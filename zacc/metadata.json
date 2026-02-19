@@ -1,0 +1,8 @@
+{
+  "name": "ZACC Integrity Nexus",
+  "description": "A smart, secure, and citizen-centric case intelligence platform for combating corruption in Zimbabwe, featuring AI-powered reporting, risk scoring, and whistleblower protection.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -1,0 +1,519 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Report;
+use App\Models\User;
+use App\Services\BlockchainService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
+use Illuminate\Http\JsonResponse;
+use App\Http\Controllers\Api\ReportControllerHelpers;
+use App\Http\Controllers\Api\AIController;
+
+class ReportController extends Controller
+{
+    use ReportControllerHelpers;
+    /**
+     * Display a listing of reports.
+     * Admins and Investigators see all reports, regular users see only their own.
+     */
+    /**
+     * @var BlockchainService
+     */
+    protected $blockchainService;
+
+    /**
+     * Constructor
+     *
+     * @param BlockchainService $blockchainService
+     */
+    public function __construct(BlockchainService $blockchainService)
+    {
+        $this->blockchainService = $blockchainService;
+    }
+
+    /**
+     * Display a listing of reports.
+     * Admins see all reports, investigators see assigned reports, regular users see only their own.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        $query = Report::query();
+
+        // Apply role-based filtering
+        if ($user->isAdmin()) {
+            // Admins can see all reports
+            $query->with(['user' => function ($q) {
+                $q->select('id', 'name', 'email');
+            }]);
+        } elseif ($user->isInvestigator()) {
+            // Investigators can see reports in investigable status
+            $query->whereIn('status', ['SUBMITTED', 'UNDER_REVIEW', 'INVESTIGATING', 'REFERRED']);
+        } else {
+            // Regular users can only see their own reports
+            $query->where('user_id', $user->id);
+        }
+
+        // Apply filters if provided
+        $filters = $request->only(['status', 'priority', 'type']);
+        foreach ($filters as $key => $value) {
+            if ($value && $value !== 'ALL') {
+                $query->where($key, $value);
+            }
+        }
+
+        // Search
+        if ($request->has('search')) {
+            $search = '%' . $request->search . '%';
+            $query->where(function ($q) use ($search) {
+                $q->where('case_id', 'LIKE', $search)
+                    ->orWhere('reference_code', 'LIKE', $search)
+                    ->orWhere('institution', 'LIKE', $search);
+            });
+        }
+
+        // Sorting
+        $sortBy = in_array($request->sort_by, [
+            'created_at',
+            'updated_at',
+            'status',
+            'priority',
+            'risk_score'
+        ]) ? $request->sort_by : 'created_at';
+
+        $sortOrder = $request->sort_order === 'asc' ? 'asc' : 'desc';
+
+        $reports = $query->orderBy($sortBy, $sortOrder)->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $reports,
+        ]);
+    }
+
+    /**
+     * Store a newly created report in storage with encryption and blockchain integration.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $user = $request->user();
+
+        $validator = Validator::make($request->all(), [
+            'type' => ['required', 'string', 'max:255'],
+            'institution' => ['required', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'description' => ['required', 'string', 'min:20'],
+            'priority' => ['required', 'string', 'in:LOW,MEDIUM,HIGH,CRITICAL'],
+            'risk_score' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'is_anonymous' => ['sometimes', 'boolean'],
+            'attachments' => ['sometimes', 'array', 'max:5'],
+            'attachments.*' => ['file', 'max:5120', 'mimes:pdf,doc,docx,jpg,jpeg,png,txt'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+
+        try {
+            // Start database transaction
+            return \DB::transaction(function () use ($validated, $user) {
+                // Generate unique IDs
+                $caseId = Report::generateCaseId();
+                $referenceCode = 'REF-' . strtoupper(Str::random(8));
+
+                // Determine if report is anonymous
+                $isAnonymous = (bool) ($validated['is_anonymous'] ?? false);
+
+                // Create report data
+                $reportData = [
+                    'case_id' => $caseId,
+                    'reference_code' => $referenceCode,
+                    'user_id' => $isAnonymous ? null : $user->id,
+                    'type' => $validated['type'],
+                    'institution' => $validated['institution'],
+                    'location' => $validated['location'] ?? null,
+                    'status' => 'SUBMITTED',
+                    'priority' => $validated['priority'],
+                    'risk_score' => $this->calculateRiskScore($validated),
+                    'last_updated' => now(),
+                    'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
+                    'is_anonymous' => $isAnonymous,
+                    'is_encrypted' => true,
+                ];
+
+                // Create the report
+                $report = new Report($reportData);
+
+                // Encrypt sensitive data
+                $report->setEncryptedData([
+                    'description' => $validated['description'],
+                    'location' => $validated['location'] ?? null,
+                    'institution' => $validated['institution'],
+                ], $user->public_key);
+
+                // Save the report
+                $report->save();
+
+                // Handle file uploads if any
+                if (isset($validated['attachments'])) {
+                    $this->handleAttachments($report, $validated['attachments']);
+                }
+
+                // Submit to blockchain
+                $report->submitToBlockchain();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Report submitted successfully',
+                    'data' => [
+                        'case_id' => $report->case_id,
+                        'reference_code' => $report->reference_code,
+                        'status' => $report->status,
+                        'created_at' => $report->created_at,
+                        'is_anonymous' => $report->is_anonymous,
+                    ],
+                ], 201);
+            });
+        } catch (\Exception $e) {
+            Log::error('Error creating report: ' . $e->getMessage(), [
+                'exception' => $e,
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to submit report. Please try again: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify the specified report on blockchain.
+     *
+     * @param string $id
+     * @return JsonResponse
+     */
+    public function verify($id)
+    {
+        $report = Report::where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        $verified = $report->verifyOnBlockchain();
+
+        return response()->json([
+            'success' => true,
+            'verified' => $verified,
+            'tx_hash' => $report->blockchain_tx_hash,
+            'block_number' => $report->blockchain_block_number,
+        ]);
+    }
+
+    /**
+     * Display the specified report.
+     */
+    public function show($id)
+    {
+        $user = Auth::user();
+        $report = Report::with('user')
+            ->where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        // Check authorization: admins, owners, or assigned investigators can view
+        $isAssignedInvestigator = $user->isInvestigator() && $report->assigned_to && $report->assigned_to === $user->id;
+
+        if (!($user->isAdmin() || $report->user_id === $user->id || $isAssignedInvestigator)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $report,
+        ]);
+    }
+
+    /**
+     * Update the specified report (admin/investigator only).
+     */
+    public function update(Request $request, $id)
+    {
+        $user = Auth::user();
+
+        if (!in_array($user->role, [User::ROLE_ADMIN, User::ROLE_INVESTIGATOR])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Investigator or Admin access required.',
+            ], 403);
+        }
+
+        $report = Report::where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'status' => 'nullable|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,CLOSED,DISPUTED',
+            'priority' => 'nullable|in:LOW,MEDIUM,HIGH,CRITICAL',
+            'risk_score' => 'nullable|integer|min:0|max:100',
+            // only admins may set assignment via this endpoint
+            'assigned_to' => 'nullable|exists:users,id',
+        ]);
+
+        // Only allow admin to assign investigators
+        if (isset($validated['assigned_to']) && !$user->isAdmin()) {
+            unset($validated['assigned_to']);
+        }
+
+        $report->update(array_merge($validated, ['last_updated' => now()]));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Report updated successfully',
+            'data' => $report->load('user'),
+        ]);
+    }
+
+    /**
+     * Update the status of a report (admin/investigator only).
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        $user = Auth::user();
+
+        if (!in_array($user->role, [User::ROLE_ADMIN, User::ROLE_INVESTIGATOR])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Investigator or Admin access required.',
+            ], 403);
+        }
+
+        $report = Report::where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,CLOSED,DISPUTED',
+            'comment' => 'nullable|string|min:3',
+        ]);
+
+        // If investigator is performing the transition, require a comment
+        if ($user->isInvestigator()) {
+            // investigator must be assigned to act
+            if (!$report->assigned_to || $report->assigned_to !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this report',
+                ], 403);
+            }
+
+            if (empty($validated['comment'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Investigators must provide a comment when changing status.',
+                ], 422);
+            }
+        }
+        $previousStatus = $report->status;
+
+        $report->update([
+            'status' => $validated['status'],
+            'last_updated' => now(),
+        ]);
+
+        // Log the status change and comment if provided
+        if (!empty($validated['comment'])) {
+            $this->logReportAction($report, 'STATUS_CHANGE', $validated['comment'], [
+                'from' => $previousStatus,
+                'to' => $validated['status'],
+            ]);
+        } else {
+            $this->logReportAction($report, 'STATUS_CHANGE', 'Status changed', [
+                'from' => $previousStatus,
+                'to' => $validated['status'],
+            ]);
+        }
+
+        // If the report is closed, run AI expert analysis and log the output
+        if ($validated['status'] === 'CLOSED') {
+            try {
+                $decrypted = $report->decrypted_data;
+                $description = $decrypted['description'] ?? $report->description ?? '';
+
+                $aiController = new AIController();
+                $aiRequest = new Request(['description' => $description]);
+                $aiResponse = $aiController->analyzeReport($aiRequest);
+
+                $aiData = [];
+                if ($aiResponse instanceof JsonResponse) {
+                    $respArr = $aiResponse->getData(true);
+                    $aiData = $respArr['data'] ?? [];
+                }
+
+                // Store AI analysis in activity log and persist to report.ai_summary
+                $this->logReportAction($report, 'AI_ANALYSIS', 'AI final analysis generated', [
+                    'ai' => $aiData,
+                ]);
+
+                try {
+                    $report->ai_summary = $aiData;
+                    $report->save();
+                } catch (\Exception $e) {
+                    Log::warning('Failed to save AI summary to report: ' . $e->getMessage());
+                }
+            } catch (\Exception $e) {
+                Log::error('AI analysis on close failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status updated successfully',
+            'data' => $report->load('user'),
+        ]);
+    }
+
+    /**
+     * Submit a dispute for a closed case.
+     */
+    public function dispute(Request $request, $id)
+    {
+        $user = Auth::user();
+        $report = Report::where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        // Check authorization - only the report owner can dispute
+        if ($report->user_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. You can only dispute your own reports.',
+            ], 403);
+        }
+
+        // Can only dispute closed cases
+        if ($report->status !== 'CLOSED') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only closed cases can be disputed',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|min:10',
+        ]);
+
+        $report->update([
+            'status' => 'DISPUTED',
+            'priority' => 'CRITICAL',
+            'dispute_reason' => $validated['reason'],
+            'last_updated' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Dispute submitted successfully',
+            'data' => $report->load('user'),
+        ]);
+    }
+
+    /**
+     * Get statistics for the dashboard.
+     */
+    public function stats()
+    {
+        $user = Auth::user();
+        $cacheKey = 'report_stats_' . $user->id;
+
+        $statsData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($user) {
+            $query = Report::query();
+
+            if (!in_array($user->role, [User::ROLE_ADMIN, User::ROLE_INVESTIGATOR])) {
+                $query->where('user_id', $user->id);
+            }
+
+            $stats = $query->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN priority = 'CRITICAL' OR status = 'DISPUTED' THEN 1 ELSE 0 END) as critical,
+                SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed,
+                SUM(CASE WHEN status NOT IN ('CLOSED', 'DISPUTED') THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN status = 'CLOSED' THEN 1 ELSE 0 END) as resolved
+            ")->first();
+
+            $total = (int) $stats->total;
+            $resolved = (int) $stats->resolved;
+            $resolutionRate = $total > 0 ? round(($resolved / $total) * 100) : 0;
+
+            return [
+                'total' => $total,
+                'critical' => (int) $stats->critical,
+                'unsolvedDisputed' => (int) $stats->disputed,
+                'active' => (int) $stats->active,
+                'resolutionRate' => $resolutionRate,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $statsData,
+        ]);
+    }
+}
