@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd \"c:\\\\Users\\\\DJ Chris\\\\Desktop\\\\zacc\" ; php artisan serve --port=8000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
