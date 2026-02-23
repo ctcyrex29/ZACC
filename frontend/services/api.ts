@@ -43,8 +43,21 @@ class ApiClient {
           localStorage.removeItem('nexus_user');
           window.location.reload();
         }
+
         const error = await response.json();
-        throw new Error(error.message || 'Request failed');
+        let message = error.message || 'Request failed';
+
+        // Surface validation messages from Laravel (422 responses)
+        if (response.status === 422 && error.errors) {
+          const firstField = Object.keys(error.errors)[0];
+          const fieldErrors = firstField ? error.errors[firstField] : null;
+
+          if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+            message = fieldErrors[0];
+          }
+        }
+
+        throw new Error(message);
       }
 
       return await response.json();

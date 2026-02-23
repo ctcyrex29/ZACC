@@ -23,6 +23,12 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (formData.description.trim().length < 20) {
+      setError('Description must be at least 20 characters.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
