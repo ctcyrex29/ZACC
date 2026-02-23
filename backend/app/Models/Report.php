@@ -199,6 +199,25 @@ class Report extends Model
      */
     public function setEncryptedData($data, $publicKey)
     {
+        // If we don't have a usable public key, gracefully fall back
+        if (empty($publicKey) || !is_string($publicKey)) {
+            Log::warning('Missing or invalid public key for report encryption; storing data unencrypted.');
+            $this->is_encrypted = false;
+            $this->description = $data['description'] ?? '';
+            $this->encrypted_data = null;
+            return;
+        }
+
+        $keyResource = @openssl_pkey_get_public($publicKey);
+
+        if ($keyResource === false) {
+            Log::warning('Unable to initialize public key for encryption; storing data unencrypted.');
+            $this->is_encrypted = false;
+            $this->description = $data['description'] ?? '';
+            $this->encrypted_data = null;
+            return;
+        }
+
         $this->is_encrypted = true;
 
         // Store a placeholder in the main description
@@ -212,12 +231,13 @@ class Report extends Model
         ]);
 
         $encrypted = '';
-        if (openssl_public_encrypt($jsonData, $encrypted, $publicKey)) {
+        if (openssl_public_encrypt($jsonData, $encrypted, $keyResource)) {
             $this->encrypted_data = base64_encode($encrypted);
         } else {
             Log::error('Public key encryption failed');
             $this->is_encrypted = false;
-            $this->description = $data['description'];
+            $this->description = $data['description'] ?? '';
+            $this->encrypted_data = null;
         }
     }
 
