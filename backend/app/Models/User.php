@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class User extends Authenticatable
 {
@@ -65,21 +66,77 @@ class User extends Authenticatable
         parent::boot();
 
         static::creating(function ($user) {
+            // Allow seeding / imports to provide keys explicitly.
+            if (!empty($user->public_key) || !empty($user->private_key_encrypted)) {
+                return;
+            }
+
             // Generate a new key pair for the user
             $config = [
                 'digest_alg' => 'sha512',
-                'private_key_bits' => 4096,
+                // 2048 is widely supported and fast; increase only if needed.
+                'private_key_bits' => 2048,
                 'private_key_type' => OPENSSL_KEYTYPE_RSA,
             ];
 
             // Create the private and public key
-            $res = openssl_pkey_new($config);
+            $res = @openssl_pkey_new($config);
+
+            if ($res === false) {
+                $errors = [];
+                while ($msg = openssl_error_string()) {
+                    $errors[] = $msg;
+                }
+
+                Log::warning('OpenSSL keypair generation failed; creating user without encryption keys.', [
+                    'email' => $user->email ?? null,
+                    'errors' => $errors,
+                ]);
+
+                $user->public_key = null;
+                $user->private_key_encrypted = null;
+                return;
+            }
 
             // Extract the private key
-            openssl_pkey_export($res, $privateKey);
+            $privateKey = null;
+            $exported = @openssl_pkey_export($res, $privateKey);
+
+            if (!$exported || empty($privateKey)) {
+                $errors = [];
+                while ($msg = openssl_error_string()) {
+                    $errors[] = $msg;
+                }
+
+                Log::warning('OpenSSL private key export failed; creating user without encryption keys.', [
+                    'email' => $user->email ?? null,
+                    'errors' => $errors,
+                ]);
+
+                $user->public_key = null;
+                $user->private_key_encrypted = null;
+                return;
+            }
 
             // Extract the public key
-            $publicKey = openssl_pkey_get_details($res)['key'];
+            $details = @openssl_pkey_get_details($res);
+            $publicKey = is_array($details) ? ($details['key'] ?? null) : null;
+
+            if (empty($publicKey) || !is_string($publicKey)) {
+                $errors = [];
+                while ($msg = openssl_error_string()) {
+                    $errors[] = $msg;
+                }
+
+                Log::warning('OpenSSL public key extraction failed; creating user without encryption keys.', [
+                    'email' => $user->email ?? null,
+                    'errors' => $errors,
+                ]);
+
+                $user->public_key = null;
+                $user->private_key_encrypted = null;
+                return;
+            }
 
             // Store the public key and encrypted private key
             $user->public_key = $publicKey;
@@ -98,7 +155,19 @@ class User extends Authenticatable
 
     public function getPrivateKeyAttribute()
     {
-        return Crypt::decryptString($this->private_key_encrypted);
+        if (empty($this->private_key_encrypted) || !is_string($this->private_key_encrypted)) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($this->private_key_encrypted);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to decrypt user private key.', [
+                'user_id' => $this->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     public function isAdmin(): bool

@@ -231,14 +231,25 @@ class Report extends Model
         ]);
 
         $encrypted = '';
-        if (openssl_public_encrypt($jsonData, $encrypted, $keyResource)) {
+        $ok = @openssl_public_encrypt($jsonData, $encrypted, $keyResource);
+
+        if ($ok) {
             $this->encrypted_data = base64_encode($encrypted);
-        } else {
-            Log::error('Public key encryption failed');
-            $this->is_encrypted = false;
-            $this->description = $data['description'] ?? '';
-            $this->encrypted_data = null;
+            return;
         }
+
+        $errors = [];
+        while ($msg = openssl_error_string()) {
+            $errors[] = $msg;
+        }
+
+        Log::warning('Public key encryption failed; storing report unencrypted.', [
+            'errors' => $errors,
+        ]);
+
+        $this->is_encrypted = false;
+        $this->description = $data['description'] ?? '';
+        $this->encrypted_data = null;
     }
 
     /**
