@@ -5,6 +5,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\AIController;
+use App\Http\Controllers\Api\PublicReportController;
+use App\Http\Controllers\Api\CaseStageController;
+use App\Http\Controllers\Api\AuditController;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,6 +22,8 @@ use App\Http\Controllers\Api\AIController;
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/reports/anonymous', [PublicReportController::class, 'storeAnonymous']);
+Route::get('/reports/track/{trackingCode}', [PublicReportController::class, 'track']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -36,6 +41,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/reports/{id}/status', [ReportController::class, 'updateStatus']);
     Route::post('/reports/{id}/dispute', [ReportController::class, 'dispute']);
     Route::get('/reports/{id}/verify', [ReportController::class, 'verify']);
+    Route::post('/reports/{id}/stages', [CaseStageController::class, 'store']);
+    Route::get('/reports/{id}/stages', [CaseStageController::class, 'index']);
+    Route::get('/notifications', [CaseStageController::class, 'notifications']);
+    Route::get('/audit/logs', [AuditController::class, 'index']);
 
     // AI routes
     Route::post('/ai/analyze-report', [AIController::class, 'analyzeReport']);

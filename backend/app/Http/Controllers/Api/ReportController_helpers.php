@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Report;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -25,14 +26,14 @@ trait ReportControllerHelpers
         foreach ($attachments as $file) {
             if ($file->isValid()) {
                 $path = $file->store("reports/{$report->id}/attachments", 'private');
-                
+
                 $report->attachments()->create([
                     'original_name' => $file->getClientOriginalName(),
                     'file_name' => basename($path),
                     'mime_type' => $file->getClientMimeType(),
                     'size' => $file->getSize(),
                     'disk' => 'private',
-                    'created_by' => auth()->id(),
+                    'created_by' => Auth::id(),
                 ]);
             }
         }
@@ -47,7 +48,7 @@ trait ReportControllerHelpers
     protected function calculateRiskScore(array $data): int
     {
         $score = 50; // Base score
-        
+
         // Adjust based on priority
         $priorityScores = [
             'LOW' => 30,
@@ -55,19 +56,19 @@ trait ReportControllerHelpers
             'HIGH' => 75,
             'CRITICAL' => 100,
         ];
-        
+
         $score = $priorityScores[$data['priority']] ?? $score;
-        
+
         // Adjust based on content (simplified example)
         $highRiskKeywords = ['bribe', 'fraud', 'theft', 'embezzle', 'murder', 'assault'];
         $text = strtolower($data['description'] . ' ' . ($data['location'] ?? '') . ' ' . ($data['institution'] ?? ''));
-        
+
         foreach ($highRiskKeywords as $keyword) {
             if (str_contains($text, $keyword)) {
                 $score = min(100, $score + 20);
             }
         }
-        
+
         return min(100, max(0, $score)); // Ensure score is between 0-100
     }
 
@@ -98,7 +99,8 @@ trait ReportControllerHelpers
     {
         try {
             $report->activityLogs()->create([
-                'user_id' => auth()->id(),
+                'report_id' => $report->id,
+                'user_id' => Auth::id(),
                 'action' => $action,
                 'details' => $details,
                 'ip_address' => request()->ip(),

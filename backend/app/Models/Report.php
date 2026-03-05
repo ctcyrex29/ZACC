@@ -5,12 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class Report extends Model
@@ -143,6 +146,38 @@ class Report extends Model
     }
 
     /**
+     * Get report attachments.
+     */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ReportAttachment::class);
+    }
+
+    /**
+     * Get activity logs for this report.
+     */
+    public function activityLogs(): MorphMany
+    {
+        return $this->morphMany(ActivityLog::class, 'subject');
+    }
+
+    /**
+     * Get per-stage investigator evaluations.
+     */
+    public function stageEvaluations(): HasMany
+    {
+        return $this->hasMany(ReportStageEvaluation::class);
+    }
+
+    /**
+     * Get stakeholder notifications related to the report.
+     */
+    public function stakeholderNotifications(): HasMany
+    {
+        return $this->hasMany(StakeholderNotification::class);
+    }
+
+    /**
      * Get the decrypted report data
      */
     public function getDecryptedDataAttribute()
@@ -156,7 +191,8 @@ class Report extends Model
         }
 
         try {
-            $user = auth()->user();
+            /** @var User|null $user */
+            $user = Auth::user();
             $privateKey = null;
 
             if ($user) {
@@ -274,7 +310,7 @@ class Report extends Model
      */
     public function getIsOwnerAttribute(): bool
     {
-        return auth()->check() && $this->user_id === auth()->id();
+        return Auth::check() && $this->user_id === Auth::id();
     }
 
     /**
@@ -282,11 +318,16 @@ class Report extends Model
      */
     public function getCanViewAttribute(): bool
     {
-        if (!auth()->check()) {
+        if (!Auth::check()) {
             return false;
         }
 
-        $user = auth()->user();
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
 
         if ($user->isAdmin()) {
             return true;
@@ -304,11 +345,16 @@ class Report extends Model
      */
     public function getCanEditAttribute(): bool
     {
-        if (!auth()->check()) {
+        if (!Auth::check()) {
             return false;
         }
 
-        $user = auth()->user();
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
 
         if ($user->isAdmin()) {
             return true;

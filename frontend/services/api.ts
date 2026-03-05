@@ -119,6 +119,14 @@ class ApiClient {
     return this.request('/reports', 'POST', data);
   }
 
+  async createAnonymousReport(data: any) {
+    return this.request('/reports/anonymous', 'POST', data);
+  }
+
+  async trackCase(trackingCode: string) {
+    return this.request(`/reports/track/${encodeURIComponent(trackingCode)}`);
+  }
+
   async getCases() {
     return this.request('/cases');
   }
@@ -145,6 +153,22 @@ class ApiClient {
 
   async verifyReport(reportId: string) {
     return this.request(`/reports/${reportId}/verify`, 'GET');
+  }
+
+  async createStageEvaluation(reportId: string, data: any) {
+    return this.request(`/reports/${reportId}/stages`, 'POST', data);
+  }
+
+  async getStageEvaluations(reportId: string) {
+    return this.request(`/reports/${reportId}/stages`);
+  }
+
+  async getNotifications() {
+    return this.request('/notifications');
+  }
+
+  async getAuditLogs() {
+    return this.request('/audit/logs');
   }
 
   async logout() {

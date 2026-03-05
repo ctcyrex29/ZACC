@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\BlockchainService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -136,7 +137,7 @@ class ReportController extends Controller
 
         try {
             // Start database transaction
-            return \DB::transaction(function () use ($validated, $user) {
+            return DB::transaction(function () use ($validated, $user) {
                 // Generate unique IDs
                 $caseId = Report::generateCaseId();
                 $referenceCode = 'REF-' . strtoupper(Str::random(8));
@@ -182,6 +183,12 @@ class ReportController extends Controller
 
                 // Submit to blockchain
                 $report->submitToBlockchain();
+
+                $this->logReportAction($report, 'REPORT_SUBMITTED', 'Report submitted successfully', [
+                    'status' => $report->status,
+                    'priority' => $report->priority,
+                    'is_anonymous' => $report->is_anonymous,
+                ]);
 
                 return response()->json([
                     'success' => true,
@@ -242,7 +249,16 @@ class ReportController extends Controller
      */
     public function show($id)
     {
+        /** @var User|null $user */
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
         $report = Report::with('user')
             ->where('id', $id)
             ->orWhere('case_id', $id)
@@ -276,7 +292,15 @@ class ReportController extends Controller
      */
     public function update(Request $request, $id)
     {
+        /** @var User|null $user */
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
 
         if (!in_array($user->role, [User::ROLE_ADMIN, User::ROLE_INVESTIGATOR])) {
             return response()->json([
@@ -323,7 +347,15 @@ class ReportController extends Controller
      */
     public function updateStatus(Request $request, $id)
     {
+        /** @var User|null $user */
         $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
 
         if (!in_array($user->role, [User::ROLE_ADMIN, User::ROLE_INVESTIGATOR])) {
             return response()->json([
@@ -466,6 +498,10 @@ class ReportController extends Controller
             'priority' => 'CRITICAL',
             'dispute_reason' => $validated['reason'],
             'last_updated' => now(),
+        ]);
+
+        $this->logReportAction($report, 'REPORT_DISPUTED', 'Whistleblower disputed final outcome', [
+            'reason' => $validated['reason'],
         ]);
 
         return response()->json([

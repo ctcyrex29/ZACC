@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Report;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -32,7 +33,7 @@ trait ReportControllerHelpers
                     'mime_type' => $file->getClientMimeType(),
                     'size' => $file->getSize(),
                     'disk' => 'private',
-                    'created_by' => auth()->id(),
+                    'created_by' => Auth::id(),
                 ]);
             }
         }
@@ -98,7 +99,8 @@ trait ReportControllerHelpers
     {
         try {
             $report->activityLogs()->create([
-                'user_id' => auth()->id(),
+                'report_id' => $report->id,
+                'user_id' => Auth::id(),
                 'action' => $action,
                 'details' => $details,
                 'ip_address' => request()->ip(),

@@ -5,8 +5,12 @@ import { ReportForm } from "./components/ReportForm";
 import { InvestigatorView } from "./components/InvestigatorView";
 import { CaseTracking } from "./components/CaseTracking";
 import { UserManagement } from "./components/UserManagement";
-import { Login } from "./components/Login";
 import { User, UserRole } from "./types";
+import { PublicPortal } from "./components/PublicPortal";
+import { Language, t } from "./i18n";
+import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
+
+type ThemeMode = "system" | "light" | "dark";
 
 export type View =
   | "dashboard"
@@ -21,19 +25,44 @@ export type View =
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>("dashboard");
+  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [language, setLanguage] = useState<Language>("en");
 
   useEffect(() => {
     const savedUser = localStorage.getItem("nexus_user");
+    const savedTheme = (localStorage.getItem("zacc_theme_mode") ||
+      "system") as ThemeMode;
+    const savedLanguage = (localStorage.getItem("zacc_language") ||
+      "en") as Language;
+
+    setThemeMode(savedTheme);
+    setLanguage(savedLanguage);
+
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
       setCurrentView(
         parsed.role === UserRole.INVESTIGATOR || parsed.role === UserRole.ADMIN
           ? "investigator"
-          : "tracking",
+          : "dashboard",
       );
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("zacc_theme_mode", themeMode);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const isDark =
+      themeMode === "dark" || (themeMode === "system" && media.matches);
+
+    document.documentElement.classList.toggle("dark", isDark);
+    document.body.classList.toggle("bg-white", !isDark);
+    document.body.classList.toggle("bg-[#04060b]", isDark);
+  }, [themeMode]);
+
+  useEffect(() => {
+    localStorage.setItem("zacc_language", language);
+  }, [language]);
 
   const handleLogin = (u: User) => {
     setUser(u);
@@ -41,7 +70,7 @@ const App: React.FC = () => {
     setCurrentView(
       u.role === UserRole.INVESTIGATOR || u.role === UserRole.ADMIN
         ? "investigator"
-        : "tracking",
+        : "dashboard",
     );
   };
 
@@ -52,12 +81,30 @@ const App: React.FC = () => {
   };
 
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <PublicPortal
+        onLogin={handleLogin}
+        language={language}
+        onLanguageChange={setLanguage}
+        themeMode={themeMode}
+        onThemeModeChange={setThemeMode}
+      />
+    );
   }
 
   const renderView = () => {
     switch (currentView) {
       case "dashboard":
+        if (user.role === UserRole.WHISTLEBLOWER) {
+          return (
+            <WhistleblowerDashboard
+              user={user}
+              language={language}
+              onCreateReport={() => setCurrentView("report")}
+              onOpenReports={() => setCurrentView("tracking")}
+            />
+          );
+        }
         return <Dashboard />;
       case "report":
         return (
@@ -85,50 +132,73 @@ const App: React.FC = () => {
   const getTitle = (view: View) => {
     switch (view) {
       case "dashboard":
-        return "System Overview";
+        return user.role === UserRole.WHISTLEBLOWER
+          ? t(language, "myDashboard")
+          : t(language, "systemOverview");
       case "report":
-        return "Report Case";
+        return t(language, "reportCase");
       case "investigator":
-        return "Control Center";
+        return t(language, "controlCenter");
       case "tracking":
-        return "My Reports";
+        return t(language, "myReports");
       case "users":
-        return "User Management";
+        return t(language, "userManagement");
       default:
-        return "Nexus";
+        return t(language, "appTitle");
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#04060b] font-sans text-slate-300 overflow-hidden">
+    <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-[#04060b] dark:text-slate-300 overflow-hidden">
       <Sidebar
         user={user}
         currentView={currentView}
         setView={setCurrentView}
         onLogout={handleLogout}
+        language={language}
+        onLanguageChange={setLanguage}
       />
 
-      <main className="flex-1 overflow-y-auto px-6 py-8 md:px-12 md:py-16 scroll-smooth">
+      <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8 scroll-smooth">
         <div className="max-w-7xl mx-auto">
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-20">
+          <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
             <div className="relative">
-              <div className="absolute top-0 left-0 w-20 h-2 bg-nexus-emerald/30 mb-8 rounded-full"></div>
-              <h1 className="text-5xl font-black text-white tracking-tighter mb-3 pt-6 uppercase">
+              <div className="absolute top-0 left-0 w-20 h-2 bg-nexus-emerald/40 mb-8 rounded-full"></div>
+              <h1 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 pt-4 uppercase">
                 {getTitle(currentView)}
               </h1>
             </div>
 
-            <div className="flex items-center gap-6 bg-[#080c18] px-8 py-5 rounded-[2.5rem] border border-white/5 backdrop-blur-3xl shadow-2xl group hover:border-nexus-emerald/20 transition-all">
+            <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-[#080c18] px-4 py-3 rounded-2xl border border-slate-200 dark:border-white/10">
+              <select
+                value={themeMode}
+                onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
+                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 text-xs font-semibold"
+              >
+                <option value="system">{t(language, "system")}</option>
+                <option value="light">{t(language, "light")}</option>
+                <option value="dark">{t(language, "dark")}</option>
+              </select>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 text-xs font-semibold"
+              >
+                <option value="en">English</option>
+                <option value="sn">Shona</option>
+                <option value="nd">Ndebele</option>
+                <option value="to">Tonga</option>
+              </select>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                   Session Identity
                 </p>
-                <p className="text-sm font-black text-white leading-none tracking-widest flex items-center gap-2">
+                <p className="text-xs font-black text-slate-900 dark:text-white leading-none tracking-widest flex items-center gap-2">
                   {user.nexusKey}
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 </p>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-nexus-emerald/20 to-emerald-900/10 text-nexus-emerald flex items-center justify-center font-black border border-nexus-emerald/10 shadow-lg group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center font-black border border-emerald-400/30">
                 {user.nexusKey.charAt(0)}
               </div>
             </div>
@@ -149,9 +219,6 @@ const App: React.FC = () => {
           opacity: 0.2;
           pointer-events: none;
           transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .stealth-blur {
-          background: black !important;
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 10px; }
