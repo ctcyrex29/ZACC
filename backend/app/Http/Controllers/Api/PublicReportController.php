@@ -24,50 +24,53 @@ class PublicReportController extends Controller
     public function storeAnonymous(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'type' => ['required', 'string', 'max:255'],
+            'type'        => ['required', 'string', 'max:255'],
             'institution' => ['required', 'string', 'max:255'],
-            'location' => ['nullable', 'string', 'max:255'],
+            'location'    => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:20'],
-            'priority' => ['required', 'string', 'in:LOW,MEDIUM,HIGH,CRITICAL'],
+            // priority is no longer accepted from the user — it is assigned by the expert system
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation error',
-                'errors' => $validator->errors(),
+                'errors'  => $validator->errors(),
             ], 422);
         }
 
         $validated = $validator->validated();
 
+        // Expert system determines priority
+        $expertPriority = $this->determineExpertPriority($validated);
+
         try {
-            $report = DB::transaction(function () use ($validated, $request) {
+            $report = DB::transaction(function () use ($validated, $expertPriority, $request) {
                 $adminWithKey = User::query()
                     ->where('role', User::ROLE_ADMIN)
                     ->whereNotNull('public_key')
                     ->first();
 
                 $report = new Report([
-                    'case_id' => Report::generateCaseId(),
+                    'case_id'      => Report::generateCaseId(),
                     'reference_code' => Report::generateReferenceCode(),
-                    'user_id' => null,
-                    'type' => $validated['type'],
-                    'institution' => $validated['institution'],
-                    'location' => $validated['location'] ?? null,
-                    'status' => 'SUBMITTED',
-                    'priority' => $validated['priority'],
-                    'risk_score' => $this->calculateRiskScore($validated),
+                    'user_id'      => null,
+                    'type'         => $validated['type'],
+                    'institution'  => $validated['institution'],
+                    'location'     => $validated['location'] ?? null,
+                    'status'       => 'SUBMITTED',
+                    'priority'     => $expertPriority,
+                    'risk_score'   => $this->calculateRiskScore(array_merge($validated, ['priority' => $expertPriority])),
                     'last_updated' => now(),
-                    'ip_address' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
+                    'ip_address'   => $request->ip(),
+                    'user_agent'   => $request->userAgent(),
                     'is_anonymous' => true,
                     'is_encrypted' => true,
                 ]);
 
                 $report->setEncryptedData([
                     'description' => $validated['description'],
-                    'location' => $validated['location'] ?? null,
+                    'location'    => $validated['location'] ?? null,
                     'institution' => $validated['institution'],
                 ], $adminWithKey?->public_key);
 
@@ -300,6 +303,94 @@ class PublicReportController extends Controller
             Log::error('Failed to upload evidence', ['error' => $e->getMessage()]);
             return response()->json(['success' => false, 'message' => 'Failed to upload evidence. Please try again.'], 500);
         }
+    }
+
+    public function publicStats(): JsonResponse
+    {
+        $total    = Report::count();
+        $byStatus = Report::select('status', DB::raw('count(*) as cnt'))->groupBy('status')->pluck('cnt', 'status')->toArray();
+        $byType   = Report::select('type',   DB::raw('count(*) as cnt'))->groupBy('type')  ->pluck('cnt', 'type')  ->toArray();
+
+        $resolvedTotal      = $byStatus['CLOSED'] ?? 0;
+        $resolvedLast30Days = Report::where('status', 'CLOSED')->where('updated_at', '>=', now()->subDays(30))->count();
+        $disputeCount       = $byStatus['DISPUTED'] ?? 0;
+        $activeCount        = ($byStatus['SUBMITTED'] ?? 0) + ($byStatus['UNDER_REVIEW'] ?? 0) + ($byStatus['INVESTIGATING'] ?? 0);
+        $resolutionRate     = $total > 0 ? round(($resolvedTotal / $total) * 100) : 0;
+        $disputeRate        = $total > 0 ? round(($disputeCount  / $total) * 100) : 0;
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'total_reports'           => $total,
+                'active_investigations'   => $activeCount,
+                'resolved_total'          => $resolvedTotal,
+                'resolved_last_30_days'   => $resolvedLast30Days,
+                'resolution_rate'         => $resolutionRate,
+                'dispute_rate'            => $disputeRate,
+                'by_status'               => $byStatus,
+                'by_type'                 => $byType,
+            ],
+        ]);
+    }
+
+    /**
+     * Expert system: automatically determines the priority of a case
+     * based on corruption type, description keywords, institution, and detail level.
+     */
+    private function determineExpertPriority(array $data): string
+    {
+        $type = strtolower($data['type'] ?? '');
+        $text = strtolower(
+            ($data['description'] ?? '') . ' ' .
+            ($data['institution']  ?? '') . ' ' .
+            ($data['location']     ?? '')
+        );
+
+        $score = 0;
+
+        // Type scoring
+        $typeScores = [
+            'embezzlement'      => 40,
+            'procurement fraud' => 35,
+            'abuse of office'   => 25,
+            'bribery'           => 20,
+            'nepotism'          => 12,
+            'other'             => 8,
+        ];
+        foreach ($typeScores as $t => $pts) {
+            if (str_contains($type, $t)) { $score += $pts; break; }
+        }
+
+        // Critical-level keywords (senior officials, large sums, systemic)
+        foreach (['million', 'billion', 'widespread', 'systematic', 'organised', 'organized', 'syndicate',
+                  'minister', 'permanent secretary', 'director general', 'commissioner',
+                  'president', 'prime minister', 'attorney general', 'hundreds of thousands'] as $kw) {
+            if (str_contains($text, $kw)) $score += 22;
+        }
+
+        // High-level keywords
+        foreach (['government', 'public funds', 'contract', 'tender', 'ministry', 'department',
+                  'council', 'authority', 'state', 'national', 'police', 'army', 'hospital',
+                  'school', 'thousands', 'hundreds'] as $kw) {
+            if (str_contains($text, $kw)) $score += 9;
+        }
+
+        // Medium-level keywords
+        foreach (['bribe', 'fraud', 'theft', 'coercion', 'embezzle', 'kickback',
+                  'extort', 'misuse', 'stolen', 'siphon', 'inflate', 'phantom'] as $kw) {
+            if (str_contains($text, $kw)) $score += 6;
+        }
+
+        // Description length bonus (detail level)
+        $len = strlen($data['description'] ?? '');
+        if ($len > 500)      $score += 15;
+        elseif ($len > 250)  $score += 8;
+        elseif ($len > 100)  $score += 3;
+
+        if ($score >= 75) return 'CRITICAL';
+        if ($score >= 42) return 'HIGH';
+        if ($score >= 20) return 'MEDIUM';
+        return 'LOW';
     }
 
     private function calculateRiskScore(array $data): int

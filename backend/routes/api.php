@@ -26,6 +26,7 @@ Route::post('/reports/anonymous', [PublicReportController::class, 'storeAnonymou
 Route::get('/reports/track/{trackingCode}', [PublicReportController::class, 'track']);
 Route::post('/reports/dispute/{trackingCode}', [PublicReportController::class, 'publicDispute']);
 Route::post('/reports/evidence/{trackingCode}', [PublicReportController::class, 'uploadEvidence']);
+Route::get('/stats/public', [PublicReportController::class, 'publicStats']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {

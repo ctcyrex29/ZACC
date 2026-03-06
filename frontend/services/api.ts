@@ -127,6 +127,10 @@ class ApiClient {
     return this.request(`/reports/track/${encodeURIComponent(trackingCode)}`);
   }
 
+  async getPublicStats() {
+    return this.request('/stats/public');
+  }
+
   async getCases() {
     return this.request('/cases');
   }

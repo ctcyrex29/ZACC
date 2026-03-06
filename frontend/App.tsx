@@ -9,6 +9,7 @@ import { User, UserRole } from "./types";
 import { PublicPortal } from "./components/PublicPortal";
 import { Language, t } from "./i18n";
 import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
+import { ChatBot } from "./components/ChatBot";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -85,13 +86,16 @@ const App: React.FC = () => {
 
   if (!user) {
     return (
-      <PublicPortal
-        onLogin={handleLogin}
-        language={language}
-        onLanguageChange={setLanguage}
-        themeMode={themeMode}
-        onThemeModeChange={setThemeMode}
-      />
+      <>
+        <PublicPortal
+          onLogin={handleLogin}
+          language={language}
+          onLanguageChange={setLanguage}
+          themeMode={themeMode}
+          onThemeModeChange={setThemeMode}
+        />
+        <ChatBot />
+      </>
     );
   }
 

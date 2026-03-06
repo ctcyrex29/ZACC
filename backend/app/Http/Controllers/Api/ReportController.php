@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Report;
 use App\Models\User;
 use App\Services\BlockchainService;
+use App\Services\StakeholderNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -28,15 +29,17 @@ class ReportController extends Controller
      * @var BlockchainService
      */
     protected $blockchainService;
+    protected StakeholderNotificationService $notificationService;
 
     /**
      * Constructor
      *
      * @param BlockchainService $blockchainService
      */
-    public function __construct(BlockchainService $blockchainService)
+    public function __construct(BlockchainService $blockchainService, StakeholderNotificationService $notificationService)
     {
         $this->blockchainService = $blockchainService;
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -118,7 +121,6 @@ class ReportController extends Controller
             'institution' => ['required', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:20'],
-            'priority' => ['required', 'string', 'in:LOW,MEDIUM,HIGH,CRITICAL'],
             'risk_score' => ['sometimes', 'integer', 'min:0', 'max:100'],
             'is_anonymous' => ['sometimes', 'boolean'],
             'attachments' => ['sometimes', 'array', 'max:5'],
@@ -135,9 +137,12 @@ class ReportController extends Controller
 
         $validated = $validator->validated();
 
+        // Priority is assigned by the expert system, not by the reporter.
+        $expertPriority = $this->determineExpertPriority($validated);
+
         try {
             // Start database transaction
-            return DB::transaction(function () use ($validated, $user) {
+            return DB::transaction(function () use ($validated, $user, $expertPriority) {
                 // Generate unique IDs
                 $caseId = Report::generateCaseId();
                 $referenceCode = 'REF-' . strtoupper(Str::random(8));
@@ -154,8 +159,8 @@ class ReportController extends Controller
                     'institution' => $validated['institution'],
                     'location' => $validated['location'] ?? null,
                     'status' => 'SUBMITTED',
-                    'priority' => $validated['priority'],
-                    'risk_score' => $this->calculateRiskScore($validated),
+                    'priority' => $expertPriority,
+                    'risk_score' => $this->calculateRiskScore(array_merge($validated, ['priority' => $expertPriority])),
                     'last_updated' => now(),
                     'ip_address' => request()->ip(),
                     'user_agent' => request()->userAgent(),
@@ -190,6 +195,19 @@ class ReportController extends Controller
                     'is_anonymous' => $report->is_anonymous,
                 ]);
 
+                $this->notificationService->notifyCaseEvent(
+                    $report,
+                    'NEW_CASE_SUBMITTED',
+                    'New Case Submitted',
+                    "New case {$report->reference_code} submitted with {$report->priority} priority.",
+                    [
+                        'case_id' => $report->case_id,
+                        'reference_code' => $report->reference_code,
+                        'priority' => $report->priority,
+                        'risk_score' => $report->risk_score,
+                    ]
+                );
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Report submitted successfully',
@@ -213,6 +231,128 @@ class ReportController extends Controller
                 'message' => 'Failed to submit report. Please try again: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Expert system: automatically determines case priority from report attributes.
+     */
+    private function determineExpertPriority(array $data): string
+    {
+        $type = strtolower($data['type'] ?? '');
+        $text = strtolower(
+            ($data['description'] ?? '') . ' ' .
+                ($data['institution']  ?? '') . ' ' .
+                ($data['location']     ?? '')
+        );
+
+        $score = 0;
+
+        $typeScores = [
+            'embezzlement'      => 40,
+            'procurement fraud' => 35,
+            'abuse of office'   => 25,
+            'bribery'           => 20,
+            'nepotism'          => 12,
+            'other'             => 8,
+        ];
+
+        foreach ($typeScores as $t => $pts) {
+            if (str_contains($type, $t)) {
+                $score += $pts;
+                break;
+            }
+        }
+
+        foreach (
+            [
+                'million',
+                'billion',
+                'widespread',
+                'systematic',
+                'organised',
+                'organized',
+                'syndicate',
+                'minister',
+                'permanent secretary',
+                'director general',
+                'commissioner',
+                'president',
+                'prime minister',
+                'attorney general',
+                'hundreds of thousands'
+            ] as $kw
+        ) {
+            if (str_contains($text, $kw)) {
+                $score += 22;
+            }
+        }
+
+        foreach (
+            [
+                'government',
+                'public funds',
+                'contract',
+                'tender',
+                'ministry',
+                'department',
+                'council',
+                'authority',
+                'state',
+                'national',
+                'police',
+                'army',
+                'hospital',
+                'school',
+                'thousands',
+                'hundreds'
+            ] as $kw
+        ) {
+            if (str_contains($text, $kw)) {
+                $score += 9;
+            }
+        }
+
+        foreach (
+            [
+                'bribe',
+                'fraud',
+                'theft',
+                'coercion',
+                'embezzle',
+                'kickback',
+                'extort',
+                'misuse',
+                'stolen',
+                'siphon',
+                'inflate',
+                'phantom'
+            ] as $kw
+        ) {
+            if (str_contains($text, $kw)) {
+                $score += 6;
+            }
+        }
+
+        $len = strlen($data['description'] ?? '');
+        if ($len > 500) {
+            $score += 15;
+        } elseif ($len > 250) {
+            $score += 8;
+        } elseif ($len > 100) {
+            $score += 3;
+        }
+
+        if ($score >= 75) {
+            return 'CRITICAL';
+        }
+        if ($score >= 42) {
+            return 'HIGH';
+        }
+        if ($score >= 20) {
+            return 'MEDIUM';
+        }
+
+        return 'LOW';
     }
 
     /**

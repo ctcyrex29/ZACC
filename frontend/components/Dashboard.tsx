@@ -70,11 +70,19 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const stats = [
-    { label: "Total Reports",      value: cases.length,                                                    icon: "📄", color: "text-white" },
-    { label: "Active Pipeline",     value: cases.filter(c => !["CLOSED", "DISPUTED"].includes(c.status)).length, icon: "⚡", color: "text-white" },
+    { label: "Total Reports",      value: cases.length,                                                    icon: "📄", color: "text-slate-900 dark:text-white" },
+    { label: "Active Pipeline",     value: cases.filter(c => !["CLOSED", "DISPUTED"].includes(c.status)).length, icon: "⚡", color: "text-slate-900 dark:text-white" },
     { label: "Integrity Alerts",    value: cases.filter(c => c.status === CaseStatus.DISPUTED).length,     icon: "🚨", color: "text-rose-400" },
-    { label: "Finalized Dossiers",  value: cases.filter(c => c.status === CaseStatus.CLOSED).length,       icon: "✅", color: "text-white" },
+    { label: "Finalized Dossiers",  value: cases.filter(c => c.status === CaseStatus.CLOSED).length,       icon: "✅", color: "text-slate-900 dark:text-white" },
   ];
+
+  const anchoredCount = cases.filter((c: any) => Boolean(c.blockchain_tx_hash)).length;
+  const anchoredRate = cases.length > 0 ? Math.round((anchoredCount / cases.length) * 100) : 0;
+  const closedCount = cases.filter((c) => c.status === CaseStatus.CLOSED).length;
+  const disputeCount = cases.filter((c) => c.status === CaseStatus.DISPUTED).length;
+  const confidenceIndex = closedCount > 0
+    ? Math.max(0, Math.min(100, Math.round(((closedCount - disputeCount) / closedCount) * 100)))
+    : 100;
 
   const distributionData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -119,7 +127,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 glass-card p-8 rounded-4xl">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-lg font-bold text-white">Engagement Activity</h3>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Engagement Activity</h3>
             <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 rounded-full">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
               <span className="text-[10px] font-bold text-emerald-500 uppercase">Live Intelligence</span>
@@ -145,7 +153,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="lg:col-span-4 glass-card p-6 rounded-4xl">
-          <h3 className="text-lg font-bold text-white mb-6">Type Distribution</h3>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Type Distribution</h3>
           {distributionData.length > 0 ? (
             <>
               <div className="h-[160px] mb-4">
@@ -164,7 +172,7 @@ export const Dashboard: React.FC = () => {
                       <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }}></div>
                       <span className="text-xs text-slate-400 font-medium truncate max-w-[120px]">{item.name}</span>
                     </div>
-                    <span className="text-xs font-black text-white">{item.value}</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -172,6 +180,23 @@ export const Dashboard: React.FC = () => {
           ) : (
             <p className="text-slate-500 text-sm text-center py-10">No data yet.</p>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="glass-card rounded-3xl p-6 border border-emerald-300/30 dark:border-emerald-500/20">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Blockchain Integrity</p>
+          <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{anchoredRate}%</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+            {anchoredCount} of {cases.length} reports are anchored with blockchain proof records.
+          </p>
+        </div>
+        <div className="glass-card rounded-3xl p-6 border border-indigo-300/30 dark:border-indigo-500/20">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Public Confidence Index</p>
+          <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{confidenceIndex}%</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+            Derived from finalized outcomes versus disputed outcomes to show process stability.
+          </p>
         </div>
       </div>
 

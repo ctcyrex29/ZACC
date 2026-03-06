@@ -1,7 +1,18 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../services/api";
 import { User, UserRole } from "../types";
 import { Language, t } from "../i18n";
+import {
+  Area,
+  AreaChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Cell,
+} from "recharts";
 
 interface PublicPortalProps {
   onLogin: (user: User) => void;
@@ -113,9 +124,9 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
     institution: "",
     location: "",
     description: "",
-    priority: "MEDIUM",
   });
   const [submitted, setSubmitted] = useState<any | null>(null);
+  const [publicStats, setPublicStats] = useState<any | null>(null);
 
   // Tracking state
   const [trackingCode, setTrackingCode] = useState("");
@@ -138,6 +149,40 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const disputeInputRef = useRef<HTMLInputElement>(null);
 
   const resetMessages = () => { setError(null); };
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await apiClient.getPublicStats();
+        if (response?.success) {
+          setPublicStats(response.data);
+        }
+      } catch {
+        // non-blocking visual widget
+      }
+    };
+    loadStats();
+  }, []);
+
+  const integritySeries = useMemo(() => {
+    const status = publicStats?.by_status || {};
+    return [
+      { stage: "Submitted", value: status.SUBMITTED || 0 },
+      { stage: "Review", value: status.UNDER_REVIEW || 0 },
+      { stage: "Investigating", value: status.INVESTIGATING || 0 },
+      { stage: "Closed", value: status.CLOSED || 0 },
+      { stage: "Disputed", value: status.DISPUTED || 0 },
+    ];
+  }, [publicStats]);
+
+  const integrityDonut = useMemo(() => {
+    if (!publicStats) return [];
+    return [
+      { name: "Resolved", value: Number(publicStats.resolved_total || 0) },
+      { name: "Active", value: Number(publicStats.active_investigations || 0) },
+      { name: "Disputed", value: Number(publicStats.by_status?.DISPUTED || 0) },
+    ];
+  }, [publicStats]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,7 +218,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       const response = await apiClient.createAnonymousReport(formData);
       if (!response.success) throw new Error(response.message || "Failed to submit report");
       setSubmitted(response.data);
-      setFormData({ type: "Bribery", institution: "", location: "", description: "", priority: "MEDIUM" });
+      setFormData({ type: "Bribery", institution: "", location: "", description: "" });
     } catch (err: any) {
       setError(err.message || "Failed to submit report");
     } finally {
@@ -272,9 +317,9 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const maxEvidenceReach = 10 - (trackedCase?.attachments_count ?? 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#04060b] dark:to-[#0a0f1a] text-slate-900 dark:text-slate-200 flex flex-col items-center justify-start px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#04060b] dark:to-[#0a0f1a] text-slate-900 dark:text-slate-200 flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
       {/* Settings Bar */}
-      <div className="absolute top-6 right-6 flex gap-2">
+      <div className="w-full max-w-5xl flex justify-end gap-2 mb-4 sm:mb-5">
         <select value={themeMode} onChange={e => onThemeModeChange(e.target.value as any)}
           className="px-3 py-2 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-semibold">
           <option value="system">{t(language, "system")}</option>
@@ -291,10 +336,51 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       </div>
 
       {/* Logo */}
-      <div className="mb-8 text-center max-w-xl">
+      <div className="mb-6 sm:mb-8 text-center max-w-xl">
         <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center text-3xl font-black text-white shadow-lg">Z</div>
         <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent">ZACC Portal</h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Secure. Anonymous. Protected.</p>
+      </div>
+
+      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Integrity Flow</p>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              Resolution Rate: {publicStats?.resolution_rate ?? 0}%
+            </span>
+          </div>
+          <div className="h-[170px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={integritySeries}>
+                <defs>
+                  <linearGradient id="integrityFlow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="stage" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={26} />
+                <Tooltip />
+                <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} fill="url(#integrityFlow)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Trust Snapshot</p>
+          <div className="h-[170px] sm:h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={integrityDonut} dataKey="value" innerRadius={38} outerRadius={64} paddingAngle={3}>
+                  <Cell fill="#10b981" />
+                  <Cell fill="#3b82f6" />
+                  <Cell fill="#f43f5e" />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Main Card */}
@@ -351,7 +437,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
                 Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-5">
                 <div>
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Type of Corruption</label>
                   <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
@@ -360,14 +446,9 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                     <option>Embezzlement</option><option>Nepotism</option><option>Other</option>
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Priority Level</label>
-                  <select value={formData.priority} onChange={e => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
-                    <option value="LOW">Low</option><option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option><option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
+              </div>
+              <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Case priority is assigned automatically by the expert system after submission.
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Affected Institution</label>

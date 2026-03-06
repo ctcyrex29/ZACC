@@ -116,6 +116,7 @@ export const InvestigatorView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState<CaseStatus | "ALL">("ALL");
   const [search, setSearch]   = useState("");
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Dossier modal
   const [dossierOpen, setDossierOpen]     = useState(false);
@@ -158,6 +159,23 @@ export const InvestigatorView: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const response = await apiClient.getNotifications();
+      if (response?.success && Array.isArray(response.data)) {
+        setNotifications(response.data);
+      }
+    } catch {
+      setNotifications([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const intervalId = window.setInterval(fetchNotifications, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchNotifications]);
 
   // ── Load stages for open dossier ──
   const loadStages = useCallback(async (reportId: string) => {
@@ -267,9 +285,38 @@ export const InvestigatorView: React.FC = () => {
 
   const currentStatus: string = dossierData?.status ?? "";
   const decrypted = dossierData?.decrypted_data ?? {};
+  const newCaseNotifications = notifications.filter((n) =>
+    ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type),
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
+
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">New Case Notifications</h3>
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            {newCaseNotifications.length} alerts
+          </span>
+        </div>
+        {newCaseNotifications.length === 0 ? (
+          <p className="text-sm text-slate-500">No new case alerts right now.</p>
+        ) : (
+          <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+            {newCaseNotifications.slice(0, 8).map((n) => (
+              <div key={n.id} className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-300 truncate">{n.title}</p>
+                  <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                    {new Date(n.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 line-clamp-2">{n.message}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Header & Filters ── */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

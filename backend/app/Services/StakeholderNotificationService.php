@@ -28,6 +28,17 @@ class StakeholderNotificationService
 
         $recipientIds = array_unique(array_merge($recipientIds, $adminIds));
 
+        // New-case events should proactively notify investigators.
+        if (in_array($type, ['NEW_CASE_SUBMITTED', 'ANONYMOUS_REPORT_SUBMITTED'])) {
+            $investigatorIds = User::query()
+                ->where('role', User::ROLE_INVESTIGATOR)
+                ->limit(50)
+                ->pluck('id')
+                ->all();
+
+            $recipientIds = array_unique(array_merge($recipientIds, $investigatorIds));
+        }
+
         if (empty($recipientIds)) {
             StakeholderNotification::create([
                 'report_id' => $report->id,

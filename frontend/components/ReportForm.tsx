@@ -41,7 +41,6 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
         institution: formData.institution,
         location: formData.location,
         description: formData.description,
-        priority: analysis.priority || "MEDIUM",
         risk_score: analysis.riskScore || 50,
       });
 
@@ -90,7 +89,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-2">
-                Priority
+                Expert Priority
               </p>
               <p
                 className={`text-sm font-black uppercase ${
@@ -318,8 +317,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             <p className="text-xs text-slate-700 dark:text-slate-400 font-medium flex items-center gap-2">
               <span className="text-lg">🔒</span>
               <span>
-                Your report is securely encrypted. Your identity is protected
-                throughout the process.
+                Your report is encrypted and the case priority is assigned by
+                the expert system for fairness and consistency.
               </span>
             </p>
           </div>
