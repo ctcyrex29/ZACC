@@ -151,6 +151,35 @@ class ApiClient {
     return this.request(`/reports/${caseId}/dispute`, 'POST', { reason });
   }
 
+  async uploadEvidence(trackingCode: string, files: File[]) {
+    const formData = new FormData();
+    files.forEach((file, index) => formData.append(`files[${index}]`, file));
+    return this.requestFormData(`/reports/evidence/${encodeURIComponent(trackingCode)}`, formData);
+  }
+
+  async publicDispute(trackingCode: string, reason: string, files: File[] = []) {
+    const formData = new FormData();
+    formData.append('reason', reason);
+    files.forEach((file, index) => formData.append(`evidence[${index}]`, file));
+    return this.requestFormData(`/reports/dispute/${encodeURIComponent(trackingCode)}`, formData);
+  }
+
+  private async requestFormData(endpoint: string, formData: FormData) {
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, { method: 'POST', headers, body: formData });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Upload failed');
+      }
+      return await response.json();
+    } catch (error: any) {
+      console.error(`API FormData Error (${endpoint}):`, error);
+      throw error;
+    }
+  }
+
   async verifyReport(reportId: string) {
     return this.request(`/reports/${reportId}/verify`, 'GET');
   }

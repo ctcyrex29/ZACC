@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 
 class PublicReportController extends Controller
 {
@@ -139,7 +140,7 @@ class PublicReportController extends Controller
         }
 
         $stageEvaluations = $report->stageEvaluations()
-            ->latest('created_at')
+            ->oldest('created_at')
             ->get(['id', 'stage', 'investigator_notes', 'expert_score', 'manual_score', 'final_score', 'created_at']);
 
         return response()->json([
@@ -154,9 +155,151 @@ class PublicReportController extends Controller
                 'type' => $report->type,
                 'created_at' => $report->created_at,
                 'last_updated' => $report->last_updated,
+                'dispute_reason' => $report->dispute_reason,
+                'attachments_count' => $report->attachments()->count(),
                 'stage_evaluations' => $stageEvaluations,
             ],
         ]);
+    }
+
+    public function publicDispute(string $trackingCode, Request $request): JsonResponse
+    {
+        $report = Report::query()
+            ->where('reference_code', $trackingCode)
+            ->orWhere('case_id', $trackingCode)
+            ->first();
+
+        if (!$report) {
+            return response()->json(['success' => false, 'message' => 'No case found for this tracking code.'], 404);
+        }
+
+        if ($report->status !== 'CLOSED') {
+            return response()->json(['success' => false, 'message' => 'Only closed cases can be disputed.'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'reason'     => ['required', 'string', 'min:10'],
+            'evidence'   => ['nullable', 'array', 'max:10'],
+            'evidence.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif,webp,mp3,wav,ogg,mp4,mov,avi,pdf,doc,docx,xls,xlsx,txt'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Validation error', 'errors' => $validator->errors()], 422);
+        }
+
+        try {
+            DB::transaction(function () use ($report, $request) {
+                $report->status         = 'DISPUTED';
+                $report->dispute_reason = $request->input('reason');
+                $report->last_updated   = now();
+                $report->save();
+
+                if ($request->hasFile('evidence')) {
+                    foreach ($request->file('evidence') as $file) {
+                        $stored = $file->store('dispute_evidence/' . $report->case_id, 'public');
+                        $report->attachments()->create([
+                            'original_name' => $file->getClientOriginalName(),
+                            'file_name'     => $stored,
+                            'mime_type'     => $file->getMimeType(),
+                            'size'          => $file->getSize(),
+                            'disk'          => 'public',
+                            'created_by'    => null,
+                        ]);
+                    }
+                }
+            });
+
+            $this->auditService->record(
+                action: 'CASE_DISPUTED',
+                subject: $report,
+                reportId: $report->id,
+                userId: null,
+                details: 'Case disputed via public portal.',
+                metadata: ['case_id' => $report->case_id],
+            );
+
+            $this->notificationService->notifyCaseEvent(
+                $report,
+                'CASE_DISPUTED',
+                'Case Dispute Filed',
+                "Case {$report->reference_code} has been disputed by the whistleblower.",
+                ['case_id' => $report->case_id],
+            );
+
+            return response()->json(['success' => true, 'message' => 'Dispute submitted successfully.', 'data' => ['status' => 'DISPUTED']]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to process public dispute', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Failed to process dispute. Please try again.'], 500);
+        }
+    }
+
+    public function uploadEvidence(string $trackingCode, Request $request): JsonResponse
+    {
+        $report = Report::query()
+            ->where('reference_code', $trackingCode)
+            ->orWhere('case_id', $trackingCode)
+            ->first();
+
+        if (!$report) {
+            return response()->json(['success' => false, 'message' => 'No case found for this tracking code.'], 404);
+        }
+
+        if (in_array($report->status, ['CLOSED', 'DISPUTED'])) {
+            return response()->json(['success' => false, 'message' => 'Evidence cannot be added to closed or disputed cases.'], 422);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'files'   => ['required', 'array', 'min:1', 'max:10'],
+            'files.*' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,gif,webp,mp3,wav,ogg,mp4,mov,avi,pdf,doc,docx,xls,xlsx,txt'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => 'Validation error', 'errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $existingCount = $report->attachments()->count();
+            $newFiles      = $request->file('files');
+
+            if ($existingCount + count($newFiles) > 10) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Maximum 10 files allowed. You already have {$existingCount} file(s) uploaded.",
+                ], 422);
+            }
+
+            $uploaded = [];
+            foreach ($newFiles as $file) {
+                $stored = $file->store('evidence/' . $report->case_id, 'public');
+                $attachment = $report->attachments()->create([
+                    'original_name' => $file->getClientOriginalName(),
+                    'file_name'     => $stored,
+                    'mime_type'     => $file->getMimeType(),
+                    'size'          => $file->getSize(),
+                    'disk'          => 'public',
+                    'created_by'    => null,
+                ]);
+                $uploaded[] = ['id' => $attachment->id, 'name' => $file->getClientOriginalName(), 'size' => $file->getSize(), 'mime_type' => $file->getMimeType()];
+            }
+
+            $this->auditService->record(
+                action: 'EVIDENCE_UPLOADED',
+                subject: $report,
+                reportId: $report->id,
+                userId: null,
+                details: count($newFiles) . ' evidence file(s) uploaded via public portal.',
+                metadata: ['case_id' => $report->case_id, 'count' => count($newFiles)],
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => count($uploaded) . ' file(s) uploaded successfully.',
+                'data'    => ['uploaded' => $uploaded, 'total_attachments' => $existingCount + count($uploaded)],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to upload evidence', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Failed to upload evidence. Please try again.'], 500);
+        }
     }
 
     private function calculateRiskScore(array $data): int

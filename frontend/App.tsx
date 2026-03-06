@@ -40,6 +40,12 @@ const App: React.FC = () => {
 
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
+      // Whistleblowers no longer use auth sessions — clear any residual saved sessions
+      if (parsed.role === UserRole.WHISTLEBLOWER) {
+        localStorage.removeItem("nexus_user");
+        localStorage.removeItem("nexus_token");
+        return;
+      }
       setUser(parsed);
       setCurrentView(
         parsed.role === UserRole.INVESTIGATOR || parsed.role === UserRole.ADMIN
@@ -65,13 +71,10 @@ const App: React.FC = () => {
   }, [language]);
 
   const handleLogin = (u: User) => {
+    if (u.role === UserRole.WHISTLEBLOWER) return; // blocked at PublicPortal level
     setUser(u);
     localStorage.setItem("nexus_user", JSON.stringify(u));
-    setCurrentView(
-      u.role === UserRole.INVESTIGATOR || u.role === UserRole.ADMIN
-        ? "investigator"
-        : "dashboard",
-    );
+    setCurrentView("investigator");
   };
 
   const handleLogout = () => {
