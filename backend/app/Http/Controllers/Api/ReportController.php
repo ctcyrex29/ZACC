@@ -62,8 +62,10 @@ class ReportController extends Controller
                 $q->select('id', 'name', 'email');
             }]);
         } elseif ($user->isInvestigator()) {
-            // Investigators can see reports in investigable status
-            $query->whereIn('status', ['SUBMITTED', 'UNDER_REVIEW', 'INVESTIGATING', 'REFERRED']);
+            // Investigators can see all reports to review dossiers
+            $query->with(['user' => function ($q) {
+                $q->select('id', 'name', 'email');
+            }]);
         } else {
             // Regular users can only see their own reports
             $query->where('user_id', $user->id);
@@ -235,18 +237,20 @@ class ReportController extends Controller
 
     /**
      * Expert system: automatically determines case priority from report attributes.
+     * Uses multi-factor analysis: corruption type severity, keyword significance,
+     * entity/amount detection, description quality, and cross-referencing heuristics.
      */
     private function determineExpertPriority(array $data): string
     {
         $type = strtolower($data['type'] ?? '');
-        $text = strtolower(
-            ($data['description'] ?? '') . ' ' .
-                ($data['institution']  ?? '') . ' ' .
-                ($data['location']     ?? '')
-        );
+        $description = $data['description'] ?? '';
+        $institution = $data['institution'] ?? '';
+        $location = $data['location'] ?? '';
+        $text = strtolower($description . ' ' . $institution . ' ' . $location);
 
         $score = 0;
 
+        // ── Factor 1: Corruption Type Severity ──
         $typeScores = [
             'embezzlement'      => 40,
             'procurement fraud' => 35,
@@ -263,78 +267,167 @@ class ReportController extends Controller
             }
         }
 
-        foreach (
-            [
-                'million',
-                'billion',
-                'widespread',
-                'systematic',
-                'organised',
-                'organized',
-                'syndicate',
-                'minister',
-                'permanent secretary',
-                'director general',
-                'commissioner',
-                'president',
-                'prime minister',
-                'attorney general',
-                'hundreds of thousands'
-            ] as $kw
-        ) {
+        // ── Factor 2: High-value targets / senior officials ──
+        $seniorOfficials = [
+            'president',
+            'vice president',
+            'prime minister',
+            'minister',
+            'permanent secretary',
+            'director general',
+            'commissioner',
+            'attorney general',
+            'chief justice',
+            'governor',
+            'mayor',
+            'secretary',
+            'chief executive',
+            'managing director',
+            'board chairman',
+            'deputy minister',
+            'ambassador',
+            'consul',
+        ];
+        foreach ($seniorOfficials as $kw) {
             if (str_contains($text, $kw)) {
-                $score += 22;
+                $score += 25;
             }
         }
 
-        foreach (
-            [
-                'government',
-                'public funds',
-                'contract',
-                'tender',
-                'ministry',
-                'department',
-                'council',
-                'authority',
-                'state',
-                'national',
-                'police',
-                'army',
-                'hospital',
-                'school',
-                'thousands',
-                'hundreds'
-            ] as $kw
-        ) {
+        // ── Factor 3: Scale indicators (large financial amounts) ──
+        $largeScaleKeywords = [
+            'million' => 30,
+            'billion' => 35,
+            'trillion' => 40,
+            'widespread' => 20,
+            'systematic' => 22,
+            'organised' => 20,
+            'organized' => 20,
+            'syndicate' => 25,
+            'cartel' => 25,
+            'network' => 15,
+            'ring' => 15,
+            'scheme' => 12,
+            'hundreds of thousands' => 18,
+        ];
+        foreach ($largeScaleKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
-                $score += 9;
+                $score += $pts;
             }
         }
 
-        foreach (
-            [
-                'bribe',
-                'fraud',
-                'theft',
-                'coercion',
-                'embezzle',
-                'kickback',
-                'extort',
-                'misuse',
-                'stolen',
-                'siphon',
-                'inflate',
-                'phantom'
-            ] as $kw
-        ) {
+        // ── Factor 4: Numeric amount detection (USD/ZWL amounts) ──
+        if (preg_match('/\$\s*[\d,]+(?:\.\d+)?/', $text) || preg_match('/(?:usd|zwl|us\$|z\$)\s*[\d,]+/i', $text)) {
+            $score += 15;
+        }
+        if (preg_match('/\b\d{6,}\b/', $text)) {
+            $score += 12;
+        }
+
+        // ── Factor 5: Government/public institution involvement ──
+        $govKeywords = [
+            'government' => 10,
+            'public funds' => 12,
+            'taxpayer' => 12,
+            'contract' => 8,
+            'tender' => 10,
+            'ministry' => 9,
+            'department' => 7,
+            'council' => 8,
+            'authority' => 8,
+            'state' => 7,
+            'national' => 7,
+            'parastatal' => 10,
+            'police' => 9,
+            'army' => 9,
+            'military' => 9,
+            'hospital' => 8,
+            'school' => 7,
+            'university' => 8,
+            'zesa' => 10,
+            'zinwa' => 10,
+            'zimra' => 10,
+            'nssa' => 10,
+        ];
+        foreach ($govKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
-                $score += 6;
+                $score += $pts;
             }
         }
 
-        $len = strlen($data['description'] ?? '');
-        if ($len > 500) {
+        // ── Factor 6: Crime severity keywords ──
+        $crimeKeywords = [
+            'bribe' => 7,
+            'fraud' => 8,
+            'theft' => 8,
+            'steal' => 8,
+            'coercion' => 10,
+            'embezzle' => 9,
+            'kickback' => 10,
+            'extort' => 12,
+            'misuse' => 6,
+            'stolen' => 8,
+            'siphon' => 10,
+            'inflate' => 8,
+            'phantom' => 12,
+            'launder' => 15,
+            'money laundering' => 18,
+            'forgery' => 10,
+            'forged' => 10,
+            'falsified' => 10,
+            'illegal' => 6,
+            'illicit' => 8,
+            'ghost workers' => 15,
+            'fictitious' => 12,
+            'collusion' => 12,
+            'conspiracy' => 10,
+            'intimidat' => 12,
+            'threaten' => 10,
+        ];
+        foreach ($crimeKeywords as $kw => $pts) {
+            if (str_contains($text, $kw)) {
+                $score += $pts;
+            }
+        }
+
+        // ── Factor 7: Evidence quality indicators ──
+        $evidenceKeywords = [
+            'document' => 5,
+            'receipt' => 6,
+            'invoice' => 6,
+            'proof' => 4,
+            'witness' => 6,
+            'recording' => 8,
+            'photo' => 5,
+            'video' => 7,
+            'screenshot' => 5,
+            'bank statement' => 8,
+            'audit' => 7,
+            'email' => 5,
+            'letter' => 4,
+        ];
+        $evidenceBonus = 0;
+        foreach ($evidenceKeywords as $kw => $pts) {
+            if (str_contains($text, $kw)) {
+                $evidenceBonus += $pts;
+            }
+        }
+        $score += min($evidenceBonus, 25);
+
+        // ── Factor 8: Temporal specificity (dates/times mentioned) ──
+        $datePatterns = 0;
+        if (preg_match('/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/', $text)) $datePatterns++;
+        if (preg_match('/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d/i', $text)) $datePatterns++;
+        if (preg_match('/\b20[12]\d\b/', $text)) $datePatterns++;
+        if ($datePatterns > 0) {
+            $score += min($datePatterns * 5, 15);
+        }
+
+        // ── Factor 9: Description quality / length ──
+        $len = strlen($description);
+        if ($len > 1000) {
+            $score += 20;
+        } elseif ($len > 500) {
             $score += 15;
         } elseif ($len > 250) {
             $score += 8;
@@ -342,13 +435,28 @@ class ReportController extends Controller
             $score += 3;
         }
 
-        if ($score >= 75) {
+        // ── Factor 10: Urgency / ongoing nature ──
+        $urgencyKeywords = ['ongoing', 'happening now', 'today', 'currently', 'right now', 'this week', 'this month', 'urgent'];
+        foreach ($urgencyKeywords as $kw) {
+            if (str_contains($text, $kw)) {
+                $score += 8;
+                break;
+            }
+        }
+
+        Log::info('Expert system scoring', [
+            'type' => $type,
+            'total_score' => $score,
+            'desc_length' => $len,
+        ]);
+
+        if ($score >= 80) {
             return 'CRITICAL';
         }
-        if ($score >= 42) {
+        if ($score >= 45) {
             return 'HIGH';
         }
-        if ($score >= 20) {
+        if ($score >= 22) {
             return 'MEDIUM';
         }
 
@@ -411,10 +519,8 @@ class ReportController extends Controller
             ], 404);
         }
 
-        // Check authorization: admins, owners, or assigned investigators can view
-        $isAssignedInvestigator = $user->isInvestigator() && $report->assigned_to && $report->assigned_to === $user->id;
-
-        if (!($user->isAdmin() || $report->user_id === $user->id || $isAssignedInvestigator)) {
+        // Check authorization: admins, investigators, or report owners can view
+        if (!($user->isAdmin() || $user->isInvestigator() || $report->user_id === $user->id)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized',

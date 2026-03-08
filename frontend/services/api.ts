@@ -204,6 +204,28 @@ class ApiClient {
     return this.request('/audit/logs');
   }
 
+  async chatbotMessage(message: string, history: { role: string; text: string }[] = []) {
+    return this.request('/chatbot', 'POST', { message, history });
+  }
+
+  async getReportSummary(filters: Record<string, string> = {}) {
+    const params = new URLSearchParams(filters).toString();
+    return this.request(`/reports/generate/summary${params ? '?' + params : ''}`);
+  }
+
+  async exportReports(category: string, filters: Record<string, string> = {}) {
+    const params = new URLSearchParams({ category, ...filters }).toString();
+    return this.request(`/reports/generate/export?${params}`);
+  }
+
+  async getHotspots() {
+    return this.request('/hotspots');
+  }
+
+  async getPublicHotspots() {
+    return this.request('/hotspots/public');
+  }
+
   async logout() {
     await this.request('/auth/logout', 'POST');
     this.token = null;

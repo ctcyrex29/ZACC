@@ -42,8 +42,12 @@ export const generateAwarenessImage = async (prompt: string, size: "1K" | "2K" |
 };
 
 export const getChatbotResponse = async (query: string, history: { role: string, text: string }[]) => {
-  // This would need to be implemented on the backend as well
-  // For now, return a placeholder response
-  return "I'm your ZACC Integrity Assistant. How can I help you today?";
+  try {
+    const response = await apiClient.chatbotMessage(query, history);
+    return response?.data?.response || "I'm your ZACC Guide. How can I help you today?";
+  } catch (error) {
+    console.error('Chatbot error:', error);
+    return "I'm your ZACC Guide. How can I help you today?";
+  }
 };
 

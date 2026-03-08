@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\AIController;
 use App\Http\Controllers\Api\PublicReportController;
 use App\Http\Controllers\Api\CaseStageController;
 use App\Http\Controllers\Api\AuditController;
+use App\Http\Controllers\Api\ChatbotController;
+use App\Http\Controllers\Api\ReportGenerationController;
+use App\Http\Controllers\Api\HotspotController;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,14 +22,23 @@ use App\Http\Controllers\Api\AuditController;
 |
 */
 
-// Public routes
-Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/reports/anonymous', [PublicReportController::class, 'storeAnonymous']);
-Route::get('/reports/track/{trackingCode}', [PublicReportController::class, 'track']);
-Route::post('/reports/dispute/{trackingCode}', [PublicReportController::class, 'publicDispute']);
-Route::post('/reports/evidence/{trackingCode}', [PublicReportController::class, 'uploadEvidence']);
-Route::get('/stats/public', [PublicReportController::class, 'publicStats']);
+// Public auth routes
+Route::middleware('throttle:auth')->group(function () {
+    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/register', [AuthController::class, 'register']);
+});
+
+// Public report routes
+Route::middleware('throttle:public-reports')->group(function () {
+    Route::post('/reports/anonymous', [PublicReportController::class, 'storeAnonymous']);
+    Route::get('/reports/track/{trackingCode}', [PublicReportController::class, 'track'])->where('trackingCode', '[A-Za-z0-9-]+');
+    Route::post('/reports/dispute/{trackingCode}', [PublicReportController::class, 'publicDispute'])->where('trackingCode', '[A-Za-z0-9-]+');
+    Route::post('/reports/evidence/{trackingCode}', [PublicReportController::class, 'uploadEvidence'])->where('trackingCode', '[A-Za-z0-9-]+');
+    Route::get('/stats/public', [PublicReportController::class, 'publicStats']);
+    Route::get('/hotspots/public', [HotspotController::class, 'publicHotspots']);
+});
+
+Route::post('/chatbot', [ChatbotController::class, 'chat'])->middleware('throttle:chatbot');
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -39,15 +51,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/cases', [ReportController::class, 'index']); // Frontend alias
     Route::post('/reports', [ReportController::class, 'store']);
     Route::get('/reports/stats', [ReportController::class, 'stats']);
-    Route::get('/reports/{id}', [ReportController::class, 'show']);
-    Route::put('/reports/{id}', [ReportController::class, 'update']);
-    Route::put('/reports/{id}/status', [ReportController::class, 'updateStatus']);
-    Route::post('/reports/{id}/dispute', [ReportController::class, 'dispute']);
-    Route::get('/reports/{id}/verify', [ReportController::class, 'verify']);
-    Route::post('/reports/{id}/stages', [CaseStageController::class, 'store']);
-    Route::get('/reports/{id}/stages', [CaseStageController::class, 'index']);
+
+    // Report generation routes (must be before /reports/{id} wildcard)
+    Route::get('/reports/generate/summary', [ReportGenerationController::class, 'summary']);
+    Route::get('/reports/generate/export', [ReportGenerationController::class, 'export']);
+
+    Route::get('/reports/{id}', [ReportController::class, 'show'])->whereNumber('id');
+    Route::put('/reports/{id}', [ReportController::class, 'update'])->whereNumber('id');
+    Route::put('/reports/{id}/status', [ReportController::class, 'updateStatus'])->whereNumber('id');
+    Route::post('/reports/{id}/dispute', [ReportController::class, 'dispute'])->whereNumber('id');
+    Route::get('/reports/{id}/verify', [ReportController::class, 'verify'])->whereNumber('id');
+    Route::post('/reports/{id}/stages', [CaseStageController::class, 'store'])->whereNumber('id');
+    Route::get('/reports/{id}/stages', [CaseStageController::class, 'index'])->whereNumber('id');
     Route::get('/notifications', [CaseStageController::class, 'notifications']);
     Route::get('/audit/logs', [AuditController::class, 'index']);
+
+    // Hotspot routes
+    Route::get('/hotspots', [HotspotController::class, 'index']);
 
     // AI routes
     Route::post('/ai/analyze-report', [AIController::class, 'analyzeReport']);
@@ -55,6 +75,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // User management routes (admin only)
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
-    Route::put('/users/{id}', [UserController::class, 'update']);
-    Route::delete('/users/{id}', [UserController::class, 'destroy']);
+    Route::put('/users/{id}', [UserController::class, 'update'])->whereNumber('id');
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->whereNumber('id');
 });

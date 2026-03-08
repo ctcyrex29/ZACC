@@ -10,6 +10,8 @@ import { PublicPortal } from "./components/PublicPortal";
 import { Language, t } from "./i18n";
 import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
 import { ChatBot } from "./components/ChatBot";
+import { ReportGeneration } from "./components/ReportGeneration";
+import { CorruptionHotspots } from "./components/CorruptionHotspots";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -21,7 +23,9 @@ export type View =
   | "media"
   | "investigator"
   | "tracking"
-  | "users";
+  | "users"
+  | "reports"
+  | "hotspots";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -121,7 +125,7 @@ const App: React.FC = () => {
           />
         );
       case "investigator":
-        return <InvestigatorView />;
+        return <InvestigatorView user={user} />;
       case "tracking":
         return (
           <CaseTracking
@@ -131,6 +135,10 @@ const App: React.FC = () => {
         );
       case "users":
         return <UserManagement />;
+      case "reports":
+        return <ReportGeneration />;
+      case "hotspots":
+        return <CorruptionHotspots />;
       default:
         return <Dashboard />;
     }
@@ -150,6 +158,10 @@ const App: React.FC = () => {
         return t(language, "myReports");
       case "users":
         return t(language, "userManagement");
+      case "reports":
+        return "Report Generation";
+      case "hotspots":
+        return "Corruption Hotspots";
       default:
         return t(language, "appTitle");
     }

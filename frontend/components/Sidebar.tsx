@@ -50,10 +50,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const investigatorItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
+    { id: "reports", label: "Reports", icon: "📋" },
+    { id: "hotspots", label: "Hotspots", icon: "🔥" },
   ];
 
   const adminItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
+    { id: "reports", label: "Reports", icon: "📋" },
+    { id: "hotspots", label: "Hotspots", icon: "🔥" },
     { id: "users", label: t(language, "userManagement"), icon: "👤" },
     { id: "dashboard", label: "System Logs", icon: "📜" },
   ];
