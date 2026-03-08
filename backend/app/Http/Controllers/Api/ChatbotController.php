@@ -3,40 +3,176 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ChatbotController extends Controller
 {
+    private const MAX_HISTORY_MESSAGES = 20;
+    private const MAX_MESSAGE_LENGTH = 1000;
+
     /**
      * Process a chatbot message using Gemini AI to guide whistleblowers.
      */
     public function chat(Request $request): JsonResponse
     {
         $request->validate([
-            'message' => ['required', 'string', 'max:1000'],
-            'history' => ['nullable', 'array', 'max:20'],
+            'message' => ['required', 'string', 'max:' . self::MAX_MESSAGE_LENGTH],
+            'history' => ['nullable', 'array', 'max:' . self::MAX_HISTORY_MESSAGES],
             'history.*.role' => ['required_with:history', 'string', 'in:user,bot'],
-            'history.*.text' => ['required_with:history', 'string'],
+            'history.*.text' => ['required_with:history', 'string', 'max:' . self::MAX_MESSAGE_LENGTH],
         ]);
 
-        $userMessage = $request->input('message');
-        $history = $request->input('history', []);
+        $userMessage = trim((string) $request->input('message'));
+        $history = $this->sanitizeHistory($request->input('history', []));
 
         try {
-            $apiKey = env('GEMINI_API_KEY');
+            $apiKey = (string) config('services.gemini.api_key');
+            $model = (string) config('services.gemini.model', 'gemini-1.5-flash');
+            $timeout = (int) config('services.gemini.timeout', 15);
 
             if (!$apiKey) {
-                return response()->json([
-                    'success' => true,
-                    'data' => ['response' => $this->getFallbackResponse($userMessage)],
-                ]);
+                return $this->fallbackJson($userMessage, 'gemini_not_configured');
             }
 
-            $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . $apiKey;
+            $url = sprintf(
+                'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                urlencode($model),
+                urlencode($apiKey)
+            );
 
-            $systemPrompt = <<<'PROMPT'
+            $payload = [
+                'contents' => $this->buildConversation($userMessage, $history),
+                'generationConfig' => [
+                    'maxOutputTokens' => 700,
+                    'temperature' => 0.55,
+                ],
+            ];
+
+            /** @var Response $response */
+            $response = Http::timeout(max(5, $timeout))
+                ->retry(1, 200)
+                ->acceptJson()
+                ->post($url, $payload);
+
+            if (!$response->successful()) {
+                Log::warning('Chatbot Gemini API error', [
+                    'http_status' => $response->status(),
+                ]);
+                return $this->fallbackJson($userMessage, 'gemini_http_error');
+            }
+
+            $json = $response->json();
+            $text = data_get($json, 'candidates.0.content.parts.0.text');
+
+            if (!is_string($text) || trim($text) === '') {
+                return $this->fallbackJson($userMessage, 'gemini_empty_response');
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'response' => trim($text),
+                    'source' => 'gemini',
+                    'suggestions' => $this->getSuggestedTopics($userMessage),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Chatbot error', [
+                'message' => $e->getMessage(),
+            ]);
+            return $this->fallbackJson($userMessage, 'chatbot_exception');
+        }
+    }
+
+    /**
+     * Build a conversation compatible with Gemini content format.
+     */
+    private function buildConversation(string $userMessage, array $history): array
+    {
+        $contents = [
+            [
+                'role' => 'user',
+                'parts' => [[
+                    'text' => $this->getSystemPrompt() . "\n\nAcknowledge this role in one short sentence.",
+                ]],
+            ],
+            [
+                'role' => 'model',
+                'parts' => [[
+                    'text' => 'I understand and I will provide safe, practical guidance as the ZACC Guide.',
+                ]],
+            ],
+        ];
+
+        foreach ($history as $message) {
+            $contents[] = [
+                'role' => $message['role'] === 'user' ? 'user' : 'model',
+                'parts' => [[
+                    'text' => $message['text'],
+                ]],
+            ];
+        }
+
+        $contents[] = [
+            'role' => 'user',
+            'parts' => [[
+                'text' => $userMessage,
+            ]],
+        ];
+
+        return $contents;
+    }
+
+    private function sanitizeHistory(array $history): array
+    {
+        $cleaned = [];
+
+        foreach ($history as $msg) {
+            if (!is_array($msg)) {
+                continue;
+            }
+
+            $role = ($msg['role'] ?? '') === 'user' ? 'user' : 'bot';
+            $text = trim((string) ($msg['text'] ?? ''));
+
+            if ($text === '') {
+                continue;
+            }
+
+            $cleaned[] = [
+                'role' => $role,
+                'text' => Str::limit($text, self::MAX_MESSAGE_LENGTH, ''),
+            ];
+        }
+
+        if (count($cleaned) > self::MAX_HISTORY_MESSAGES) {
+            $cleaned = array_slice($cleaned, -self::MAX_HISTORY_MESSAGES);
+        }
+
+        return $cleaned;
+    }
+
+    private function fallbackJson(string $input, string $reason): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'response' => $this->getFallbackResponse($input),
+                'source' => 'fallback',
+                'suggestions' => $this->getSuggestedTopics($input),
+                'reason' => $reason,
+            ],
+        ]);
+    }
+
+    private function getSystemPrompt(): string
+    {
+        return <<<'PROMPT'
 You are the ZACC Guide — the official AI assistant of the Zimbabwe Anti-Corruption Commission (ZACC). You are an expert in Zimbabwean anti-corruption law, whistleblower protection, and the ZACC reporting process. Your role is to provide profound, knowledgeable guidance to whistleblowers navigating the anti-corruption reporting system safely and confidentially.
 
 YOUR EXPERTISE AND MANDATE:
@@ -87,86 +223,21 @@ CONVERSATION RULES:
 - Proactively help users strengthen their reports by suggesting what additional details would help
 - When explaining legal concepts, use simple analogies and examples
 PROMPT;
+    }
 
-            // Build conversation history for context
-            $contents = [];
+    private function getSuggestedTopics(string $input): array
+    {
+        $lower = strtolower($input);
 
-            // Add system instruction as first user message
-            $contents[] = [
-                'role' => 'user',
-                'parts' => [['text' => $systemPrompt . "\n\nPlease acknowledge you understand your role."]],
-            ];
-            $contents[] = [
-                'role' => 'model',
-                'parts' => [['text' => 'I understand. I am the ZACC Guide, ready to help whistleblowers navigate the reporting process safely and confidentially.']],
-            ];
-
-            // Add conversation history
-            foreach ($history as $msg) {
-                $role = $msg['role'] === 'user' ? 'user' : 'model';
-                $contents[] = [
-                    'role' => $role,
-                    'parts' => [['text' => $msg['text']]],
-                ];
-            }
-
-            // Add current user message
-            $contents[] = [
-                'role' => 'user',
-                'parts' => [['text' => $userMessage]],
-            ];
-
-            $payload = [
-                'contents' => $contents,
-                'generationConfig' => [
-                    'maxOutputTokens' => 800,
-                    'temperature' => 0.7,
-                ],
-            ];
-
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => $url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($payload),
-                CURLOPT_TIMEOUT => 15,
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200 || !$response) {
-                Log::warning('Chatbot Gemini API error: HTTP ' . $httpCode);
-                return response()->json([
-                    'success' => true,
-                    'data' => ['response' => $this->getFallbackResponse($userMessage)],
-                ]);
-            }
-
-            $decoded = json_decode($response, true);
-            $text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? null;
-
-            if (!$text) {
-                return response()->json([
-                    'success' => true,
-                    'data' => ['response' => $this->getFallbackResponse($userMessage)],
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => ['response' => $text],
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Chatbot error: ' . $e->getMessage());
-            return response()->json([
-                'success' => true,
-                'data' => ['response' => $this->getFallbackResponse($userMessage)],
-            ]);
+        if (str_contains($lower, 'track') || str_contains($lower, 'status')) {
+            return ['How to add evidence', 'How to dispute a decision', 'Is my identity safe?'];
         }
+
+        if (str_contains($lower, 'file') || str_contains($lower, 'report')) {
+            return ['How to track my case', 'What evidence should I include?', 'Is my identity safe?'];
+        }
+
+        return ['How to file a report', 'How to track my case', 'Is my identity safe?'];
     }
 
     /**

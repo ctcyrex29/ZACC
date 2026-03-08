@@ -32,6 +32,7 @@ export interface User {
 
 export interface CaseReport {
   id: string;
+  case_id?: string;
   timestamp: string;
   type: string;
   description: string;
@@ -46,4 +47,6 @@ export interface CaseReport {
   lastUpdated?: string;
   blockchain_tx_hash?: string;
   blockchain_block_number?: number;
+  attachments_count?: number;
+  stage_evaluations_count?: number;
 }

@@ -112,6 +112,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
   });
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [submittedReport, setSubmittedReport] = useState<any>(null);
+  const [evidenceUploadNotice, setEvidenceUploadNotice] = useState<string | null>(null);
 
   // Evidence upload
   const [files, setFiles] = useState<File[]>([]);
@@ -263,9 +264,16 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
         if (files.length > 0 && response.data.reference_code) {
           try {
             await apiClient.uploadEvidence(response.data.reference_code, files);
+            setEvidenceUploadNotice(
+              `${files.length} evidence file${files.length === 1 ? "" : "s"} uploaded and linked to this case file.`,
+            );
           } catch {
-            // Evidence upload failure shouldn't block the report
+            setEvidenceUploadNotice(
+              "Report submitted, but evidence upload failed. You can upload files later using your tracking code in Track Case.",
+            );
           }
+        } else {
+          setEvidenceUploadNotice(null);
         }
       } else {
         throw new Error(response.message || "Failed to submit report");
@@ -352,6 +360,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
           </div>
 
+          {evidenceUploadNotice && (
+            <div className="rounded-2xl p-4 mb-8 border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/70 dark:bg-emerald-500/10">
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                {evidenceUploadNotice}
+              </p>
+            </div>
+          )}
+
           <div className="bg-white/20 dark:bg-white/5 rounded-2xl p-6 mb-8 border border-emerald-200/30 dark:border-white/10">
             <h3 className="font-bold text-emerald-900 dark:text-white mb-4">
               What Happens Next
@@ -391,6 +407,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
               onClick={() => {
                 setAiAnalysis(null);
                 setSubmittedReport(null);
+                setEvidenceUploadNotice(null);
                 setFiles([]);
                 setFileErrors([]);
                 setLocationQuery("");

@@ -374,7 +374,12 @@ export const CorruptionHotspots: React.FC = () => {
           {data.by_type.length > 0 ? (
             <>
               <div className="h-[200px] mb-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={260}
+                  minHeight={220}
+                >
                   <PieChart>
                     <Pie
                       data={data.by_type}
@@ -468,7 +473,12 @@ export const CorruptionHotspots: React.FC = () => {
           Province Comparison
         </h3>
         <div className="h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            minWidth={260}
+            minHeight={220}
+          >
             <BarChart
               data={data.by_province.filter((p) => p.total > 0)}
               layout="vertical"

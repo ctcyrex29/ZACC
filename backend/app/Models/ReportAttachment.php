@@ -10,6 +10,11 @@ class ReportAttachment extends Model
 {
     use HasFactory;
 
+    protected $appends = [
+        'download_url',
+        'is_public',
+    ];
+
     protected $fillable = [
         'report_id',
         'original_name',
@@ -23,5 +28,23 @@ class ReportAttachment extends Model
     public function report(): BelongsTo
     {
         return $this->belongsTo(Report::class);
+    }
+
+    public function getIsPublicAttribute(): bool
+    {
+        return $this->disk === 'public';
+    }
+
+    public function getDownloadUrlAttribute(): ?string
+    {
+        if ($this->disk === 'public') {
+            return asset('storage/' . ltrim((string) $this->file_name, '/'));
+        }
+
+        if (!$this->report_id) {
+            return null;
+        }
+
+        return url("/api/reports/{$this->report_id}/attachments/{$this->id}/download");
     }
 }

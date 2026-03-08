@@ -13,6 +13,15 @@ use Illuminate\Http\Request;
 
 class CaseStageController extends Controller
 {
+    private const STAGE_TRANSITIONS = [
+        'SUBMITTED' => ['UNDER_REVIEW'],
+        'UNDER_REVIEW' => ['INVESTIGATING', 'CLOSED'],
+        'INVESTIGATING' => ['REFERRED', 'CLOSED'],
+        'REFERRED' => ['CLOSED'],
+        'DISPUTED' => ['CLOSED'],
+        'CLOSED' => [],
+    ];
+
     public function __construct(
         protected ExpertEvaluationService $expertEvaluationService,
         protected StakeholderNotificationService $notificationService,
@@ -61,6 +70,21 @@ class CaseStageController extends Controller
             'investigator_notes' => 'required|string|min:10',
             'manual_score' => 'nullable|integer|min:0|max:100',
         ]);
+
+        $currentStage = (string) $report->status;
+        $requestedStage = (string) $validated['stage'];
+        $allowedNextStages = self::STAGE_TRANSITIONS[$currentStage] ?? [];
+
+        if (!in_array($requestedStage, $allowedNextStages, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Invalid stage transition from {$currentStage} to {$requestedStage}. Past stages are locked once completed.",
+                'data' => [
+                    'current_stage' => $currentStage,
+                    'allowed_next_stages' => $allowedNextStages,
+                ],
+            ], 422);
+        }
 
         $expert = $this->expertEvaluationService->evaluateStage(
             $report,

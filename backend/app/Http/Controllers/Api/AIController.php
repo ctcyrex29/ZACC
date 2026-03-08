@@ -19,7 +19,8 @@ class AIController extends Controller
         ]);
 
         try {
-            $apiKey = env('GEMINI_API_KEY');
+            $apiKey = (string) config('services.gemini.api_key');
+            $model = (string) config('services.gemini.model', 'gemini-1.5-flash');
 
             if (!$apiKey) {
                 return response()->json([
@@ -28,7 +29,11 @@ class AIController extends Controller
                 ], 500);
             }
 
-            $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . $apiKey;
+            $url = sprintf(
+                'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                urlencode($model),
+                urlencode($apiKey)
+            );
 
             $payload = [
                 'contents' => [

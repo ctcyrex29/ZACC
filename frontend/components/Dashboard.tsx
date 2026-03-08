@@ -224,7 +224,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
               <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
@@ -274,7 +274,7 @@ export const Dashboard: React.FC = () => {
           {distributionData.length > 0 ? (
             <>
               <div className="h-[160px] mb-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={140}>
                   <PieChart>
                     <Pie
                       data={distributionData}

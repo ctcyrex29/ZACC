@@ -128,6 +128,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const [submitted, setSubmitted] = useState<any | null>(null);
   const [publicStats, setPublicStats] = useState<any | null>(null);
 
+  // Initial report evidence (optional on first submission)
+  const [reportFiles, setReportFiles] = useState<File[]>([]);
+  const [reportFileError, setReportFileError] = useState<string | null>(null);
+  const [reportUploadNotice, setReportUploadNotice] = useState<string | null>(null);
+  const [reportSubmittedEvidenceCount, setReportSubmittedEvidenceCount] = useState(0);
+  const reportFileInputRef = useRef<HTMLInputElement>(null);
+
   // Tracking state
   const [trackingCode, setTrackingCode] = useState("");
   const [trackedCase, setTrackedCase] = useState<any | null>(null);
@@ -215,15 +222,62 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
     setLoading(true);
     resetMessages();
     try {
+      const selectedEvidenceCount = reportFiles.length;
       const response = await apiClient.createAnonymousReport(formData);
       if (!response.success) throw new Error(response.message || "Failed to submit report");
+
+      let uploadNotice: string | null = null;
+      if (reportFiles.length > 0 && response.data?.reference_code) {
+        try {
+          const uploadResp = await apiClient.uploadEvidence(
+            response.data.reference_code,
+            reportFiles,
+          );
+          const uploadedCount = uploadResp?.data?.uploaded?.length ?? reportFiles.length;
+          uploadNotice = `${uploadedCount} evidence file${uploadedCount === 1 ? "" : "s"} uploaded with your report.`;
+        } catch {
+          uploadNotice = "Your report was submitted, but evidence upload failed. You can upload evidence later in Track Case.";
+        }
+      }
+
+      setReportUploadNotice(uploadNotice);
+      setReportSubmittedEvidenceCount(selectedEvidenceCount);
       setSubmitted(response.data);
+      setReportFiles([]);
+      setReportFileError(null);
       setFormData({ type: "Bribery", institution: "", location: "", description: "" });
     } catch (err: any) {
       setError(err.message || "Failed to submit report");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const remaining = 10 - reportFiles.length;
+
+    if (remaining <= 0) {
+      setReportFileError("You can only attach up to 10 files.");
+      return;
+    }
+
+    const tooLarge = selected.filter((f) => f.size > 10 * 1024 * 1024);
+    const valid = selected.filter((f) => f.size <= 10 * 1024 * 1024).slice(0, remaining);
+
+    if (tooLarge.length > 0) {
+      setReportFileError(`${tooLarge.length} file(s) exceeded 10MB and were skipped.`);
+    } else {
+      setReportFileError(null);
+    }
+
+    setReportFiles((prev) => [...prev, ...valid].slice(0, 10));
+    if (reportFileInputRef.current) reportFileInputRef.current.value = "";
+  };
+
+  const removeReportFile = (index: number) => {
+    setReportFiles((prev) => prev.filter((_, i) => i !== index));
+    setReportFileError(null);
   };
 
   const handleTrack = async (e: React.FormEvent) => {
@@ -315,6 +369,52 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
   const activeStatusIdx = STATUS_ORDER.indexOf(trackedCase?.status ?? "SUBMITTED");
   const maxEvidenceReach = 10 - (trackedCase?.attachments_count ?? 0);
+  const useWideTabLayout =
+    (tab === "report" && !submitted) ||
+    tab === "signin" ||
+    (tab === "tracking" && !trackedCase);
+
+  const sideInsightPanel = (
+    <div className="lg:col-span-2 space-y-4">
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500">Integrity Flow</p>
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{publicStats?.resolution_rate ?? 0}%</span>
+        </div>
+        <div className="h-[180px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={150}>
+            <AreaChart data={integritySeries}>
+              <defs>
+                <linearGradient id="integrityFlowSidebar" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="stage" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip />
+              <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} fill="url(#integrityFlowSidebar)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 p-4">
+        <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Trust Snapshot</p>
+        <div className="h-[180px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={150}>
+            <PieChart>
+              <Pie data={integrityDonut} dataKey="value" innerRadius={40} outerRadius={66} paddingAngle={3}>
+                <Cell fill="#10b981" />
+                <Cell fill="#3b82f6" />
+                <Cell fill="#f43f5e" />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#04060b] dark:to-[#0a0f1a] text-slate-900 dark:text-slate-200 flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
@@ -342,6 +442,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
         <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Secure. Anonymous. Protected.</p>
       </div>
 
+      {!(tab === "report" && !submitted) && (
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
@@ -351,7 +452,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
             </span>
           </div>
           <div className="h-[170px] sm:h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={260} minHeight={150}>
               <AreaChart data={integritySeries}>
                 <defs>
                   <linearGradient id="integrityFlow" x1="0" y1="0" x2="0" y2="1">
@@ -370,7 +471,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
         <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
           <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Trust Snapshot</p>
           <div className="h-[170px] sm:h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={150}>
               <PieChart>
                 <Pie data={integrityDonut} dataKey="value" innerRadius={38} outerRadius={64} paddingAngle={3}>
                   <Cell fill="#10b981" />
@@ -382,9 +483,10 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* Main Card */}
-      <div className="w-full max-w-2xl rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] shadow-2xl overflow-hidden">
+      <div className={`w-full ${useWideTabLayout ? "max-w-6xl" : "max-w-2xl"} rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] shadow-2xl overflow-hidden`}>
         {/* Tabs */}
         <div className="grid grid-cols-3 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20">
           {[
@@ -410,7 +512,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
           {/* ── STAFF LOGIN ── */}
           {tab === "signin" && (
-            <form onSubmit={handleLogin} className="space-y-5 animate-fade-in">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
+            <form onSubmit={handleLogin} className="space-y-5 lg:col-span-3">
               <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-5 py-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
                 For ZACC Staff (Admin &amp; Investigators) only. Whistleblowers do not need to log in — use the Track Case tab.
               </div>
@@ -429,11 +532,14 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 {loading ? "Authenticating..." : "Sign In"}
               </button>
             </form>
+            {sideInsightPanel}
+            </div>
           )}
 
           {/* ── FILE REPORT ── */}
           {tab === "report" && !submitted && (
-            <form onSubmit={handleAnonymousSubmit} className="space-y-5 animate-fade-in">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
+            <form onSubmit={handleAnonymousSubmit} className="space-y-5 lg:col-span-3">
               <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
                 Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
               </div>
@@ -469,11 +575,54 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none" />
                 <p className="text-xs text-slate-500 mt-1">{formData.description.length} characters (min 20)</p>
               </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                  Evidence (Optional)
+                </label>
+                <div
+                  onClick={() => reportFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-4 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/50 transition-all"
+                >
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Click to attach evidence now</p>
+                  <p className="text-xs text-slate-500 mt-1">Optional. You can still submit without evidence. Max 10 files, 10MB each.</p>
+                </div>
+                <input
+                  ref={reportFileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPTED_MIME}
+                  onChange={handleReportFileChange}
+                  className="hidden"
+                />
+
+                {reportFileError && (
+                  <p className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-300">⚠️ {reportFileError}</p>
+                )}
+
+                {reportFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {reportFiles.map((f, i) => (
+                      <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-slate-50 dark:bg-white/5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm">📎</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{f.name}</span>
+                          <span className="text-xs text-slate-500">{formatBytes(f.size)}</span>
+                        </div>
+                        <button type="button" onClick={() => removeReportFile(i)} className="text-rose-500 text-sm font-bold">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button type="submit" disabled={loading}
                 className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
                 {loading ? "Submitting Securely..." : "Submit Anonymous Report"}
               </button>
             </form>
+
+            {sideInsightPanel}
+            </div>
           )}
 
           {tab === "report" && submitted && (
@@ -494,21 +643,26 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="rounded-xl border border-slate-200 dark:border-white/10 p-4 bg-slate-50 dark:bg-white/5">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Priority</p>
-                  <p className="font-black text-slate-900 dark:text-white">{submitted.priority}</p>
+              {reportUploadNotice && (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  {reportUploadNotice}
                 </div>
+              )}
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="rounded-xl border border-slate-200 dark:border-white/10 p-4 bg-slate-50 dark:bg-white/5">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Status</p>
                   <p className="font-black text-blue-600 dark:text-blue-400">SUBMITTED</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 dark:border-white/10 p-4 bg-slate-50 dark:bg-white/5">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Evidence</p>
+                  <p className="font-black text-slate-900 dark:text-white">{reportSubmittedEvidenceCount} file{reportSubmittedEvidenceCount === 1 ? "" : "s"}</p>
                 </div>
               </div>
               <button onClick={() => { setTab("tracking"); setTrackingCode(submitted.reference_code); setSubmitted(null); }}
                 className="w-full rounded-2xl border border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold py-3.5 text-sm uppercase tracking-wider hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all">
                 Track This Case Now →
               </button>
-              <button onClick={() => setSubmitted(null)}
+              <button onClick={() => { setSubmitted(null); setReportUploadNotice(null); setReportSubmittedEvidenceCount(0); }}
                 className="w-full rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 font-bold py-3 text-sm uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
                 Submit Another Report
               </button>
@@ -517,7 +671,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
           {/* ── TRACK CASE ── */}
           {tab === "tracking" && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
+            <div className="space-y-6 lg:col-span-3">
               <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Enter Your Tracking Code</label>
@@ -764,6 +919,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   )}
                 </div>
               )}
+            </div>
+            {sideInsightPanel}
             </div>
           )}
         </div>

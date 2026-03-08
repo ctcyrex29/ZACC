@@ -8,6 +8,15 @@ interface Message {
   timestamp: Date;
 }
 
+interface ChatbotApiPayload {
+  response?: string;
+  source?: "gemini" | "fallback";
+  suggestions?: string[];
+}
+
+const MAX_INPUT_LENGTH = 1000;
+const MAX_HISTORY_LENGTH = 20;
+
 const QUICK_TOPICS = [
   { label: "How to file a report", key: "file" },
   { label: "What is a tracking code?", key: "tracking_code" },
@@ -101,8 +110,10 @@ export const ChatBot: React.FC = () => {
   const [typing, setTyping] = useState(false);
   const [unread, setUnread] = useState(0);
   const [guidedStep, setGuidedStep] = useState<number>(-1);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
   const [conversationHistory, setConversationHistory] = useState<
-    { role: string; text: string }[]
+    { role: "user" | "bot"; text: string }[]
   >([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -130,11 +141,13 @@ export const ChatBot: React.FC = () => {
   };
 
   const sendMessage = async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || typing) return;
+    const normalized = text.trim().slice(0, MAX_INPUT_LENGTH);
+
     const userMsg: Message = {
       id: ++msgId,
       from: "user",
-      text: text.trim(),
+      text: normalized,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -143,9 +156,10 @@ export const ChatBot: React.FC = () => {
 
     // Check for guided flow triggers
     if (
-      text.trim().toLowerCase() === "yes, guide me" ||
-      text.trim().toLowerCase() === "start over"
+      normalized.toLowerCase() === "yes, guide me" ||
+      normalized.toLowerCase() === "start over"
     ) {
+      setUsingFallback(false);
       setGuidedStep(1);
       setTimeout(() => {
         addBotMessage(GUIDED_STEPS[1].message);
@@ -154,7 +168,8 @@ export const ChatBot: React.FC = () => {
       return;
     }
 
-    if (text.trim().toLowerCase() === "i have questions first") {
+    if (normalized.toLowerCase() === "i have questions first") {
+      setUsingFallback(false);
       setGuidedStep(-1);
       setTimeout(() => {
         addBotMessage(
@@ -167,6 +182,7 @@ export const ChatBot: React.FC = () => {
 
     // If in guided mode, advance steps
     if (guidedStep >= 1 && guidedStep < GUIDED_STEPS.length - 1) {
+      setUsingFallback(false);
       const nextStep = guidedStep + 1;
       setGuidedStep(nextStep);
       setTimeout(() => {
@@ -177,7 +193,8 @@ export const ChatBot: React.FC = () => {
     }
 
     // Check for "guide me" in any message
-    if (text.trim().toLowerCase().includes("guide me")) {
+    if (normalized.toLowerCase().includes("guide me")) {
+      setUsingFallback(false);
       setGuidedStep(0);
       setTimeout(() => {
         addBotMessage(GUIDED_STEPS[0].message);
@@ -187,22 +204,28 @@ export const ChatBot: React.FC = () => {
     }
 
     // Normal AI-powered chat
-    const newHistory = [
-      ...conversationHistory,
-      { role: "user", text: text.trim() },
-    ];
+    const newHistory = [...conversationHistory, { role: "user", text: normalized }].slice(
+      -MAX_HISTORY_LENGTH,
+    );
 
     try {
-      const response = await apiClient.chatbotMessage(
-        text.trim(),
-        conversationHistory,
+      const response = await apiClient.chatbotMessage(normalized, newHistory);
+      const payload = (response?.data || {}) as ChatbotApiPayload;
+      const botText = payload.response || getFallbackResponse(normalized);
+      const updatedHistory = [...newHistory, { role: "bot", text: botText }].slice(
+        -MAX_HISTORY_LENGTH,
       );
-      const botText =
-        response?.data?.response || getFallbackResponse(text.trim());
-      setConversationHistory([...newHistory, { role: "bot", text: botText }]);
+
+      setUsingFallback(payload.source === "fallback");
+      setDynamicSuggestions(
+        Array.isArray(payload.suggestions) ? payload.suggestions.slice(0, 3) : [],
+      );
+      setConversationHistory(updatedHistory);
       addBotMessage(botText);
     } catch {
-      const fallback = getFallbackResponse(text.trim());
+      const fallback = getFallbackResponse(normalized);
+      setUsingFallback(true);
+      setDynamicSuggestions([]);
       setConversationHistory([...newHistory, { role: "bot", text: fallback }]);
       addBotMessage(fallback);
     } finally {
@@ -325,10 +348,24 @@ export const ChatBot: React.FC = () => {
 
           {/* Quick topics */}
           <div className="px-4 py-2 border-t border-white/10 flex-shrink-0">
+            {usingFallback && (
+              <p className="mb-2 text-[10px] text-amber-300">
+                AI service is temporarily unavailable. The guide is using trusted built-in responses.
+              </p>
+            )}
             <div
               className="flex gap-1.5 overflow-x-auto pb-1"
               style={{ scrollbarWidth: "none" }}
             >
+              {dynamicSuggestions.map((topic) => (
+                <button
+                  key={topic}
+                  onClick={() => sendMessage(topic)}
+                  className="flex-shrink-0 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-200 hover:bg-amber-500/25 transition-all whitespace-nowrap"
+                >
+                  {topic}
+                </button>
+              ))}
               <button
                 onClick={() => sendMessage("Guide me through filing a report")}
                 className="flex-shrink-0 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30 transition-all whitespace-nowrap"
@@ -354,6 +391,7 @@ export const ChatBot: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKey}
+              maxLength={MAX_INPUT_LENGTH}
               placeholder="Type a question..."
               className="flex-1 bg-white/8 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 min-w-0"
             />
@@ -364,6 +402,9 @@ export const ChatBot: React.FC = () => {
             >
               ↑
             </button>
+          </div>
+          <div className="px-4 pb-3 text-right text-[10px] text-slate-500">
+            {input.length}/{MAX_INPUT_LENGTH}
           </div>
         </div>
       )}

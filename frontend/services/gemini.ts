@@ -41,7 +41,7 @@ export const generateAwarenessImage = async (prompt: string, size: "1K" | "2K" |
   return null;
 };
 
-export const getChatbotResponse = async (query: string, history: { role: string, text: string }[]) => {
+export const getChatbotResponse = async (query: string, history: { role: 'user' | 'bot', text: string }[]) => {
   try {
     const response = await apiClient.chatbotMessage(query, history);
     return response?.data?.response || "I'm your ZACC Guide. How can I help you today?";

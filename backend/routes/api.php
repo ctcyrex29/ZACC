@@ -56,13 +56,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/generate/summary', [ReportGenerationController::class, 'summary']);
     Route::get('/reports/generate/export', [ReportGenerationController::class, 'export']);
 
-    Route::get('/reports/{id}', [ReportController::class, 'show'])->whereNumber('id');
-    Route::put('/reports/{id}', [ReportController::class, 'update'])->whereNumber('id');
-    Route::put('/reports/{id}/status', [ReportController::class, 'updateStatus'])->whereNumber('id');
-    Route::post('/reports/{id}/dispute', [ReportController::class, 'dispute'])->whereNumber('id');
-    Route::get('/reports/{id}/verify', [ReportController::class, 'verify'])->whereNumber('id');
-    Route::post('/reports/{id}/stages', [CaseStageController::class, 'store'])->whereNumber('id');
-    Route::get('/reports/{id}/stages', [CaseStageController::class, 'index'])->whereNumber('id');
+    Route::get('/reports/{id}', [ReportController::class, 'show'])->where('id', '[A-Za-z0-9-]+');
+    Route::get('/reports/{id}/attachments/{attachmentId}/download', [ReportController::class, 'downloadAttachment'])
+        ->where('id', '[A-Za-z0-9-]+')
+        ->whereNumber('attachmentId');
+    Route::put('/reports/{id}', [ReportController::class, 'update'])->where('id', '[A-Za-z0-9-]+');
+    Route::put('/reports/{id}/status', [ReportController::class, 'updateStatus'])->where('id', '[A-Za-z0-9-]+');
+    Route::post('/reports/{id}/dispute', [ReportController::class, 'dispute'])->where('id', '[A-Za-z0-9-]+');
+    Route::get('/reports/{id}/verify', [ReportController::class, 'verify'])->where('id', '[A-Za-z0-9-]+');
+    Route::post('/reports/{id}/stages', [CaseStageController::class, 'store'])->where('id', '[A-Za-z0-9-]+');
+    Route::get('/reports/{id}/stages', [CaseStageController::class, 'index'])->where('id', '[A-Za-z0-9-]+');
     Route::get('/notifications', [CaseStageController::class, 'notifications']);
     Route::get('/audit/logs', [AuditController::class, 'index']);
 

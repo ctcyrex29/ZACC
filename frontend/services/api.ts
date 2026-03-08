@@ -204,7 +204,7 @@ class ApiClient {
     return this.request('/audit/logs');
   }
 
-  async chatbotMessage(message: string, history: { role: string; text: string }[] = []) {
+  async chatbotMessage(message: string, history: { role: 'user' | 'bot'; text: string }[] = []) {
     return this.request('/chatbot', 'POST', { message, history });
   }
 

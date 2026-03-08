@@ -423,7 +423,12 @@ export const ReportGeneration: React.FC = () => {
                 Monthly Trend
               </h3>
               <div className="h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={260}
+                  minHeight={220}
+                >
                   <AreaChart data={data.monthly_trend}>
                     <defs>
                       <linearGradient
@@ -500,7 +505,12 @@ export const ReportGeneration: React.FC = () => {
               {typeData.length > 0 ? (
                 <>
                   <div className="h-[160px] mb-3">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer
+                      width="100%"
+                      height="100%"
+                      minWidth={220}
+                      minHeight={140}
+                    >
                       <PieChart>
                         <Pie
                           data={typeData}
@@ -555,7 +565,12 @@ export const ReportGeneration: React.FC = () => {
                 By Priority
               </h3>
               <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={260}
+                  minHeight={180}
+                >
                   <BarChart data={priorityData}>
                     <CartesianGrid
                       strokeDasharray="3 3"

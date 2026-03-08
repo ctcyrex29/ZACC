@@ -29,7 +29,7 @@ trait ReportControllerHelpers
 
                 $report->attachments()->create([
                     'original_name' => $file->getClientOriginalName(),
-                    'file_name' => basename($path),
+                    'file_name' => $path,
                     'mime_type' => $file->getClientMimeType(),
                     'size' => $file->getSize(),
                     'disk' => 'private',

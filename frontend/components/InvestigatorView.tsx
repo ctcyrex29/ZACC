@@ -42,6 +42,29 @@ const priorityColor = (p: string) => {
   return "text-emerald-600 dark:text-emerald-400";
 };
 
+const CASE_BOOK_STAGES = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "INVESTIGATING",
+  "REFERRED",
+  "CLOSED",
+] as const;
+
+const stageIndex = (status?: string) => {
+  const idx = CASE_BOOK_STAGES.indexOf((status || "") as (typeof CASE_BOOK_STAGES)[number]);
+  return idx === -1 ? 0 : idx;
+};
+
+const attachmentIcon = (mimeType = "") => {
+  if (mimeType.startsWith("image/")) return "🖼️";
+  if (mimeType.startsWith("video/")) return "🎬";
+  if (mimeType.startsWith("audio/")) return "🎵";
+  if (mimeType.includes("pdf")) return "📄";
+  if (mimeType.includes("word") || mimeType.includes("officedocument")) return "📝";
+  if (mimeType.includes("excel") || mimeType.includes("spreadsheet")) return "📊";
+  return "📎";
+};
+
 // ── PDF Generator ─────────────────────────────────────────────────────────
 function generateStagePDF(caseData: any, stage: any) {
   const inv = stage.investigator;
@@ -162,6 +185,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
             priority: r.priority,
             reporterId: r.user_id,
             referenceCode: r.reference_code,
+            attachments_count: r.attachments_count,
+            stage_evaluations_count: r.stage_evaluations_count,
           })),
         );
       } else {
@@ -316,6 +341,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
 
   const currentStatus: string = dossierData?.status ?? "";
   const decrypted = dossierData?.decrypted_data ?? {};
+  const currentStageIndex = stageIndex(currentStatus);
+  const bookmarkStage = CASE_BOOK_STAGES[currentStageIndex] ?? "SUBMITTED";
+  const caseAttachments: any[] = Array.isArray(dossierData?.attachments)
+    ? dossierData.attachments
+    : [];
   const newCaseNotifications = notifications.filter((n) =>
     ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type),
   );
@@ -484,6 +514,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                     "Institution",
                     "Priority",
                     "Status",
+                    "Evidence",
                     "Date",
                     "Action",
                   ].map((h) => (
@@ -529,6 +560,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                       >
                         {statusLabel(c.status)}
                       </span>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap">
+                      {c.attachments_count ?? 0} file{(c.attachments_count ?? 0) === 1 ? "" : "s"}
                     </td>
                     <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
                       {new Date(c.timestamp).toLocaleDateString()}
@@ -671,6 +705,122 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                           "No description available."}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Case Book */}
+                  <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <p className="text-xs font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest">
+                        Case Book Timeline
+                      </p>
+                      <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                        Bookmark: {statusLabel(bookmarkStage)}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      {CASE_BOOK_STAGES.map((stage, idx) => {
+                        const isPassed = idx < currentStageIndex;
+                        const isCurrent = idx === currentStageIndex;
+                        const stageRecord = stagesData.find((s: any) => s.stage === stage);
+
+                        return (
+                          <div
+                            key={stage}
+                            className={`rounded-xl border px-3 py-3 min-h-[108px] transition-all ${
+                              isCurrent
+                                ? "border-emerald-400 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10"
+                                : isPassed
+                                  ? "border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-900/40 opacity-70"
+                                  : "border-slate-200 dark:border-white/10 bg-white dark:bg-black/20"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <p
+                                className={`text-[11px] font-black uppercase tracking-wider ${
+                                  isPassed
+                                    ? "text-slate-500 dark:text-slate-400"
+                                    : isCurrent
+                                      ? "text-emerald-700 dark:text-emerald-300"
+                                      : "text-slate-700 dark:text-slate-300"
+                                }`}
+                              >
+                                {statusLabel(stage)}
+                              </p>
+                              <span className="text-xs">
+                                {isCurrent ? "🔖" : isPassed ? "🔒" : "📄"}
+                              </span>
+                            </div>
+
+                            {stageRecord ? (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-3">
+                                {stageRecord.investigator_notes || "Stage completed."}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                                {isPassed ? "Passed and locked" : isCurrent ? "Current stage" : "Pending"}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                      Past stages are locked for editing. Investigators can only continue from the bookmarked stage.
+                    </p>
+                  </div>
+
+                  {/* Evidence Shelf */}
+                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-5 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">
+                        Case Evidence
+                      </p>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        {caseAttachments.length} file{caseAttachments.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+
+                    {caseAttachments.length === 0 ? (
+                      <p className="text-sm text-slate-500 italic">
+                        No evidence files attached to this case yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {caseAttachments.map((attachment: any) => (
+                          <div
+                            key={attachment.id}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 px-3 py-2.5"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span>{attachmentIcon(attachment.mime_type || "")}</span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                                  {attachment.original_name || "Evidence file"}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {attachment.mime_type || "Unknown type"} · {attachment.size ? `${(attachment.size / 1024 / 1024).toFixed(2)} MB` : "Size unknown"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {attachment.download_url ? (
+                              <a
+                                href={attachment.download_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
+                              >
+                                Open
+                              </a>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">Unavailable</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* ── Workflow Panel (INVESTIGATORS ONLY) ── */}

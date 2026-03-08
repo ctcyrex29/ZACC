@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Api\ReportControllerHelpers;
 use App\Http\Controllers\Api\AIController;
 
@@ -101,6 +102,8 @@ class ReportController extends Controller
         $sortOrder = $request->sort_order === 'asc' ? 'asc' : 'desc';
 
         $reports = $query->orderBy($sortBy, $sortOrder)->get();
+
+        $reports->loadCount(['attachments', 'stageEvaluations']);
 
         return response()->json([
             'success' => true,
@@ -507,7 +510,11 @@ class ReportController extends Controller
             ], 401);
         }
 
-        $report = Report::with('user')
+        $report = Report::with([
+            'user',
+            'attachments' => fn ($query) => $query->latest('created_at'),
+            'stageEvaluations' => fn ($query) => $query->with('investigator:id,name,email')->latest('created_at'),
+        ])
             ->where('id', $id)
             ->orWhere('case_id', $id)
             ->first();
@@ -531,6 +538,76 @@ class ReportController extends Controller
             'success' => true,
             'data' => $report,
         ]);
+    }
+
+    /**
+     * Download an attachment belonging to a report.
+     */
+    public function downloadAttachment(Request $request, string $id, string $attachmentId)
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $report = Report::query()
+            ->where('id', $id)
+            ->orWhere('case_id', $id)
+            ->first();
+
+        if (!$report) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Report not found',
+            ], 404);
+        }
+
+        if (!($user->isAdmin() || $user->isInvestigator() || $report->user_id === $user->id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $attachment = $report->attachments()->find($attachmentId);
+
+        if (!$attachment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attachment not found',
+            ], 404);
+        }
+
+        if ($attachment->disk === 'public') {
+            return redirect()->away(asset('storage/' . ltrim((string) $attachment->file_name, '/')));
+        }
+
+        $disk = Storage::disk('private');
+        $path = $attachment->file_name;
+
+        if (!$disk->exists($path)) {
+            $legacyPath = "reports/{$report->id}/attachments/{$attachment->file_name}";
+            if ($disk->exists($legacyPath)) {
+                $path = $legacyPath;
+            }
+        }
+
+        if (!$disk->exists($path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attachment file is missing',
+            ], 404);
+        }
+
+        return response()->download(
+            storage_path('app/private/' . ltrim((string) $path, '/')),
+            (string) $attachment->original_name
+        );
     }
 
     /**
