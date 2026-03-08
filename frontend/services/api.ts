@@ -157,14 +157,14 @@ class ApiClient {
 
   async uploadEvidence(trackingCode: string, files: File[]) {
     const formData = new FormData();
-    files.forEach((file, index) => formData.append(`files[${index}]`, file));
+    files.forEach((file) => formData.append('files[]', file));
     return this.requestFormData(`/reports/evidence/${encodeURIComponent(trackingCode)}`, formData);
   }
 
   async publicDispute(trackingCode: string, reason: string, files: File[] = []) {
     const formData = new FormData();
     formData.append('reason', reason);
-    files.forEach((file, index) => formData.append(`evidence[${index}]`, file));
+    files.forEach((file) => formData.append('evidence[]', file));
     return this.requestFormData(`/reports/dispute/${encodeURIComponent(trackingCode)}`, formData);
   }
 
@@ -174,8 +174,24 @@ class ApiClient {
     try {
       const response = await fetch(`${API_URL}${endpoint}`, { method: 'POST', headers, body: formData });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Upload failed');
+        let message = 'Upload failed';
+        try {
+          const error = await response.json();
+          message = error.message || message;
+
+          // Surface Laravel validation messages when available.
+          if (response.status === 422 && error.errors) {
+            const firstField = Object.keys(error.errors)[0];
+            const fieldErrors = firstField ? error.errors[firstField] : null;
+            if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+              message = fieldErrors[0];
+            }
+          }
+        } catch {
+          const text = await response.text().catch(() => '');
+          if (text) message = text.slice(0, 200);
+        }
+        throw new Error(message);
       }
       return await response.json();
     } catch (error: any) {

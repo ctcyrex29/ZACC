@@ -183,7 +183,11 @@ class PublicReportController extends Controller
         $validator = Validator::make($request->all(), [
             'reason'     => ['required', 'string', 'min:10'],
             'evidence'   => ['nullable', 'array', 'max:10'],
-            'evidence.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif,webp,mp3,wav,ogg,mp4,mov,avi,pdf,doc,docx,xls,xlsx,txt'],
+            'evidence.*' => [
+                'file',
+                'max:10240',
+                'mimetypes:image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/wav,audio/ogg,video/mp4,video/quicktime,video/x-msvideo,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain',
+            ],
         ]);
 
         if ($validator->fails()) {
@@ -253,7 +257,12 @@ class PublicReportController extends Controller
 
         $validator = Validator::make($request->all(), [
             'files'   => ['required', 'array', 'min:1', 'max:10'],
-            'files.*' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,gif,webp,mp3,wav,ogg,mp4,mov,avi,pdf,doc,docx,xls,xlsx,txt'],
+            'files.*' => [
+                'required',
+                'file',
+                'max:10240',
+                'mimetypes:image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/wav,audio/ogg,video/mp4,video/quicktime,video/x-msvideo,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain',
+            ],
         ]);
 
         if ($validator->fails()) {

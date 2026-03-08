@@ -229,14 +229,27 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       let uploadNotice: string | null = null;
       if (reportFiles.length > 0 && response.data?.reference_code) {
         try {
-          const uploadResp = await apiClient.uploadEvidence(
-            response.data.reference_code,
-            reportFiles,
-          );
+          let uploadResp: any;
+          try {
+            uploadResp = await apiClient.uploadEvidence(
+              response.data.reference_code,
+              reportFiles,
+            );
+          } catch (primaryError) {
+            // Fallback: some environments resolve by case_id more reliably than reference_code.
+            if (response.data?.case_id) {
+              uploadResp = await apiClient.uploadEvidence(response.data.case_id, reportFiles);
+            } else {
+              throw primaryError;
+            }
+          }
+
           const uploadedCount = uploadResp?.data?.uploaded?.length ?? reportFiles.length;
           uploadNotice = `${uploadedCount} evidence file${uploadedCount === 1 ? "" : "s"} uploaded with your report.`;
-        } catch {
-          uploadNotice = "Your report was submitted, but evidence upload failed. You can upload evidence later in Track Case.";
+        } catch (uploadErr: any) {
+          uploadNotice = uploadErr?.message
+            ? `Your report was submitted, but evidence upload failed: ${uploadErr.message}. You can upload evidence later in Track Case.`
+            : "Your report was submitted, but evidence upload failed. You can upload evidence later in Track Case.";
         }
       }
 
@@ -375,7 +388,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
     (tab === "tracking" && !trackedCase);
 
   const sideInsightPanel = (
-    <div className="lg:col-span-2 space-y-4">
+    <aside className="lg:col-span-2 space-y-4 lg:sticky lg:top-6 self-start h-fit">
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-black uppercase tracking-widest text-slate-500">Integrity Flow</p>
@@ -413,7 +426,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
           </ResponsiveContainer>
         </div>
       </div>
-    </div>
+    </aside>
   );
 
   return (
@@ -441,49 +454,6 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
         <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent">ZACC Portal</h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Secure. Anonymous. Protected.</p>
       </div>
-
-      {!(tab === "report" && !submitted) && (
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Integrity Flow</p>
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              Resolution Rate: {publicStats?.resolution_rate ?? 0}%
-            </span>
-          </div>
-          <div className="h-[170px] sm:h-[200px]">
-            <ResponsiveContainer width="100%" height="100%" minWidth={260} minHeight={150}>
-              <AreaChart data={integritySeries}>
-                <defs>
-                  <linearGradient id="integrityFlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="stage" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={26} />
-                <Tooltip />
-                <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} fill="url(#integrityFlow)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-[#080c18] p-4 sm:p-5">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Trust Snapshot</p>
-          <div className="h-[170px] sm:h-[200px]">
-            <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={150}>
-              <PieChart>
-                <Pie data={integrityDonut} dataKey="value" innerRadius={38} outerRadius={64} paddingAngle={3}>
-                  <Cell fill="#10b981" />
-                  <Cell fill="#3b82f6" />
-                  <Cell fill="#f43f5e" />
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-      )}
 
       {/* Main Card */}
       <div className={`w-full ${useWideTabLayout ? "max-w-6xl" : "max-w-2xl"} rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] shadow-2xl overflow-hidden`}>
@@ -539,94 +509,95 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
           {/* ── FILE REPORT ── */}
           {tab === "report" && !submitted && (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
-            <form onSubmit={handleAnonymousSubmit} className="space-y-5 lg:col-span-3">
-              <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
-                Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
-              </div>
-              <div className="grid grid-cols-1 gap-5">
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Type of Corruption</label>
-                  <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
-                    <option>Bribery</option><option>Procurement Fraud</option><option>Abuse of Office</option>
-                    <option>Embezzlement</option><option>Nepotism</option><option>Other</option>
-                  </select>
+              <form onSubmit={handleAnonymousSubmit} className="space-y-5 lg:col-span-3">
+                <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
+                  Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
                 </div>
-              </div>
-              <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                Case priority is assigned automatically by the expert system after submission.
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Affected Institution</label>
-                <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })}
-                  placeholder="Ministry, department, or organization" required
-                  className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Location</label>
-                <input type="text" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="District or province"
-                  className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Detailed Description</label>
-                <textarea rows={5} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the incident in detail. Include dates, names (if known), amounts, witnesses..." required
-                  className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none" />
-                <p className="text-xs text-slate-500 mt-1">{formData.description.length} characters (min 20)</p>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                  Evidence (Optional)
-                </label>
-                <div
-                  onClick={() => reportFileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-4 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/50 transition-all"
-                >
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Click to attach evidence now</p>
-                  <p className="text-xs text-slate-500 mt-1">Optional. You can still submit without evidence. Max 10 files, 10MB each.</p>
-                </div>
-                <input
-                  ref={reportFileInputRef}
-                  type="file"
-                  multiple
-                  accept={ACCEPTED_MIME}
-                  onChange={handleReportFileChange}
-                  className="hidden"
-                />
-
-                {reportFileError && (
-                  <p className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-300">⚠️ {reportFileError}</p>
-                )}
-
-                {reportFiles.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {reportFiles.map((f, i) => (
-                      <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-slate-50 dark:bg-white/5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm">📎</span>
-                          <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{f.name}</span>
-                          <span className="text-xs text-slate-500">{formatBytes(f.size)}</span>
-                        </div>
-                        <button type="button" onClick={() => removeReportFile(i)} className="text-rose-500 text-sm font-bold">Remove</button>
-                      </div>
-                    ))}
+                <div className="grid grid-cols-1 gap-5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Type of Corruption</label>
+                    <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
+                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
+                      <option>Bribery</option><option>Procurement Fraud</option><option>Abuse of Office</option>
+                      <option>Embezzlement</option><option>Nepotism</option><option>Other</option>
+                    </select>
                   </div>
-                )}
-              </div>
+                </div>
+                <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  Case priority is assigned automatically by the expert system after submission.
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Affected Institution</label>
+                  <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })}
+                    placeholder="Ministry, department, or organization" required
+                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Location</label>
+                  <input type="text" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="District or province"
+                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Detailed Description</label>
+                  <textarea rows={5} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Describe the incident in detail. Include dates, names (if known), amounts, witnesses..." required
+                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none" />
+                  <p className="text-xs text-slate-500 mt-1">{formData.description.length} characters (min 20)</p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                    Evidence (Optional)
+                  </label>
+                  <div
+                    onClick={() => reportFileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-4 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/50 transition-all"
+                  >
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Click to attach evidence now</p>
+                    <p className="text-xs text-slate-500 mt-1">Optional. You can still submit without evidence. Max 10 files, 10MB each.</p>
+                  </div>
+                  <input
+                    ref={reportFileInputRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_MIME}
+                    onChange={handleReportFileChange}
+                    className="hidden"
+                  />
 
-              <button type="submit" disabled={loading}
-                className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
-                {loading ? "Submitting Securely..." : "Submit Anonymous Report"}
-              </button>
-            </form>
+                  {reportFileError && (
+                    <p className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-300">⚠️ {reportFileError}</p>
+                  )}
 
-            {sideInsightPanel}
+                  {reportFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {reportFiles.map((f, i) => (
+                        <div key={`${f.name}-${i}`} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-slate-50 dark:bg-white/5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm">📎</span>
+                            <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{f.name}</span>
+                            <span className="text-xs text-slate-500">{formatBytes(f.size)}</span>
+                          </div>
+                          <button type="button" onClick={() => removeReportFile(i)} className="text-rose-500 text-sm font-bold">Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" disabled={loading}
+                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
+                  {loading ? "Submitting Securely..." : "Submit Anonymous Report"}
+                </button>
+              </form>
+
+              {sideInsightPanel}
             </div>
           )}
 
           {tab === "report" && submitted && (
-            <div className="space-y-5 animate-fade-in">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
+              <div className="space-y-5 lg:col-span-3">
               <div className="rounded-3xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 p-6">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white text-2xl flex items-center justify-center font-black flex-shrink-0">✓</div>
@@ -666,6 +637,9 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 className="w-full rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 font-bold py-3 text-sm uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
                 Submit Another Report
               </button>
+              </div>
+
+              {sideInsightPanel}
             </div>
           )}
 
