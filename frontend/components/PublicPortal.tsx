@@ -110,7 +110,18 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   themeMode,
   onThemeModeChange,
 }) => {
-  const [tab, setTab] = useState<PortalTab>("report");
+  const [tab, setTab] = useState<PortalTab>(
+    window.location.pathname.startsWith("/staff") ? "signin" : "report"
+  );
+  
+  useEffect(() => {
+    if (tab === "signin") {
+      window.history.replaceState(null, "", "/staff");
+    } else if (window.location.pathname.startsWith("/staff")) {
+      window.history.replaceState(null, "", "/");
+    }
+  }, [tab]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -387,48 +398,6 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
     tab === "signin" ||
     (tab === "tracking" && !trackedCase);
 
-  const sideInsightPanel = (
-    <aside className="lg:col-span-2 space-y-4 lg:sticky lg:top-6 self-start h-fit">
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-500">Integrity Flow</p>
-          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{publicStats?.resolution_rate ?? 0}%</span>
-        </div>
-        <div className="h-[180px]">
-          <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={150}>
-            <AreaChart data={integritySeries}>
-              <defs>
-                <linearGradient id="integrityFlowSidebar" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="stage" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip />
-              <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} fill="url(#integrityFlowSidebar)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 p-4">
-        <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Trust Snapshot</p>
-        <div className="h-[180px]">
-          <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={150}>
-            <PieChart>
-              <Pie data={integrityDonut} dataKey="value" innerRadius={40} outerRadius={66} paddingAngle={3}>
-                <Cell fill="#10b981" />
-                <Cell fill="#3b82f6" />
-                <Cell fill="#f43f5e" />
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </aside>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#04060b] dark:to-[#0a0f1a] text-slate-900 dark:text-slate-200 flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
       {/* Settings Bar */}
@@ -458,20 +427,21 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       {/* Main Card */}
       <div className={`w-full ${useWideTabLayout ? "max-w-6xl" : "max-w-2xl"} rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] shadow-2xl overflow-hidden`}>
         {/* Tabs */}
-        <div className="grid grid-cols-3 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20">
-          {[
-            { id: "report", label: "File Report", icon: "📝" },
-            { id: "tracking", label: "Track Case", icon: "🔍" },
-            { id: "signin", label: "Staff Login", icon: "🔐" },
-          ].map(item => (
-            <button key={item.id} onClick={() => { setTab(item.id as PortalTab); setError(null); }}
-              className={`px-4 py-4 font-bold text-xs uppercase tracking-wider transition-all relative ${tab === item.id ? "text-emerald-600 dark:text-emerald-400 bg-white dark:bg-white/5" : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300"}`}>
-              <span className="text-base mb-1 block">{item.icon}</span>
-              {item.label}
-              {tab === item.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />}
-            </button>
-          ))}
-        </div>
+        {tab !== "signin" && (
+          <div className="grid grid-cols-2 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20">
+            {[
+              { id: "report", label: "File Report", icon: "📝" },
+              { id: "tracking", label: "Track Case", icon: "🔍" },
+            ].map(item => (
+              <button key={item.id} onClick={() => { setTab(item.id as PortalTab); setError(null); }}
+                className={`px-4 py-4 font-bold text-xs uppercase tracking-wider transition-all relative ${tab === item.id ? "text-emerald-600 dark:text-emerald-400 bg-white dark:bg-white/5" : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300"}`}>
+                <span className="text-base mb-1 block">{item.icon}</span>
+                {item.label}
+                {tab === item.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="p-8">
           {error && (
@@ -482,8 +452,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
           {/* ── STAFF LOGIN ── */}
           {tab === "signin" && (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
-            <form onSubmit={handleLogin} className="space-y-5 lg:col-span-3">
+            <div className="animate-fade-in max-w-md mx-auto">
+            <form onSubmit={handleLogin} className="space-y-5">
               <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-5 py-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
                 For ZACC Staff (Admin &amp; Investigators) only. Whistleblowers do not need to log in — use the Track Case tab.
               </div>
@@ -501,15 +471,17 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
                 {loading ? "Authenticating..." : "Sign In"}
               </button>
+              <div className="text-center pt-2">
+                <button type="button" onClick={() => setTab("report")} className="text-xs font-bold text-slate-400 hover:text-emerald-500 uppercase tracking-widest transition-all">← Back to Public Portal</button>
+              </div>
             </form>
-            {sideInsightPanel}
             </div>
           )}
 
           {/* ── FILE REPORT ── */}
           {tab === "report" && !submitted && (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
-              <form onSubmit={handleAnonymousSubmit} className="space-y-5 lg:col-span-3">
+            <div className="animate-fade-in max-w-2xl mx-auto">
+              <form onSubmit={handleAnonymousSubmit} className="space-y-5">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
                   Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
                 </div>
@@ -590,14 +562,12 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   {loading ? "Submitting Securely..." : "Submit Anonymous Report"}
                 </button>
               </form>
-
-              {sideInsightPanel}
             </div>
           )}
 
           {tab === "report" && submitted && (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
-              <div className="space-y-5 lg:col-span-3">
+            <div className="animate-fade-in max-w-2xl mx-auto">
+              <div className="space-y-5">
               <div className="rounded-3xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 p-6">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white text-2xl flex items-center justify-center font-black flex-shrink-0">✓</div>
@@ -638,15 +608,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 Submit Another Report
               </button>
               </div>
-
-              {sideInsightPanel}
             </div>
           )}
 
           {/* ── TRACK CASE ── */}
           {tab === "tracking" && (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in">
-            <div className="space-y-6 lg:col-span-3">
+            <div className="animate-fade-in max-w-3xl mx-auto">
+            <div className="space-y-6">
               <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Enter Your Tracking Code</label>
@@ -894,7 +862,6 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 </div>
               )}
             </div>
-            {sideInsightPanel}
             </div>
           )}
         </div>
