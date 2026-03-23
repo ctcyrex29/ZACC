@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Storage;
 
 class PublicReportController extends Controller
 {
+    use ReportControllerHelpers;
+
     public function __construct(
         protected AuditService $auditService,
         protected StakeholderNotificationService $notificationService,
@@ -340,85 +342,5 @@ class PublicReportController extends Controller
                 'by_type'                 => $byType,
             ],
         ]);
-    }
-
-    /**
-     * Expert system: automatically determines the priority of a case
-     * based on corruption type, description keywords, institution, and detail level.
-     */
-    private function determineExpertPriority(array $data): string
-    {
-        $type = strtolower($data['type'] ?? '');
-        $text = strtolower(
-            ($data['description'] ?? '') . ' ' .
-            ($data['institution']  ?? '') . ' ' .
-            ($data['location']     ?? '')
-        );
-
-        $score = 0;
-
-        // Type scoring
-        $typeScores = [
-            'embezzlement'      => 40,
-            'procurement fraud' => 35,
-            'abuse of office'   => 25,
-            'bribery'           => 20,
-            'nepotism'          => 12,
-            'other'             => 8,
-        ];
-        foreach ($typeScores as $t => $pts) {
-            if (str_contains($type, $t)) { $score += $pts; break; }
-        }
-
-        // Critical-level keywords (senior officials, large sums, systemic)
-        foreach (['million', 'billion', 'widespread', 'systematic', 'organised', 'organized', 'syndicate',
-                  'minister', 'permanent secretary', 'director general', 'commissioner',
-                  'president', 'prime minister', 'attorney general', 'hundreds of thousands'] as $kw) {
-            if (str_contains($text, $kw)) $score += 22;
-        }
-
-        // High-level keywords
-        foreach (['government', 'public funds', 'contract', 'tender', 'ministry', 'department',
-                  'council', 'authority', 'state', 'national', 'police', 'army', 'hospital',
-                  'school', 'thousands', 'hundreds'] as $kw) {
-            if (str_contains($text, $kw)) $score += 9;
-        }
-
-        // Medium-level keywords
-        foreach (['bribe', 'fraud', 'theft', 'coercion', 'embezzle', 'kickback',
-                  'extort', 'misuse', 'stolen', 'siphon', 'inflate', 'phantom'] as $kw) {
-            if (str_contains($text, $kw)) $score += 6;
-        }
-
-        // Description length bonus (detail level)
-        $len = strlen($data['description'] ?? '');
-        if ($len > 500)      $score += 15;
-        elseif ($len > 250)  $score += 8;
-        elseif ($len > 100)  $score += 3;
-
-        if ($score >= 75) return 'CRITICAL';
-        if ($score >= 42) return 'HIGH';
-        if ($score >= 20) return 'MEDIUM';
-        return 'LOW';
-    }
-
-    private function calculateRiskScore(array $data): int
-    {
-        $base = [
-            'LOW' => 30,
-            'MEDIUM' => 50,
-            'HIGH' => 75,
-            'CRITICAL' => 90,
-        ][$data['priority']] ?? 50;
-
-        $text = strtolower(($data['description'] ?? '') . ' ' . ($data['institution'] ?? '') . ' ' . ($data['location'] ?? ''));
-
-        foreach (['bribe', 'fraud', 'embezzle', 'theft', 'coercion'] as $keyword) {
-            if (str_contains($text, $keyword)) {
-                $base += 5;
-            }
-        }
-
-        return max(0, min(100, $base));
     }
 }

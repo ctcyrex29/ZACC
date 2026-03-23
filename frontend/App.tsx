@@ -121,6 +121,7 @@ const App: React.FC = () => {
         return (
           <ReportForm
             user={user}
+            language={language}
             onSuccess={() => setCurrentView("tracking")}
           />
         );
@@ -136,7 +137,7 @@ const App: React.FC = () => {
       case "users":
         return <UserManagement />;
       case "reports":
-        return <ReportGeneration />;
+        return <ReportGeneration language={language} />;
       case "hotspots":
         return <CorruptionHotspots />;
       default:
@@ -159,9 +160,9 @@ const App: React.FC = () => {
       case "users":
         return t(language, "userManagement");
       case "reports":
-        return "Report Generation";
+        return t(language, "reportGeneration");
       case "hotspots":
-        return "Corruption Hotspots";
+        return t(language, "corruptionHotspots");
       default:
         return t(language, "appTitle");
     }
@@ -210,7 +211,7 @@ const App: React.FC = () => {
               </select>
               <div className="text-right">
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                  Session Identity
+                  {t(language, "sessionIdentity")}
                 </p>
                 <p className="text-xs font-black text-slate-900 dark:text-white leading-none tracking-widest flex items-center gap-2">
                   {user.nexusKey}

@@ -39,6 +39,7 @@ Route::middleware('throttle:public-reports')->group(function () {
 });
 
 Route::post('/chatbot', [ChatbotController::class, 'chat'])->middleware('throttle:chatbot');
+Route::post('/ai/pre-submission-suggestions-public', [AIController::class, 'preSubmissionSuggestions'])->middleware('throttle:public-reports');
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -74,10 +75,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // AI routes
     Route::post('/ai/analyze-report', [AIController::class, 'analyzeReport']);
+    Route::get('/ai/expert-review/{id}', [AIController::class, 'expertCaseReview'])->where('id', '[A-Za-z0-9-]+');
+    Route::get('/ai/scan-evidence/{id}', [AIController::class, 'scanEvidence'])->where('id', '[A-Za-z0-9-]+');
+    Route::post('/ai/pre-submission-suggestions', [AIController::class, 'preSubmissionSuggestions']);
 
     // User management routes (admin only)
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/users/{id}', [UserController::class, 'update'])->whereNumber('id');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->whereNumber('id');
+    Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->whereNumber('id');
+    Route::post('/users/{id}/toggle-active', [UserController::class, 'toggleActive'])->whereNumber('id');
 });

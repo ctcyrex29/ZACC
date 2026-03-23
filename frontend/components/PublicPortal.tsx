@@ -47,6 +47,65 @@ function formatBytes(bytes: number) {
   return (bytes / 1048576).toFixed(1) + " MB";
 }
 
+// Zimbabwe provinces with towns mapped
+const PORTAL_PROVINCE_LOCATIONS: Record<string, string[]> = {
+  "Harare Province": ["Harare", "Chitungwiza", "Epworth", "Ruwa", "Norton"],
+  "Bulawayo Province": ["Bulawayo"],
+  "Manicaland": [
+    "Mutare", "Rusape", "Chipinge", "Nyanga", "Chimanimani",
+    "Buhera", "Murambinda", "Penhalonga", "Headlands", "Hauna",
+    "Nyazura", "Odzi", "Sakubva", "Dangamvura", "Chisumbanje",
+  ],
+  "Mashonaland Central": [
+    "Bindura", "Mount Darwin", "Shamva", "Mvurwi", "Concession",
+    "Mazowe", "Rushinga", "Centenary", "Guruve", "Glendale",
+  ],
+  "Mashonaland East": [
+    "Marondera", "Chivhu", "Macheke", "Goromonzi", "Seke",
+    "Murehwa", "Mutoko", "Mudzi",
+  ],
+  "Mashonaland West": [
+    "Chinhoyi", "Kadoma", "Chegutu", "Karoi", "Kariba",
+    "Mhangura", "Banket", "Raffingora", "Tengwe", "Zvimba",
+    "Chirundu", "Makuti", "Sanyati",
+  ],
+  "Masvingo Province": [
+    "Masvingo", "Chiredzi", "Bikita", "Gutu", "Zaka",
+    "Chivi", "Mwenezi", "Ngundu", "Triangle", "Hippo Valley",
+    "Nemamwa", "Buffalo Range", "Chatsworth",
+  ],
+  "Matabeleland North": [
+    "Hwange", "Victoria Falls", "Lupane", "Nkayi", "Tsholotsho",
+    "Inyathi", "Dete",
+  ],
+  "Matabeleland South": [
+    "Gwanda", "Beitbridge", "Plumtree", "Filabusi",
+    "West Nicholson", "Esigodini",
+  ],
+  "Midlands": [
+    "Gweru", "Kwekwe", "Zvishavane", "Shurugwi", "Redcliff",
+    "Gokwe", "Gokwe South", "Gokwe North", "Mvuma", "Mashava", "Mberengwa",
+  ],
+};
+
+const PORTAL_PROVINCES = Object.keys(PORTAL_PROVINCE_LOCATIONS);
+const PORTAL_ALL_LOCATIONS = PORTAL_PROVINCES.flatMap(p =>
+  PORTAL_PROVINCE_LOCATIONS[p].map(t => `${t}, ${p}`)
+);
+
+function portalFuzzyMatch(query: string, text: string): { match: boolean; score: number } {
+  const q = query.toLowerCase();
+  const tl = text.toLowerCase();
+  if (tl.startsWith(q)) return { match: true, score: 3 };
+  if (tl.includes(q)) return { match: true, score: 2 };
+  let qi = 0;
+  for (let i = 0; i < tl.length && qi < q.length; i++) {
+    if (tl[i] === q[qi]) qi++;
+  }
+  if (qi === q.length) return { match: true, score: 1 };
+  return { match: false, score: 0 };
+}
+
 function generateWhistleblowerPDF(trackedCase: any, stage: any, idx: number) {
   const win = window.open("", "_blank", "width=900,height=700");
   if (!win) return;
@@ -128,6 +187,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   // Sign in state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
 
   // Report form state
   const [formData, setFormData] = useState({
@@ -145,6 +205,47 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const [reportUploadNotice, setReportUploadNotice] = useState<string | null>(null);
   const [reportSubmittedEvidenceCount, setReportSubmittedEvidenceCount] = useState(0);
   const reportFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Location autocomplete
+  const [locationSuggestions, setLocationSuggestions] = useState<string[]>([]);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [portalProvince, setPortalProvince] = useState("");
+
+  // Pre-submission suggestions
+  const [portalPreSuggestions, setPortalPreSuggestions] = useState<any>(null);
+  const [portalPreSuggestionsLoading, setPortalPreSuggestionsLoading] = useState(false);
+
+  const handleLocationInput = (value: string) => {
+    setFormData(prev => ({ ...prev, location: value }));
+    if (value.trim().length >= 1) {
+      const pool = portalProvince
+        ? PORTAL_PROVINCE_LOCATIONS[portalProvince].map(t => `${t}, ${portalProvince}`)
+        : PORTAL_ALL_LOCATIONS;
+      const results = pool
+        .map(loc => ({ loc, ...portalFuzzyMatch(value, loc) }))
+        .filter(r => r.match)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map(r => r.loc);
+      setLocationSuggestions(results);
+      setShowLocationDropdown(results.length > 0);
+    } else {
+      setLocationSuggestions([]);
+      setShowLocationDropdown(false);
+    }
+  };
+
+  const selectPortalLocation = (loc: string) => {
+    setFormData(prev => ({ ...prev, location: loc }));
+    setShowLocationDropdown(false);
+  };
+
+  const handlePortalProvinceChange = (province: string) => {
+    setPortalProvince(province);
+    setFormData(prev => ({ ...prev, location: "" }));
+    setLocationSuggestions([]);
+    setShowLocationDropdown(false);
+  };
 
   // Tracking state
   const [trackingCode, setTrackingCode] = useState("");
@@ -221,6 +322,24 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getPortalPreSuggestions = async () => {
+    if (formData.description.trim().length < 10) return;
+    setPortalPreSuggestionsLoading(true);
+    try {
+      const resp = await apiClient.preSubmissionSuggestions({
+        type: formData.type,
+        description: formData.description,
+        institution: formData.institution,
+        location: formData.location,
+      });
+      if (resp.success) setPortalPreSuggestions(resp.data);
+    } catch {
+      // Silently fail
+    } finally {
+      setPortalPreSuggestionsLoading(false);
     }
   };
 
@@ -420,8 +539,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
       {/* Logo */}
       <div className="mb-6 sm:mb-8 text-center max-w-xl">
         <div className="w-16 h-16 mx-auto mb-5 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center text-3xl font-black text-white shadow-lg">Z</div>
-        <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent">ZACC Portal</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Secure. Anonymous. Protected.</p>
+        <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent">{t(language, "portalTitle")}</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">{t(language, "portalSubtitle")}</p>
       </div>
 
       {/* Main Card */}
@@ -430,8 +549,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
         {tab !== "signin" && (
           <div className="grid grid-cols-2 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20">
             {[
-              { id: "report", label: "File Report", icon: "📝" },
-              { id: "tracking", label: "Track Case", icon: "🔍" },
+              { id: "report", label: t(language, "fileReport"), icon: "📝" },
+              { id: "tracking", label: t(language, "trackCase"), icon: "🔍" },
             ].map(item => (
               <button key={item.id} onClick={() => { setTab(item.id as PortalTab); setError(null); }}
                 className={`px-4 py-4 font-bold text-xs uppercase tracking-wider transition-all relative ${tab === item.id ? "text-emerald-600 dark:text-emerald-400 bg-white dark:bg-white/5" : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300"}`}>
@@ -455,24 +574,33 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
             <div className="animate-fade-in max-w-md mx-auto">
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-5 py-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
-                For ZACC Staff (Admin &amp; Investigators) only. Whistleblowers do not need to log in — use the Track Case tab.
+                {t(language, "staffOnly")}
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Email Address</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "emailAddress")}</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="staff@zacc.org.zw" required
                   className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
-                  className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "password")}</label>
+                <div className="relative">
+                  <input type={showStaffPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
+                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 pr-14 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
+                  <button type="button" onClick={() => setShowStaffPassword(!showStaffPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-emerald-500 transition-colors p-1" tabIndex={-1}>
+                    {showStaffPassword
+                      ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                      : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    }
+                  </button>
+                </div>
               </div>
               <button type="submit" disabled={loading}
                 className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
-                {loading ? "Authenticating..." : "Sign In"}
+                {loading ? t(language, "authenticating") : t(language, "signIn")}
               </button>
               <div className="text-center pt-2">
-                <button type="button" onClick={() => setTab("report")} className="text-xs font-bold text-slate-400 hover:text-emerald-500 uppercase tracking-widest transition-all">← Back to Public Portal</button>
+                <button type="button" onClick={() => setTab("report")} className="text-xs font-bold text-slate-400 hover:text-emerald-500 uppercase tracking-widest transition-all">{t(language, "backToPortal")}</button>
               </div>
             </form>
             </div>
@@ -483,11 +611,11 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
             <div className="animate-fade-in max-w-2xl mx-auto">
               <form onSubmit={handleAnonymousSubmit} className="space-y-5">
                 <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-5 py-3 text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
-                  Your identity is fully protected. No personal information is collected. A unique tracking code will be generated for your case.
+                  {t(language, "identityProtected")}
                 </div>
                 <div className="grid grid-cols-1 gap-5">
                   <div>
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Type of Corruption</label>
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "corruptionType")}</label>
                     <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
                       className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
                       <option>Bribery</option><option>Procurement Fraud</option><option>Abuse of Office</option>
@@ -496,37 +624,59 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   </div>
                 </div>
                 <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  Case priority is assigned automatically by the expert system after submission.
+                  {t(language, "priorityExpert")}
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Affected Institution</label>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "affectedInstitution")}</label>
                   <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })}
-                    placeholder="Ministry, department, or organization" required
+                    placeholder={t(language, "institutionPlaceholder")} required
                     className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Location</label>
-                  <input type="text" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="District or province"
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Province</label>
+                    <select value={portalProvince} onChange={e => handlePortalProvinceChange(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
+                      <option value="">All Provinces</option>
+                      {PORTAL_PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "location")}</label>
+                    <input type="text" value={formData.location} onChange={e => handleLocationInput(e.target.value)}
+                      onFocus={() => { if (formData.location.length >= 1 && locationSuggestions.length > 0) setShowLocationDropdown(true); }}
+                      onBlur={() => setTimeout(() => setShowLocationDropdown(false), 200)}
+                      placeholder={t(language, "locationPlaceholder")}
+                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                    {showLocationDropdown && locationSuggestions.length > 0 && (
+                      <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c1020] shadow-xl max-h-52 overflow-y-auto">
+                        {locationSuggestions.map(loc => (
+                          <button key={loc} type="button" onClick={() => selectPortalLocation(loc)}
+                            className="w-full text-left px-5 py-3 text-sm text-slate-900 dark:text-white hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors font-medium border-b border-slate-100 dark:border-white/5 last:border-0">
+                            <span className="mr-2 text-emerald-500">📍</span>{loc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Detailed Description</label>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "detailedDescription")}</label>
                   <textarea rows={5} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Describe the incident in detail. Include dates, names (if known), amounts, witnesses..." required
+                    placeholder={t(language, "descriptionPlaceholder")} required
                     className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none" />
-                  <p className="text-xs text-slate-500 mt-1">{formData.description.length} characters (min 20)</p>
+                  <p className="text-xs text-slate-500 mt-1">{formData.description.length} {t(language, "characters")} ({t(language, "minChars")})</p>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                    Evidence (Optional)
+                    {t(language, "evidenceOptional")}
                   </label>
                   <div
                     onClick={() => reportFileInputRef.current?.click()}
                     className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-4 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/50 transition-all"
                   >
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Click to attach evidence now</p>
-                    <p className="text-xs text-slate-500 mt-1">Optional. You can still submit without evidence. Max 10 files, 10MB each.</p>
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t(language, "clickToAttach")}</p>
+                    <p className="text-xs text-slate-500 mt-1">{t(language, "evidenceHint")}</p>
                   </div>
                   <input
                     ref={reportFileInputRef}
@@ -557,9 +707,74 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   )}
                 </div>
 
+                {/* Pre-Submission AI Suggestions */}
+                {formData.description.trim().length >= 20 && (
+                  <div className="space-y-3">
+                    {!portalPreSuggestions && (
+                      <button type="button" onClick={getPortalPreSuggestions} disabled={portalPreSuggestionsLoading}
+                        className="w-full py-3 rounded-2xl border-2 border-dashed border-violet-300 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 font-bold text-xs uppercase tracking-widest hover:bg-violet-50 dark:hover:bg-violet-500/5 transition-all disabled:opacity-50">
+                        {portalPreSuggestionsLoading ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+                            Analyzing...
+                          </span>
+                        ) : `🤖 ${t(language, "getAISuggestions") || "Get AI Suggestions Before Submitting"}`}
+                      </button>
+                    )}
+                    {portalPreSuggestions && (
+                      <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">{t(language, "aiAssessment") || "AI Case Assessment"}</p>
+                          <button type="button" onClick={() => setPortalPreSuggestions(null)} className="text-violet-400 hover:text-violet-600 text-sm font-bold">&times;</button>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                            portalPreSuggestions.case_strength === "STRONG" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20" :
+                            portalPreSuggestions.case_strength === "MODERATE" ? "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20" :
+                            "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20"
+                          }`}>{portalPreSuggestions.case_strength?.replace(/_/g, " ")}</span>
+                          <span className="text-xs font-bold text-slate-500">Score: {portalPreSuggestions.strength_score}/100</span>
+                          {portalPreSuggestions.ready_to_submit && <span className="text-xs font-bold text-emerald-600">✓ {t(language, "readyToSubmit") || "Ready to submit"}</span>}
+                        </div>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{portalPreSuggestions.summary}</p>
+                        {portalPreSuggestions.suggestions?.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">{t(language, "suggestions") || "Suggestions"}</p>
+                            <ul className="space-y-1">
+                              {portalPreSuggestions.suggestions.map((s: string, i: number) => (
+                                <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-violet-500 mt-0.5">→</span> {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {portalPreSuggestions.recommended_evidence?.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-1">{t(language, "recommendedEvidence") || "Recommended Evidence"}</p>
+                            <ul className="space-y-1">
+                              {portalPreSuggestions.recommended_evidence.map((e: string, i: number) => (
+                                <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-cyan-500 mt-0.5">📎</span> {e}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {portalPreSuggestions.missing_details?.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">{t(language, "missingDetails") || "Missing Details"}</p>
+                            <ul className="space-y-1">
+                              {portalPreSuggestions.missing_details.map((d: string, i: number) => (
+                                <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-amber-500 mt-0.5">!</span> {d}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button type="submit" disabled={loading}
                   className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold py-4 disabled:opacity-50 transition-all text-sm uppercase tracking-widest shadow-lg shadow-emerald-500/20">
-                  {loading ? "Submitting Securely..." : "Submit Anonymous Report"}
+                  {loading ? t(language, "submittingSecurely") : t(language, "submitAnonymousReport")}
                 </button>
               </form>
             </div>
@@ -572,14 +787,14 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white text-2xl flex items-center justify-center font-black flex-shrink-0">✓</div>
                   <div className="flex-1">
-                    <p className="font-black text-emerald-700 dark:text-emerald-300 text-lg mb-2">Report Submitted Successfully</p>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300 mb-4">Your anonymous report has been securely logged and encrypted.</p>
+                    <p className="font-black text-emerald-700 dark:text-emerald-300 text-lg mb-2">{t(language, "reportSubmitted")}</p>
+                    <p className="text-sm text-emerald-700 dark:text-emerald-300 mb-4">{t(language, "reportEncrypted")}</p>
                     <div className="bg-white dark:bg-black/30 rounded-2xl p-5 mb-4 border border-emerald-200 dark:border-emerald-500/20">
-                      <p className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Your Session Tracking Code</p>
+                      <p className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">{t(language, "sessionTrackingCode")}</p>
                       <p className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-2xl tracking-widest">{submitted.reference_code}</p>
                     </div>
                     <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-300 font-semibold">
-                      ⚠️ Save this code securely. It is the ONLY way to track your case. No account or email is required.
+                      ⚠️ {t(language, "saveCodeWarning")}
                     </div>
                   </div>
                 </div>
@@ -591,21 +806,21 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
               )}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="rounded-xl border border-slate-200 dark:border-white/10 p-4 bg-slate-50 dark:bg-white/5">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Status</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t(language, "status")}</p>
                   <p className="font-black text-blue-600 dark:text-blue-400">SUBMITTED</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 dark:border-white/10 p-4 bg-slate-50 dark:bg-white/5">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Evidence</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t(language, "evidence")}</p>
                   <p className="font-black text-slate-900 dark:text-white">{reportSubmittedEvidenceCount} file{reportSubmittedEvidenceCount === 1 ? "" : "s"}</p>
                 </div>
               </div>
               <button onClick={() => { setTab("tracking"); setTrackingCode(submitted.reference_code); setSubmitted(null); }}
                 className="w-full rounded-2xl border border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold py-3.5 text-sm uppercase tracking-wider hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-all">
-                Track This Case Now →
+                {t(language, "trackThisCase")}
               </button>
               <button onClick={() => { setSubmitted(null); setReportUploadNotice(null); setReportSubmittedEvidenceCount(0); }}
                 className="w-full rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 font-bold py-3 text-sm uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
-                Submit Another Report
+                {t(language, "submitAnother")}
               </button>
               </div>
             </div>
@@ -617,14 +832,14 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
             <div className="space-y-6">
               <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Enter Your Tracking Code</label>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "enterTrackingCode")}</label>
                   <input type="text" value={trackingCode} onChange={e => setTrackingCode(e.target.value.toUpperCase())}
                     placeholder="ZACC-REF-XXXXXXXXX"
                     className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono font-bold tracking-widest uppercase" />
                 </div>
                 <button type="submit" disabled={loading}
                   className="sm:mt-7 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold px-6 py-3.5 disabled:opacity-50 transition-all text-sm uppercase tracking-wider whitespace-nowrap shadow-lg shadow-emerald-500/20">
-                  {loading ? "Searching..." : "Track Case"}
+                  {loading ? t(language, "searching") : t(language, "trackCase")}
                 </button>
               </form>
 
@@ -635,7 +850,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-gradient-to-br from-slate-50 to-white dark:from-white/5 dark:to-white/2 p-6">
                     <div className="flex items-start justify-between gap-4 mb-5">
                       <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Case Overview</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{t(language, "caseOverview")}</p>
                         <h3 className="text-xl font-black text-slate-900 dark:text-white">{trackedCase.type}</h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{trackedCase.institution}</p>
                       </div>
@@ -643,12 +858,10 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                         {statusLabel(trackedCase.status)}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
                       {[
-                        { label: "Case ID", value: trackedCase.case_id },
-                        { label: "Reference", value: trackedCase.reference_code },
-                        { label: "Priority", value: trackedCase.priority },
-                        { label: "Risk Score", value: `${trackedCase.risk_score}%` },
+                        { label: t(language, "caseId"), value: trackedCase.case_id },
+                        { label: t(language, "reference"), value: trackedCase.reference_code },
                       ].map(item => (
                         <div key={item.label} className="rounded-xl bg-white dark:bg-black/20 border border-slate-200 dark:border-white/10 p-3">
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{item.label}</p>
@@ -660,7 +873,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
                   {/* Status Timeline */}
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Case Progress</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">{t(language, "caseProgress")}</p>
                     <div className="flex items-center gap-0">
                       {STATUS_ORDER.map((s, i) => {
                         const done = i <= activeStatusIdx && trackedCase.status !== "DISPUTED";
@@ -695,7 +908,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
                   {/* Investigation Progress */}
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Investigation Progress</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">{t(language, "investigationProgress")}</p>
                     {trackedCase.stage_evaluations && trackedCase.stage_evaluations.length > 0 ? (
                       <div className="space-y-3">
                         {trackedCase.stage_evaluations.map((stage: any, idx: number) => (
@@ -712,15 +925,15 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                                   </span>
                                 </div>
                                 <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                                  {stage.investigator_notes || "No notes available for this stage."}
+                                  {stage.investigator_notes || t(language, "noNotesAvailable")}
                                 </p>
                                 {stage.final_score != null && (
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Assessment Score: <strong className="text-emerald-600 dark:text-emerald-400">{stage.final_score}/100</strong></p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{t(language, "assessmentScore")}: <strong className="text-emerald-600 dark:text-emerald-400">{stage.final_score}/100</strong></p>
                                 )}
                               </div>
                               <button onClick={() => generateWhistleblowerPDF(trackedCase, stage, idx)}
                                 className="flex-shrink-0 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-white/10 text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all">
-                                PDF Report
+                                {t(language, "pdfReport")}
                               </button>
                             </div>
                           </div>
@@ -728,7 +941,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-slate-300 dark:border-white/10 p-6 text-center">
-                        <p className="text-sm text-slate-500">Your case has been received. Investigators will begin the review process shortly.</p>
+                        <p className="text-sm text-slate-500">{t(language, "caseReceived")}</p>
                       </div>
                     )}
                   </div>
@@ -737,9 +950,9 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   {!["CLOSED", "DISPUTED"].includes(trackedCase.status) && (
                     <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
                       <div className="flex items-center justify-between mb-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Add Evidence</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t(language, "addEvidence")}</p>
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                          {trackedCase.attachments_count}/10 files uploaded
+                          {trackedCase.attachments_count}/10 {t(language, "filesUploaded")}
                         </span>
                       </div>
                       {evidenceSuccess && (
@@ -758,8 +971,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                             onClick={() => evidenceInputRef.current?.click()}
                             className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/50 transition-all group">
                             <p className="text-2xl mb-2">📎</p>
-                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">Click to add evidence files</p>
-                            <p className="text-xs text-slate-500 mt-1">Photos, videos, audio, documents · Max 10MB per file · Up to {maxEvidenceReach} more file(s)</p>
+                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{t(language, "clickToAddEvidence")}</p>
+                            <p className="text-xs text-slate-500 mt-1">{t(language, "evidenceFileHint")} · {maxEvidenceReach} {t(language, "moreFiles")}</p>
                           </div>
                           <input ref={evidenceInputRef} type="file" multiple accept={ACCEPTED_MIME}
                             onChange={handleEvidenceFileChange} className="hidden" />
@@ -778,13 +991,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                               ))}
                               <button onClick={handleEvidenceUpload} disabled={evidenceUploading}
                                 className="w-full mt-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-sm uppercase tracking-wider disabled:opacity-50 transition-all">
-                                {evidenceUploading ? "Uploading..." : `Upload ${evidenceFiles.length} File(s)`}
+                                {evidenceUploading ? t(language, "uploading") : `${t(language, "upload")} ${evidenceFiles.length}`}
                               </button>
                             </div>
                           )}
                         </>
                       ) : (
-                        <p className="text-sm text-slate-500 text-center py-4">Maximum of 10 evidence files reached.</p>
+                        <p className="text-sm text-slate-500 text-center py-4">{t(language, "maxEvidenceReached")}</p>
                       )}
                     </div>
                   )}
@@ -792,18 +1005,18 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   {/* Dispute Section */}
                   {trackedCase.status === "CLOSED" && !disputeSuccess && (
                     <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-5">
-                      <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest mb-2">Case Closed</p>
+                      <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest mb-2">{t(language, "caseClosed")}</p>
                       {trackedCase.dispute_reason && (
                         <div className="rounded-xl bg-white dark:bg-black/20 border border-amber-200 dark:border-amber-500/20 px-4 py-3 mb-4">
-                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Closure Reason</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{t(language, "closureReason")}</p>
                           <p className="text-sm text-slate-700 dark:text-slate-300">{trackedCase.dispute_reason}</p>
                         </div>
                       )}
-                      <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">If you disagree with this outcome, you may file a formal dispute with supporting evidence and your statement.</p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">{t(language, "disputeExplanation")}</p>
                       {!disputeOpen ? (
                         <button onClick={() => setDisputeOpen(true)}
                           className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm uppercase tracking-wider transition-all">
-                          Dispute This Decision
+                          {t(language, "disputeThisDecision")}
                         </button>
                       ) : (
                         <div className="space-y-4 animate-fade-in">
@@ -813,13 +1026,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                             </div>
                           )}
                           <div>
-                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Dispute Statement <span className="text-rose-500">*</span></label>
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "disputeStatement")} <span className="text-rose-500">*</span></label>
                             <textarea rows={4} value={disputeReason} onChange={e => setDisputeReason(e.target.value)}
-                              placeholder="Explain why you dispute this decision and what additional information supports your case (min 10 characters)..."
+                              placeholder={t(language, "disputePlaceholder")}
                               className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-medium resize-none" />
                           </div>
                           <div>
-                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Supporting Evidence (Optional)</label>
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "supportingEvidence")}</label>
                             <div onClick={() => disputeInputRef.current?.click()}
                               className="border-2 border-dashed border-slate-300 dark:border-white/20 rounded-xl p-4 text-center cursor-pointer hover:border-amber-400 transition-all">
                               <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Click to attach evidence files · Max 10MB each · Up to 10 files</p>
@@ -840,11 +1053,11 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                           <div className="flex gap-3">
                             <button onClick={handleDisputeSubmit} disabled={disputeSubmitting}
                               className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm uppercase tracking-wider disabled:opacity-50 transition-all">
-                              {disputeSubmitting ? "Submitting..." : "Submit Dispute"}
+                              {disputeSubmitting ? t(language, "processing") : t(language, "submitDispute")}
                             </button>
                             <button onClick={() => setDisputeOpen(false)}
                               className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
-                              Cancel
+                              {t(language, "cancel")}
                             </button>
                           </div>
                         </div>
@@ -855,8 +1068,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   {/* Dispute Success */}
                   {trackedCase.status === "DISPUTED" && (
                     <div className="rounded-2xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 p-5">
-                      <p className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-2">Dispute Filed</p>
-                      <p className="text-sm text-rose-700 dark:text-rose-300">Your dispute has been received and is now under review by ZACC management. You will be notified of the outcome.</p>
+                      <p className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-2">{t(language, "disputeFiled")}</p>
+                      <p className="text-sm text-rose-700 dark:text-rose-300">{t(language, "disputeReceived")}</p>
                     </div>
                   )}
                 </div>
@@ -869,7 +1082,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
       <div className="mt-8 text-center">
         <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">
-          🔒 End-to-end encrypted · Anonymity guaranteed · Zero-knowledge architecture
+          🔒 {t(language, "encryption")}
         </p>
       </div>
     </div>

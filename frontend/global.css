@@ -78,3 +78,60 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #334155;
 }
+
+/* ── Print Styles ──
+   When printing from the main app (Ctrl+P), hide navigation,
+   sidebar, header controls, and only show the main content. */
+@media print {
+    /* Hide non-content elements */
+    aside,
+    nav,
+    .no-print,
+    header select,
+    header .flex.flex-wrap,
+    button,
+    .stealth-blur,
+    [data-no-print] {
+        display: none !important;
+    }
+
+    /* Reset dark mode for readable print */
+    body,
+    .dark body,
+    main,
+    div {
+        background: white !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Full width on print - no sidebar layout */
+    main {
+        margin: 0 !important;
+        padding: 20px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .flex.h-screen {
+        display: block !important;
+    }
+
+    /* Ensure tables and cards display well */
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    th, td {
+        border: 1px solid #e2e8f0;
+        padding: 6px 8px;
+    }
+
+    /* Avoid page breaks inside cards */
+    .glass-card,
+    .rounded-3xl,
+    .rounded-2xl {
+        break-inside: avoid;
+    }
+}

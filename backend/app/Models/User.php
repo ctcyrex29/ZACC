@@ -30,8 +30,12 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_active',
+        'allowed_case_types',
         'public_key',
         'private_key_encrypted',
+        'password_reset_token',
+        'password_reset_token_expires_at',
     ];
 
     protected $appends = ['role_name'];
@@ -39,6 +43,9 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'private_key_encrypted' => 'encrypted',
+        'is_active' => 'boolean',
+        'allowed_case_types' => 'array',
+        'password_reset_token_expires_at' => 'datetime',
     ];
 
     /**
@@ -59,6 +66,7 @@ class User extends Authenticatable
         'remember_token',
         'private_key_encrypted',
         'public_key',
+        'password_reset_token',
     ];
 
     protected static function boot()
@@ -183,6 +191,19 @@ class User extends Authenticatable
     public function isWhistleblower(): bool
     {
         return $this->role === self::ROLE_WHISTLEBLOWER;
+    }
+
+    /**
+     * Check if user can access a given case type.
+     * Admins can see all types. Investigators only see their allowed types.
+     */
+    public function canAccessCaseType(string $type): bool
+    {
+        if ($this->isAdmin()) return true;
+        if ($this->isWhistleblower()) return true;
+        $allowed = $this->allowed_case_types;
+        if (empty($allowed)) return true; // No restrictions = access all
+        return in_array($type, $allowed, true);
     }
 
     /**

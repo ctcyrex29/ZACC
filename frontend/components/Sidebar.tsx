@@ -50,16 +50,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const investigatorItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
-    { id: "reports", label: "Reports", icon: "📋" },
-    { id: "hotspots", label: "Hotspots", icon: "🔥" },
+    { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
+    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
   ];
 
   const adminItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
-    { id: "reports", label: "Reports", icon: "📋" },
-    { id: "hotspots", label: "Hotspots", icon: "🔥" },
+    { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
+    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
     { id: "users", label: t(language, "userManagement"), icon: "👤" },
-    { id: "dashboard", label: "System Logs", icon: "📜" },
+    { id: "dashboard", label: t(language, "systemOverview"), icon: "📜" },
   ];
 
   const getMenuItems = () => {

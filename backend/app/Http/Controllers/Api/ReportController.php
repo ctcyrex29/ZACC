@@ -63,10 +63,14 @@ class ReportController extends Controller
                 $q->select('id', 'name', 'email');
             }]);
         } elseif ($user->isInvestigator()) {
-            // Investigators can see all reports to review dossiers
+            // Investigators can see reports matching their allowed case types
             $query->with(['user' => function ($q) {
                 $q->select('id', 'name', 'email');
             }]);
+            $allowed = $user->allowed_case_types;
+            if (!empty($allowed)) {
+                $query->whereIn('type', $allowed);
+            }
         } else {
             // Regular users can only see their own reports
             $query->where('user_id', $user->id);
@@ -220,6 +224,9 @@ class ReportController extends Controller
                         'case_id' => $report->case_id,
                         'reference_code' => $report->reference_code,
                         'status' => $report->status,
+                        'priority' => $report->priority,
+                        'risk_score' => $report->risk_score,
+                        'type' => $report->type,
                         'created_at' => $report->created_at,
                         'is_anonymous' => $report->is_anonymous,
                     ],
@@ -236,234 +243,6 @@ class ReportController extends Controller
                 'message' => 'Failed to submit report. Please try again: ' . $e->getMessage(),
             ], 500);
         }
-    }
-
-    /**
-     * Expert system: automatically determines case priority from report attributes.
-     * Uses multi-factor analysis: corruption type severity, keyword significance,
-     * entity/amount detection, description quality, and cross-referencing heuristics.
-     */
-    private function determineExpertPriority(array $data): string
-    {
-        $type = strtolower($data['type'] ?? '');
-        $description = $data['description'] ?? '';
-        $institution = $data['institution'] ?? '';
-        $location = $data['location'] ?? '';
-        $text = strtolower($description . ' ' . $institution . ' ' . $location);
-
-        $score = 0;
-
-        // ── Factor 1: Corruption Type Severity ──
-        $typeScores = [
-            'embezzlement'      => 40,
-            'procurement fraud' => 35,
-            'abuse of office'   => 25,
-            'bribery'           => 20,
-            'nepotism'          => 12,
-            'other'             => 8,
-        ];
-
-        foreach ($typeScores as $t => $pts) {
-            if (str_contains($type, $t)) {
-                $score += $pts;
-                break;
-            }
-        }
-
-        // ── Factor 2: High-value targets / senior officials ──
-        $seniorOfficials = [
-            'president',
-            'vice president',
-            'prime minister',
-            'minister',
-            'permanent secretary',
-            'director general',
-            'commissioner',
-            'attorney general',
-            'chief justice',
-            'governor',
-            'mayor',
-            'secretary',
-            'chief executive',
-            'managing director',
-            'board chairman',
-            'deputy minister',
-            'ambassador',
-            'consul',
-        ];
-        foreach ($seniorOfficials as $kw) {
-            if (str_contains($text, $kw)) {
-                $score += 25;
-            }
-        }
-
-        // ── Factor 3: Scale indicators (large financial amounts) ──
-        $largeScaleKeywords = [
-            'million' => 30,
-            'billion' => 35,
-            'trillion' => 40,
-            'widespread' => 20,
-            'systematic' => 22,
-            'organised' => 20,
-            'organized' => 20,
-            'syndicate' => 25,
-            'cartel' => 25,
-            'network' => 15,
-            'ring' => 15,
-            'scheme' => 12,
-            'hundreds of thousands' => 18,
-        ];
-        foreach ($largeScaleKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $score += $pts;
-            }
-        }
-
-        // ── Factor 4: Numeric amount detection (USD/ZWL amounts) ──
-        if (preg_match('/\$\s*[\d,]+(?:\.\d+)?/', $text) || preg_match('/(?:usd|zwl|us\$|z\$)\s*[\d,]+/i', $text)) {
-            $score += 15;
-        }
-        if (preg_match('/\b\d{6,}\b/', $text)) {
-            $score += 12;
-        }
-
-        // ── Factor 5: Government/public institution involvement ──
-        $govKeywords = [
-            'government' => 10,
-            'public funds' => 12,
-            'taxpayer' => 12,
-            'contract' => 8,
-            'tender' => 10,
-            'ministry' => 9,
-            'department' => 7,
-            'council' => 8,
-            'authority' => 8,
-            'state' => 7,
-            'national' => 7,
-            'parastatal' => 10,
-            'police' => 9,
-            'army' => 9,
-            'military' => 9,
-            'hospital' => 8,
-            'school' => 7,
-            'university' => 8,
-            'zesa' => 10,
-            'zinwa' => 10,
-            'zimra' => 10,
-            'nssa' => 10,
-        ];
-        foreach ($govKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $score += $pts;
-            }
-        }
-
-        // ── Factor 6: Crime severity keywords ──
-        $crimeKeywords = [
-            'bribe' => 7,
-            'fraud' => 8,
-            'theft' => 8,
-            'steal' => 8,
-            'coercion' => 10,
-            'embezzle' => 9,
-            'kickback' => 10,
-            'extort' => 12,
-            'misuse' => 6,
-            'stolen' => 8,
-            'siphon' => 10,
-            'inflate' => 8,
-            'phantom' => 12,
-            'launder' => 15,
-            'money laundering' => 18,
-            'forgery' => 10,
-            'forged' => 10,
-            'falsified' => 10,
-            'illegal' => 6,
-            'illicit' => 8,
-            'ghost workers' => 15,
-            'fictitious' => 12,
-            'collusion' => 12,
-            'conspiracy' => 10,
-            'intimidat' => 12,
-            'threaten' => 10,
-        ];
-        foreach ($crimeKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $score += $pts;
-            }
-        }
-
-        // ── Factor 7: Evidence quality indicators ──
-        $evidenceKeywords = [
-            'document' => 5,
-            'receipt' => 6,
-            'invoice' => 6,
-            'proof' => 4,
-            'witness' => 6,
-            'recording' => 8,
-            'photo' => 5,
-            'video' => 7,
-            'screenshot' => 5,
-            'bank statement' => 8,
-            'audit' => 7,
-            'email' => 5,
-            'letter' => 4,
-        ];
-        $evidenceBonus = 0;
-        foreach ($evidenceKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $evidenceBonus += $pts;
-            }
-        }
-        $score += min($evidenceBonus, 25);
-
-        // ── Factor 8: Temporal specificity (dates/times mentioned) ──
-        $datePatterns = 0;
-        if (preg_match('/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/', $text)) $datePatterns++;
-        if (preg_match('/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d/i', $text)) $datePatterns++;
-        if (preg_match('/\b20[12]\d\b/', $text)) $datePatterns++;
-        if ($datePatterns > 0) {
-            $score += min($datePatterns * 5, 15);
-        }
-
-        // ── Factor 9: Description quality / length ──
-        $len = strlen($description);
-        if ($len > 1000) {
-            $score += 20;
-        } elseif ($len > 500) {
-            $score += 15;
-        } elseif ($len > 250) {
-            $score += 8;
-        } elseif ($len > 100) {
-            $score += 3;
-        }
-
-        // ── Factor 10: Urgency / ongoing nature ──
-        $urgencyKeywords = ['ongoing', 'happening now', 'today', 'currently', 'right now', 'this week', 'this month', 'urgent'];
-        foreach ($urgencyKeywords as $kw) {
-            if (str_contains($text, $kw)) {
-                $score += 8;
-                break;
-            }
-        }
-
-        Log::info('Expert system scoring', [
-            'type' => $type,
-            'total_score' => $score,
-            'desc_length' => $len,
-        ]);
-
-        if ($score >= 80) {
-            return 'CRITICAL';
-        }
-        if ($score >= 45) {
-            return 'HIGH';
-        }
-        if ($score >= 22) {
-            return 'MEDIUM';
-        }
-
-        return 'LOW';
     }
 
     /**
