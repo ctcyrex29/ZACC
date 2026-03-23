@@ -251,7 +251,7 @@ export const ChatBot: React.FC = () => {
       {/* Floating button */}
       <button
         onClick={() => setOpen((p) => !p)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-2xl shadow-emerald-500/40 flex items-center justify-center hover:scale-110 transition-transform"
+        className="fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-2xl shadow-emerald-500/40 flex items-center justify-center hover:scale-110 transition-transform"
         aria-label="Open ZACC Guide"
       >
         <span className="text-2xl">{open ? "✕" : "💬"}</span>
@@ -264,7 +264,7 @@ export const ChatBot: React.FC = () => {
 
       {/* Chat window */}
       {open && (
-        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[min(380px,calc(100vw-2rem))] h-[min(560px,calc(100vh-8rem))] flex flex-col rounded-3xl border border-white/10 bg-[#080c18] shadow-2xl overflow-hidden animate-fade-in">
+        <div className="fixed bottom-24 left-4 sm:left-6 z-50 w-[min(380px,calc(100vw-2rem))] h-[min(560px,calc(100vh-8rem))] flex flex-col rounded-3xl border border-white/10 bg-[#080c18] shadow-2xl overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="flex items-center gap-3 px-5 py-4 bg-gradient-to-r from-emerald-600 to-emerald-800 flex-shrink-0">
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">

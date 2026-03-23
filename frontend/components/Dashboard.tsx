@@ -14,48 +14,13 @@ import {
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus } from "../types";
 
+
 const COLORS = ["#10b981", "#6366f1", "#f59e0b", "#f43f5e", "#a855f7"];
 
-const statusBadge = (s: string) => {
-  if (s === "SUBMITTED")
-    return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-  if (s === "UNDER_REVIEW")
-    return "bg-indigo-500/10 text-indigo-500 border-indigo-500/20";
-  if (s === "INVESTIGATING")
-    return "bg-amber-500/10 text-amber-500 border-amber-500/20";
-  if (s === "REFERRED")
-    return "bg-purple-500/10 text-purple-500 border-purple-500/20";
-  if (s === "CLOSED")
-    return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-  if (s === "DISPUTED")
-    return "bg-rose-500/10 text-rose-500 border-rose-500/20";
-  return "bg-slate-500/10 text-slate-400 border-slate-500/20";
-};
-
-const priorityColor = (p: string) => {
-  if (p === "CRITICAL") return "text-rose-500";
-  if (p === "HIGH") return "text-orange-500";
-  if (p === "MEDIUM") return "text-amber-500";
-  return "text-emerald-500";
-};
-
-const statusLabel = (s: string) => {
-  const map: Record<string, string> = {
-    SUBMITTED: "Submitted",
-    UNDER_REVIEW: "Under Review",
-    INVESTIGATING: "Investigating",
-    REFERRED: "Referred",
-    CLOSED: "Closed",
-    DISPUTED: "Disputed",
-  };
-  return map[s] ?? s;
-};
 
 export const Dashboard: React.FC = () => {
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tableFilter, setTableFilter] = useState<string>("ALL");
-  const [tableSearch, setTableSearch] = useState("");
   const [hotspotData, setHotspotData] = useState<{
     by_province: { name: string; total: number }[];
     critical_hotspots: { institution: string; total: number }[];
@@ -173,16 +138,6 @@ export const Dashboard: React.FC = () => {
     { name: "Week 3", value: 15 },
     { name: "Week 4", value: Math.max(cases.length, 1) },
   ];
-
-  const filteredCases = cases.filter((c) => {
-    const matchFilter = tableFilter === "ALL" || c.status === tableFilter;
-    const matchSearch =
-      !tableSearch ||
-      c.type?.toLowerCase().includes(tableSearch.toLowerCase()) ||
-      c.institution?.toLowerCase().includes(tableSearch.toLowerCase()) ||
-      (c.referenceCode || "").toLowerCase().includes(tableSearch.toLowerCase());
-    return matchFilter && matchSearch;
-  });
 
   return (
     <div className="space-y-8">
@@ -435,129 +390,6 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Cases Table */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              All Cases
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {filteredCases.length} of {cases.length} cases
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Search..."
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-            />
-            <select
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-            >
-              <option value="ALL">All Statuses</option>
-              {Object.values(CaseStatus).map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="p-12 text-center">
-            <div className="w-8 h-8 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm text-slate-500">Loading cases...</p>
-          </div>
-        ) : filteredCases.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-slate-500 font-medium">No cases found.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
-                <tr>
-                  {[
-                    "#",
-                    "Reference",
-                    "Type",
-                    "Institution",
-                    "Priority",
-                    "Status",
-                    "Risk",
-                    "Date",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-5 py-3.5 text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {filteredCases.map((c, idx) => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors"
-                  >
-                    <td className="px-5 py-4 text-xs text-slate-500 font-bold">
-                      {idx + 1}
-                    </td>
-                    <td className="px-5 py-4">
-                      <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
-                        {c.referenceCode || c.id}
-                      </code>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                      {c.type}
-                    </td>
-                    <td className="px-5 py-4 text-slate-600 dark:text-slate-400 max-w-[160px] truncate">
-                      {c.institution}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`text-xs font-black uppercase ${priorityColor(c.priority)}`}
-                      >
-                        {c.priority}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusBadge(c.status)}`}
-                      >
-                        {statusLabel(c.status)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${c.riskScore > 74 ? "bg-rose-500" : c.riskScore > 40 ? "bg-amber-500" : "bg-emerald-500"}`}
-                            style={{ width: `${c.riskScore}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                          {c.riskScore}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(c.timestamp).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

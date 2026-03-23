@@ -226,6 +226,24 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     return () => window.clearInterval(intervalId);
   }, [fetchNotifications]);
 
+  // ── Authenticated evidence download (avoids 401 from <a href target="_blank">) ──
+  const downloadEvidence = async (url: string, fileName: string) => {
+    try {
+      const token = localStorage.getItem("nexus_token");
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+      const blob = await resp.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch (err) {
+      console.error("Evidence download error:", err);
+    }
+  };
+
   // ── Load stages for open dossier ──
   const loadStages = useCallback(async (reportId: string) => {
     try {
@@ -411,6 +429,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
         </div>
       </div>
 
+      {!isAdmin && (
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
@@ -450,6 +469,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Header & Filters ── */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -575,9 +595,20 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                       {idx + 1}
                     </td>
                     <td className="px-5 py-4">
-                      <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
-                        {c.referenceCode || c.id}
-                      </code>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
+                          {c.referenceCode || c.id}
+                        </code>
+                        {c.referenceCode && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.referenceCode!); }}
+                            title="Copy tracking code"
+                            className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 hover:bg-emerald-500/10 border border-slate-200 dark:border-white/10 text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+                          >
+                            Copy
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                       {c.type}
@@ -641,22 +672,31 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                   {isAdmin ? "Case Details" : "Case Dossier"}
                 </h3>
                 {dossierData && !dossierData.error && (
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs">
                       {dossierData.reference_code || dossierData.case_id}
                     </code>
-                    &nbsp;·&nbsp;
+                    {!isAdmin && dossierData.reference_code && (
+                      <button
+                        onClick={() => navigator.clipboard.writeText(dossierData.reference_code)}
+                        title="Copy reference code"
+                        className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 transition-all"
+                      >
+                        Copy
+                      </button>
+                    )}
+                    <span className="text-slate-400 text-xs">·</span>
                     <span
-                      className={`font-bold ${statusBadge(currentStatus).split(" ")[1]}`}
+                      className={`font-bold text-xs ${statusBadge(currentStatus).split(" ")[1]}`}
                     >
                       {statusLabel(currentStatus)}
                     </span>
                     {isAdmin && (
-                      <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase">
                         Read Only
                       </span>
                     )}
-                  </p>
+                  </div>
                 )}
               </div>
               <button
@@ -844,14 +884,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                             </div>
 
                             {attachment.download_url ? (
-                              <a
-                                href={attachment.download_url}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                onClick={() => downloadEvidence(attachment.download_url!, attachment.original_name || "evidence")}
                                 className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
                               >
-                                Open
-                              </a>
+                                Download
+                              </button>
                             ) : (
                               <span className="text-[11px] text-slate-400">Unavailable</span>
                             )}
