@@ -25,6 +25,19 @@ class AuthController extends Controller
             ]);
         }
 
+        if (!$user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => ['Your account is currently inactive. Please contact an administrator.'],
+            ]);
+        }
+
+        // Check if login is via password reset token
+        if ($user->password_reset_token && $user->password_reset_token_expires_at && $user->password_reset_token_expires_at->isFuture()) {
+            $user->password_reset_token = null;
+            $user->password_reset_token_expires_at = null;
+            $user->save();
+        }
+
         return response()->json([
             'user' => $user,
             'token' => $user->createToken('api-token')->plainTextToken,

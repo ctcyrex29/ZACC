@@ -2,78 +2,90 @@ import React, { useState, useRef, useCallback } from "react";
 import { analyzeCase } from "../services/gemini";
 import { apiClient } from "../services/api";
 import { CorruptionType, User } from "../types";
+import { Language, t } from "../i18n";
 
 interface ReportFormProps {
   user: User;
+  language: Language;
   onSuccess: () => void;
 }
 
-// Zimbabwe provinces and cities for location type-ahead
-const LOCATIONS = [
-  "Harare",
-  "Bulawayo",
-  "Chitungwiza",
-  "Mutare",
-  "Gweru",
-  "Kwekwe",
-  "Kadoma",
-  "Masvingo",
-  "Chinhoyi",
-  "Marondera",
-  "Norton",
-  "Chegutu",
-  "Bindura",
-  "Beitbridge",
-  "Hwange",
-  "Victoria Falls",
-  "Kariba",
-  "Karoi",
-  "Chiredzi",
-  "Zvishavane",
-  "Shurugwi",
-  "Rusape",
-  "Chipinge",
-  "Redcliff",
-  "Plumtree",
-  "Lupane",
-  "Gokwe",
-  "Bikita",
-  "Gutu",
-  // Provinces
-  "Harare Province",
-  "Bulawayo Province",
-  "Manicaland",
-  "Mashonaland Central",
-  "Mashonaland East",
-  "Mashonaland West",
-  "Masvingo Province",
-  "Matabeleland North",
-  "Matabeleland South",
-  "Midlands",
-  // Districts
-  "Epworth",
-  "Ruwa",
-  "Goromonzi",
-  "Seke",
-  "Mazowe",
-  "Shamva",
-  "Mvurwi",
-  "Concession",
-  "Chivhu",
-  "Macheke",
-  "Headlands",
-  "Nyanga",
-  "Chimanimani",
-  "Buhera",
-  "Murambinda",
-  "Inyanga",
-  "Penhalonga",
-  "Mhangura",
-  "Banket",
-  "Raffingora",
-  "Tengwe",
-  "Zvimba",
-];
+// Zimbabwe provinces with their towns/cities mapped
+const PROVINCE_LOCATIONS: Record<string, string[]> = {
+  "Harare Province": [
+    "Harare", "Chitungwiza", "Epworth", "Ruwa", "Norton",
+  ],
+  "Bulawayo Province": [
+    "Bulawayo",
+  ],
+  "Manicaland": [
+    "Mutare", "Rusape", "Chipinge", "Nyanga", "Chimanimani",
+    "Buhera", "Murambinda", "Penhalonga", "Headlands",
+    "Hauna", "Juliasdale", "Nyazura", "Dorowa", "Odzi",
+    "Sakubva", "Dangamvura", "Chipinge Town", "Mount Selinda",
+    "Chimanimani Village", "Chisumbanje", "Hot Springs",
+  ],
+  "Mashonaland Central": [
+    "Bindura", "Mount Darwin", "Shamva", "Mvurwi", "Concession",
+    "Mazowe", "Rushinga", "Centenary", "Guruve", "Mbire",
+    "Muzarabani", "Glendale",
+  ],
+  "Mashonaland East": [
+    "Marondera", "Chivhu", "Macheke", "Goromonzi", "Seke",
+    "Murehwa", "Mutoko", "Mudzi", "Nyamapanda",
+  ],
+  "Mashonaland West": [
+    "Chinhoyi", "Kadoma", "Chegutu", "Karoi", "Kariba",
+    "Mhangura", "Banket", "Raffingora", "Tengwe", "Zvimba",
+    "Chirundu", "Makuti", "Sanyati", "Alaska Mine", "Selous",
+  ],
+  "Masvingo Province": [
+    "Masvingo", "Chiredzi", "Bikita", "Gutu", "Zaka",
+    "Jerera", "Chivi", "Mwenezi", "Ngundu", "Rutenga",
+    "Triangle", "Hippo Valley", "Morgenster", "Nemamwa",
+    "Buffalo Range", "Tokwe", "Mashoko", "Chatsworth",
+  ],
+  "Matabeleland North": [
+    "Hwange", "Victoria Falls", "Lupane", "Nkayi", "Tsholotsho",
+    "Inyathi", "Dete", "Kamativi", "Kazungula",
+  ],
+  "Matabeleland South": [
+    "Gwanda", "Beitbridge", "Plumtree", "Filabusi",
+    "West Nicholson", "Esigodini",
+  ],
+  "Midlands": [
+    "Gweru", "Kwekwe", "Zvishavane", "Shurugwi", "Redcliff",
+    "Gokwe", "Gokwe South", "Gokwe North", "Zhombe", "Silobela",
+    "Mvuma", "Lalapanzi", "Mashava", "Mberengwa", "Gokwe Centre",
+  ],
+};
+
+const PROVINCES = Object.keys(PROVINCE_LOCATIONS);
+const ALL_LOCATIONS = PROVINCES.flatMap(p => PROVINCE_LOCATIONS[p].map(t => `${t}, ${p}`));
+
+function getProvinceForLocation(location: string): string | null {
+  for (const [province, towns] of Object.entries(PROVINCE_LOCATIONS)) {
+    if (towns.some(t => t.toLowerCase() === location.toLowerCase())) return province;
+  }
+  return null;
+}
+
+// Fuzzy location matching: matches if all characters of query appear in order in the location
+function fuzzyMatch(query: string, text: string): { match: boolean; score: number } {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  // Exact start match gets best score
+  if (t.startsWith(q)) return { match: true, score: 3 };
+  // Contains match
+  if (t.includes(q)) return { match: true, score: 2 };
+  // Fuzzy: all chars of query appear in order
+  let qi = 0;
+  for (let i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) qi++;
+  }
+  if (qi === q.length) return { match: true, score: 1 };
+  return { match: false, score: 0 };
+}
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -101,7 +113,7 @@ const fileIcon = (type: string) => {
   return "📎";
 };
 
-export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
+export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -123,31 +135,55 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
   const [locationQuery, setLocationQuery] = useState("");
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [filteredLocations, setFilteredLocations] = useState<string[]>([]);
+  const [selectedProvince, setSelectedProvince] = useState("");
 
   // Language hint
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
 
-  // ── Location type-ahead ──
+  // Pre-submission suggestions
+  const [preSuggestions, setPreSuggestions] = useState<any>(null);
+  const [preSuggestionsLoading, setPreSuggestionsLoading] = useState(false);
+
+  // ── Location type-ahead with fuzzy matching ──
   const handleLocationChange = useCallback((value: string) => {
     setLocationQuery(value);
     setFormData((prev) => ({ ...prev, location: value }));
 
-    if (value.trim().length >= 2) {
-      const lower = value.toLowerCase();
-      const matches = LOCATIONS.filter((loc) =>
-        loc.toLowerCase().includes(lower),
-      );
-      setFilteredLocations(matches.slice(0, 8));
-      setShowLocationDropdown(matches.length > 0);
+    if (value.trim().length >= 1) {
+      // Filter by selected province if one is chosen
+      const pool = selectedProvince
+        ? PROVINCE_LOCATIONS[selectedProvince].map(t => `${t}, ${selectedProvince}`)
+        : ALL_LOCATIONS;
+      const results = pool
+        .map((loc) => ({ loc, ...fuzzyMatch(value, loc) }))
+        .filter((r) => r.match)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map((r) => r.loc);
+      setFilteredLocations(results);
+      setShowLocationDropdown(results.length > 0);
     } else {
       setFilteredLocations([]);
       setShowLocationDropdown(false);
     }
-  }, []);
+  }, [selectedProvince]);
 
   const selectLocation = (loc: string) => {
     setLocationQuery(loc);
     setFormData((prev) => ({ ...prev, location: loc }));
+    // Auto-detect province from selection
+    const town = loc.split(",")[0].trim();
+    const prov = getProvinceForLocation(town);
+    if (prov && !selectedProvince) setSelectedProvince(prov);
+    setShowLocationDropdown(false);
+  };
+
+  const handleProvinceChange = (province: string) => {
+    setSelectedProvince(province);
+    // Reset location when province changes
+    setLocationQuery("");
+    setFormData((prev) => ({ ...prev, location: "" }));
+    setFilteredLocations([]);
     setShowLocationDropdown(false);
   };
 
@@ -234,6 +270,24 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
     }
   };
 
+  const getPreSubmissionSuggestions = async () => {
+    if (formData.description.trim().length < 10) return;
+    setPreSuggestionsLoading(true);
+    try {
+      const resp = await apiClient.preSubmissionSuggestions({
+        type: formData.type,
+        description: formData.description,
+        institution: formData.institution,
+        location: formData.location,
+      });
+      if (resp.success) setPreSuggestions(resp.data);
+    } catch {
+      // Silently fail - suggestions are optional
+    } finally {
+      setPreSuggestionsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -296,18 +350,17 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
               ✓
             </div>
             <h2 className="text-3xl md:text-4xl font-black text-emerald-900 dark:text-emerald-100 mb-3">
-              Report Submitted Successfully
+              {t(language, "reportSubmitted")}
             </h2>
             <p className="text-emerald-800 dark:text-emerald-200 max-w-md mx-auto leading-relaxed">
-              Your case has been securely logged and is now in the investigation
-              queue.
+              {t(language, "caseReceived")}
             </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 p-6 bg-white/30 dark:bg-white/5 rounded-2xl">
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-2">
-                Category
+                {t(language, "category")}
               </p>
               <p className="text-sm font-black text-emerald-900 dark:text-white">
                 {submittedReport.type}
@@ -315,7 +368,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-2">
-                Expert Priority
+                {t(language, "expertPriority")}
               </p>
               <p
                 className={`text-sm font-black uppercase ${submittedReport.priority === "CRITICAL" ? "text-rose-600 dark:text-rose-400" : submittedReport.priority === "HIGH" ? "text-orange-600 dark:text-orange-400" : "text-emerald-600 dark:text-emerald-400"}`}
@@ -325,7 +378,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-2">
-                Risk Score
+                {t(language, "riskScore")}
               </p>
               <p className="text-sm font-black text-emerald-900 dark:text-white">
                 {submittedReport.risk_score}%
@@ -333,7 +386,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider mb-2">
-                Evidence
+                {t(language, "evidence")}
               </p>
               <p className="text-sm font-black text-emerald-900 dark:text-white">
                 {files.length} file{files.length !== 1 ? "s" : ""}
@@ -343,7 +396,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
 
           <div className="bg-white dark:bg-black/20 rounded-2xl p-6 mb-8 border border-emerald-200 dark:border-emerald-500/20">
             <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-3">
-              Your Tracking Code
+              {t(language, "yourTrackingCode")}
             </p>
             <div className="flex items-center justify-between gap-4">
               <code className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
@@ -355,7 +408,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                 }
                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg transition-all"
               >
-                Copy
+                {t(language, "copy")}
               </button>
             </div>
           </div>
@@ -370,7 +423,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
 
           <div className="bg-white/20 dark:bg-white/5 rounded-2xl p-6 mb-8 border border-emerald-200/30 dark:border-white/10">
             <h3 className="font-bold text-emerald-900 dark:text-white mb-4">
-              What Happens Next
+              {t(language, "whatHappensNext")}
             </h3>
             <ol className="space-y-3 text-sm text-emerald-800 dark:text-emerald-100">
               <li className="flex gap-3">
@@ -378,8 +431,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                   1.
                 </span>
                 <span>
-                  Our team reviews your submission and conducts an initial
-                  assessment.
+                  {t(language, "step1")}
                 </span>
               </li>
               <li className="flex gap-3">
@@ -387,8 +439,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                   2.
                 </span>
                 <span>
-                  You can track progress using your tracking code in the "Track
-                  Case" section.
+                  {t(language, "step2")}
                 </span>
               </li>
               <li className="flex gap-3">
@@ -396,7 +447,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                   3.
                 </span>
                 <span>
-                  Investigators will update status within 48-72 hours.
+                  {t(language, "step3")}
                 </span>
               </li>
             </ol>
@@ -412,6 +463,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                 setFileErrors([]);
                 setLocationQuery("");
                 setDetectedLanguage(null);
+                setSelectedProvince("");
                 setFormData({
                   type: CorruptionType.BRIBERY,
                   institution: "",
@@ -421,13 +473,13 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
               }}
               className="flex-1 px-6 py-4 rounded-xl bg-white/20 dark:bg-white/5 hover:bg-white/30 dark:hover:bg-white/10 text-emerald-900 dark:text-white font-bold text-sm uppercase tracking-wider transition-all border border-emerald-200 dark:border-white/10"
             >
-              File Another Report
+              {t(language, "fileAnotherReport")}
             </button>
             <button
               onClick={onSuccess}
               className="flex-1 px-6 py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm uppercase tracking-wider transition-all"
             >
-              View My Reports
+              {t(language, "viewMyReports")}
             </button>
           </div>
         </div>
@@ -440,12 +492,10 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
       <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-8 md:p-10">
         <div className="mb-8">
           <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-3">
-            File a Report
+            {t(language, "fileAReport")}
           </h2>
           <p className="text-slate-600 dark:text-slate-400 font-medium">
-            Provide detailed information about the integrity concern. All
-            submissions are encrypted and protected. You can write in any
-            language — English, Shona, Ndebele, or Tonga.
+            {t(language, "reportFormHint")}
           </p>
         </div>
 
@@ -463,7 +513,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
-                Type of Corruption
+                {t(language, "corruptionType")}
               </label>
               <select
                 className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all"
@@ -484,11 +534,11 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
-                Affected Institution
+                {t(language, "affectedInstitution")}
               </label>
               <input
                 type="text"
-                placeholder="Ministry, department, or company"
+                placeholder={t(language, "institutionPlaceholder")}
                 className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 font-medium focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all"
                 value={formData.institution}
                 onChange={(e) =>
@@ -503,11 +553,11 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
-                Detailed Description
+                {t(language, "detailedDescription")}
               </label>
               {detectedLanguage && (
                 <span className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                  Detected: {detectedLanguage}
+                  {t(language, "detected")}: {detectedLanguage}
                 </span>
               )}
             </div>
@@ -523,61 +573,78 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
               <p
                 className={`text-xs font-medium ml-1 ${formData.description.length < 20 ? "text-slate-500 dark:text-slate-600" : "text-emerald-600 dark:text-emerald-400"}`}
               >
-                {formData.description.length} characters (minimum 20 required)
+                {formData.description.length} {t(language, "characters")} ({t(language, "minChars")})
               </p>
               {formData.description.length >= 20 &&
                 formData.description.length < 250 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                    Tip: More detail = higher priority from the expert system
+                    {t(language, "tipMoreDetail")}
                   </p>
                 )}
             </div>
           </div>
 
-          {/* Location with type-ahead */}
-          <div className="space-y-2 relative">
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
-              Location (District/Province)
-            </label>
-            <input
-              type="text"
-              placeholder="Start typing a city or province (e.g., Harare, Bulawayo, Masvingo)"
-              className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 font-medium focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all"
-              value={locationQuery}
-              onChange={(e) => handleLocationChange(e.target.value)}
-              onFocus={() => {
-                if (locationQuery.length >= 2 && filteredLocations.length > 0)
-                  setShowLocationDropdown(true);
-              }}
-              onBlur={() =>
-                setTimeout(() => setShowLocationDropdown(false), 200)
-              }
-            />
-            {/* Location suggestions dropdown */}
-            {showLocationDropdown && filteredLocations.length > 0 && (
-              <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c1020] shadow-xl max-h-52 overflow-y-auto">
-                {filteredLocations.map((loc) => (
-                  <button
-                    key={loc}
-                    type="button"
-                    onClick={() => selectLocation(loc)}
-                    className="w-full text-left px-5 py-3 text-sm text-slate-900 dark:text-white hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors font-medium border-b border-slate-100 dark:border-white/5 last:border-0"
-                  >
-                    <span className="mr-2 text-emerald-500">📍</span>
-                    {loc}
-                  </button>
+          {/* Province & Location with type-ahead */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
+                Province
+              </label>
+              <select
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white font-medium focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all"
+                value={selectedProvince}
+                onChange={(e) => handleProvinceChange(e.target.value)}
+              >
+                <option value="">All Provinces</option>
+                {PROVINCES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
                 ))}
-              </div>
-            )}
-            <p className="text-xs text-slate-500 ml-1">
-              Type to search or enter a custom location if not listed
-            </p>
+              </select>
+            </div>
+            <div className="space-y-2 relative">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
+                {t(language, "locationDistrictProvince")}
+              </label>
+              <input
+                type="text"
+                placeholder={t(language, "locationPlaceholder")}
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 font-medium focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all"
+                value={locationQuery}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                onFocus={() => {
+                  if (locationQuery.length >= 1 && filteredLocations.length > 0)
+                    setShowLocationDropdown(true);
+                }}
+                onBlur={() =>
+                  setTimeout(() => setShowLocationDropdown(false), 200)
+                }
+              />
+              {/* Location suggestions dropdown */}
+              {showLocationDropdown && filteredLocations.length > 0 && (
+                <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c1020] shadow-xl max-h-52 overflow-y-auto">
+                  {filteredLocations.map((loc) => (
+                    <button
+                      key={loc}
+                      type="button"
+                      onClick={() => selectLocation(loc)}
+                      className="w-full text-left px-5 py-3 text-sm text-slate-900 dark:text-white hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors font-medium border-b border-slate-100 dark:border-white/5 last:border-0"
+                    >
+                      <span className="mr-2 text-emerald-500">📍</span>
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-slate-500 ml-1">
+                {selectedProvince ? `Showing locations in ${selectedProvince}` : "Select a province or type to search all locations"}
+              </p>
+            </div>
           </div>
 
           {/* Evidence Upload */}
           <div className="space-y-3">
             <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
-              Upload Evidence (Optional)
+              {t(language, "uploadEvidence")}
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -585,10 +652,10 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             >
               <div className="text-3xl mb-2">📎</div>
               <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                Click to upload evidence files
+                {t(language, "clickToUpload")}
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Photos, videos, audio, documents — max 10 files, 10MB each
+                {t(language, "uploadHintDetailed")}
               </p>
               <p className="text-[10px] text-slate-400 mt-1">
                 JPG, PNG, MP4, MOV, MP3, WAV, PDF, DOC, DOCX, XLS, XLSX, TXT
@@ -655,18 +722,81 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
             <p className="text-xs text-slate-700 dark:text-slate-400 font-medium flex items-center gap-2">
               <span className="text-lg">🔒</span>
               <span>
-                Your report is encrypted with RSA-2048 and the case priority is
-                assigned by the expert system for fairness and consistency.
+                {t(language, "securityNote")}
               </span>
             </p>
             <p className="text-xs text-slate-700 dark:text-slate-400 font-medium flex items-center gap-2">
               <span className="text-lg">🌐</span>
               <span>
-                Write in any language — English, Shona, Ndebele, Tonga — your
-                report will be processed and credited fully.
+                {t(language, "languageNote")}
               </span>
             </p>
           </div>
+
+          {/* Pre-Submission AI Suggestions */}
+          {formData.description.trim().length >= 20 && (
+            <div className="space-y-3">
+              {!preSuggestions && (
+                <button type="button" onClick={getPreSubmissionSuggestions} disabled={preSuggestionsLoading}
+                  className="w-full py-3 rounded-2xl border-2 border-dashed border-violet-300 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 font-bold text-xs uppercase tracking-widest hover:bg-violet-50 dark:hover:bg-violet-500/5 transition-all disabled:opacity-50">
+                  {preSuggestionsLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+                      {t(language, "analyzing") || "Analyzing your report..."}
+                    </span>
+                  ) : "🤖 Get AI Suggestions Before Submitting"}
+                </button>
+              )}
+              {preSuggestions && (
+                <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">AI Case Assessment</p>
+                    <button type="button" onClick={() => setPreSuggestions(null)} className="text-violet-400 hover:text-violet-600 text-sm font-bold">&times;</button>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      preSuggestions.case_strength === "STRONG" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20" :
+                      preSuggestions.case_strength === "MODERATE" ? "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20" :
+                      "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20"
+                    }`}>{preSuggestions.case_strength?.replace(/_/g, " ")}</span>
+                    <span className="text-xs font-bold text-slate-500">Score: {preSuggestions.strength_score}/100</span>
+                    {preSuggestions.ready_to_submit && <span className="text-xs font-bold text-emerald-600">✓ Ready to submit</span>}
+                  </div>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{preSuggestions.summary}</p>
+                  {preSuggestions.suggestions?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">Suggestions</p>
+                      <ul className="space-y-1">
+                        {preSuggestions.suggestions.map((s: string, i: number) => (
+                          <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-violet-500 mt-0.5">→</span> {s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {preSuggestions.recommended_evidence?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-1">Recommended Evidence</p>
+                      <ul className="space-y-1">
+                        {preSuggestions.recommended_evidence.map((e: string, i: number) => (
+                          <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-cyan-500 mt-0.5">📎</span> {e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {preSuggestions.missing_details?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Missing Details</p>
+                      <ul className="space-y-1">
+                        {preSuggestions.missing_details.map((d: string, i: number) => (
+                          <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2"><span className="text-amber-500 mt-0.5">!</span> {d}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit Button */}
           <button
@@ -684,7 +814,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, onSuccess }) => {
                 Processing...
               </span>
             ) : (
-              `Submit Secure Report${files.length > 0 ? ` with ${files.length} Evidence File${files.length !== 1 ? "s" : ""}` : ""}`
+              `${t(language, "submitSecureReport")}${files.length > 0 ? ` ${t(language, "withEvidenceFiles")} (${files.length})` : ""}`
             )}
           </button>
         </form>

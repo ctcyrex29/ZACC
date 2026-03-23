@@ -151,6 +151,14 @@ class ApiClient {
     return this.request(`/users/${id}`, 'DELETE');
   }
 
+  async resetUserPassword(id: string) {
+    return this.request(`/users/${id}/reset-password`, 'POST');
+  }
+
+  async toggleUserActive(id: string) {
+    return this.request(`/users/${id}/toggle-active`, 'POST');
+  }
+
   async disputeReport(caseId: string, reason: string) {
     return this.request(`/reports/${caseId}/dispute`, 'POST', { reason });
   }
@@ -261,6 +269,21 @@ class ApiClient {
 
   async delete(endpoint: string) {
     return this.request(endpoint, 'DELETE');
+  }
+
+  // AI Expert System methods
+  async expertCaseReview(caseId: string) {
+    return this.request(`/ai/expert-review/${caseId}`);
+  }
+
+  async scanEvidence(caseId: string) {
+    return this.request(`/ai/scan-evidence/${caseId}`);
+  }
+
+  async preSubmissionSuggestions(data: { type: string; description: string; institution?: string; location?: string }) {
+    // Use authenticated route if token exists, otherwise public route
+    const endpoint = this.token ? '/ai/pre-submission-suggestions' : '/ai/pre-submission-suggestions-public';
+    return this.request(endpoint, 'POST', data);
   }
 }
 

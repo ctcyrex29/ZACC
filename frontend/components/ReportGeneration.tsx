@@ -14,6 +14,7 @@ import {
   Bar,
 } from "recharts";
 import { apiClient } from "../services/api";
+import { Language, t } from "../i18n";
 
 const COLORS = [
   "#10b981",
@@ -86,7 +87,7 @@ interface SummaryData {
   disputed_cases: ReportCase[];
 }
 
-export const ReportGeneration: React.FC = () => {
+export const ReportGeneration: React.FC<{ language: Language }> = ({ language }) => {
   const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -203,31 +204,31 @@ export const ReportGeneration: React.FC = () => {
   }[] = [
     {
       id: "overview",
-      label: "Overview",
+      label: t(language, "overview"),
       count: data?.overview?.total,
       color: "text-white",
     },
     {
       id: "successful",
-      label: "Successful",
+      label: t(language, "successful"),
       count: data?.overview?.successful,
       color: "text-emerald-500",
     },
     {
       id: "in_progress",
-      label: "In Progress",
+      label: t(language, "inProgress"),
       count: data?.overview?.in_progress,
       color: "text-amber-500",
     },
     {
       id: "closed",
-      label: "Closed",
+      label: t(language, "closed"),
       count: data?.overview?.closed,
       color: "text-blue-500",
     },
     {
       id: "disputed",
-      label: "Disputed",
+      label: t(language, "disputed"),
       count: data?.overview?.disputed,
       color: "text-rose-500",
     },
@@ -262,7 +263,7 @@ export const ReportGeneration: React.FC = () => {
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-sm text-slate-500 font-semibold">
-            Generating reports...
+            {t(language, "generatingReports")}
           </p>
         </div>
       </div>
@@ -276,7 +277,7 @@ export const ReportGeneration: React.FC = () => {
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
-              From
+              {t(language, "from")}
             </label>
             <input
               type="date"
@@ -287,7 +288,7 @@ export const ReportGeneration: React.FC = () => {
           </div>
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
-              To
+              {t(language, "to")}
             </label>
             <input
               type="date"
@@ -298,14 +299,14 @@ export const ReportGeneration: React.FC = () => {
           </div>
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
-              Type
+              {t(language, "type")}
             </label>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white"
             >
-              <option value="">All Types</option>
+              <option value="">{t(language, "allTypes")}</option>
               <option value="Bribery">Bribery</option>
               <option value="Procurement Fraud">Procurement Fraud</option>
               <option value="Abuse of Office">Abuse of Office</option>
@@ -318,7 +319,7 @@ export const ReportGeneration: React.FC = () => {
             onClick={fetchData}
             className="px-5 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-600 transition-colors"
           >
-            Apply Filters
+            {t(language, "applyFilters")}
           </button>
         </div>
       </div>
@@ -351,25 +352,25 @@ export const ReportGeneration: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               {
-                label: "Total Cases",
+                label: t(language, "totalCases"),
                 value: data.overview.total,
                 icon: "📊",
                 color: "text-slate-900 dark:text-white",
               },
               {
-                label: "Successful",
+                label: t(language, "successful"),
                 value: data.overview.successful,
                 icon: "✅",
                 color: "text-emerald-500",
               },
               {
-                label: "In Progress",
+                label: t(language, "inProgress"),
                 value: data.overview.in_progress,
                 icon: "⏳",
                 color: "text-amber-500",
               },
               {
-                label: "Disputed",
+                label: t(language, "disputed"),
                 value: data.overview.disputed,
                 icon: "🚨",
                 color: "text-rose-500",
@@ -391,7 +392,7 @@ export const ReportGeneration: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="glass-card rounded-2xl p-5 border border-emerald-500/20">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                Resolution Rate
+                {t(language, "resolutionRate")}
               </p>
               <p className="text-3xl font-black text-emerald-500">
                 {data.overview.resolution_rate}%
@@ -399,7 +400,7 @@ export const ReportGeneration: React.FC = () => {
             </div>
             <div className="glass-card rounded-2xl p-5 border border-blue-500/20">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                Success Rate
+                {t(language, "successRate")}
               </p>
               <p className="text-3xl font-black text-blue-500">
                 {data.overview.success_rate}%
@@ -407,7 +408,7 @@ export const ReportGeneration: React.FC = () => {
             </div>
             <div className="glass-card rounded-2xl p-5 border border-amber-500/20">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                Avg Risk Score
+                {t(language, "avgRiskScore")}
               </p>
               <p className="text-3xl font-black text-amber-500">
                 {data.overview.avg_risk_score}
@@ -420,7 +421,7 @@ export const ReportGeneration: React.FC = () => {
             {/* Monthly Trend */}
             <div className="glass-card p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
-                Monthly Trend
+                {t(language, "monthlyTrend")}
               </h3>
               <div className="h-[240px]">
                 <ResponsiveContainer
@@ -500,7 +501,7 @@ export const ReportGeneration: React.FC = () => {
             {/* Type Distribution */}
             <div className="glass-card p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
-                By Type
+                {t(language, "byType")}
               </h3>
               {typeData.length > 0 ? (
                 <>
@@ -552,7 +553,7 @@ export const ReportGeneration: React.FC = () => {
                 </>
               ) : (
                 <p className="text-slate-500 text-sm text-center py-10">
-                  No data available.
+                  {t(language, "noDataAvailable")}
                 </p>
               )}
             </div>
@@ -562,7 +563,7 @@ export const ReportGeneration: React.FC = () => {
           {priorityData.length > 0 && (
             <div className="glass-card p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
-                By Priority
+                {t(language, "byPriority")}
               </h3>
               <div className="h-[200px]">
                 <ResponsiveContainer
@@ -622,19 +623,19 @@ export const ReportGeneration: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-black text-slate-900 dark:text-white">
               {activeTab === "successful"
-                ? "Successful"
+                ? t(language, "successful")
                 : activeTab === "in_progress"
-                  ? "In Progress"
+                  ? t(language, "inProgress")
                   : activeTab === "closed"
-                    ? "Closed"
-                    : "Disputed"}{" "}
-              Cases
+                    ? t(language, "closed")
+                    : t(language, "disputed")}{" "}
+              {t(language, "cases")}
             </h3>
             <button
               onClick={() => generatePDF(activeTab, getCasesForTab(activeTab))}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors"
             >
-              📄 Export PDF
+              📄 {t(language, "exportPdf")}
             </button>
           </div>
 
@@ -642,7 +643,7 @@ export const ReportGeneration: React.FC = () => {
             {getCasesForTab(activeTab).length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-slate-500 font-medium">
-                  No cases in this category.
+                  {t(language, "noCasesInCategory")}
                 </p>
               </div>
             ) : (
