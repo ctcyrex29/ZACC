@@ -52,6 +52,7 @@ const App: React.FC = () => {
         return;
       }
       setUser(parsed);
+      (window as any).__zacc_user_name = parsed.name || parsed.email || "Authorized Officer";
       setCurrentView(
         parsed.role === UserRole.INVESTIGATOR || parsed.role === UserRole.ADMIN
           ? "investigator"
@@ -78,6 +79,7 @@ const App: React.FC = () => {
   const handleLogin = (u: User) => {
     if (u.role === UserRole.WHISTLEBLOWER) return; // blocked at PublicPortal level
     setUser(u);
+    (window as any).__zacc_user_name = u.name || u.email || "Authorized Officer";
     localStorage.setItem("nexus_user", JSON.stringify(u));
     setCurrentView("investigator");
   };

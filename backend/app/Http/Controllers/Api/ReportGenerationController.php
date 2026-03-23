@@ -152,19 +152,34 @@ class ReportGenerationController extends Controller
 
     private function formatCase($report): array
     {
+        $stageEvals = $report->stageEvaluations()
+            ->with('investigator:id,name,email')
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn($s) => [
+                'stage'              => $s->stage,
+                'investigator_name'  => $s->investigator?->name ?? 'System',
+                'investigator_email' => $s->investigator?->email ?? '',
+                'notes'              => $s->investigator_notes,
+                'final_score'        => $s->final_score,
+                'performed_at'       => $s->created_at?->toISOString(),
+            ])
+            ->toArray();
+
         return [
-            'case_id' => $report->case_id,
+            'case_id'        => $report->case_id,
             'reference_code' => $report->reference_code,
-            'type' => $report->type,
-            'institution' => $report->institution,
-            'location' => $report->location,
-            'status' => $report->status,
-            'priority' => $report->priority,
-            'risk_score' => $report->risk_score,
-            'is_anonymous' => $report->is_anonymous,
-            'created_at' => $report->created_at?->toISOString(),
-            'last_updated' => $report->last_updated,
+            'type'           => $report->type,
+            'institution'    => $report->institution,
+            'location'       => $report->location,
+            'status'         => $report->status,
+            'priority'       => $report->priority,
+            'risk_score'     => $report->risk_score,
+            'is_anonymous'   => $report->is_anonymous,
+            'created_at'     => $report->created_at?->toISOString(),
+            'last_updated'   => $report->last_updated,
             'dispute_reason' => $report->dispute_reason,
+            'stage_history'  => $stageEvals,
         ];
     }
 }

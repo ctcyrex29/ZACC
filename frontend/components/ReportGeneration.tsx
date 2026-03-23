@@ -58,6 +58,14 @@ interface ReportCase {
   created_at: string;
   last_updated: string;
   dispute_reason?: string;
+  stage_history?: {
+    stage: string;
+    investigator_name: string;
+    investigator_email: string;
+    notes: string;
+    final_score: number | null;
+    performed_at: string;
+  }[];
 }
 
 interface SummaryData {
@@ -130,8 +138,14 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
         .meta { color: #64748b; font-size: 13px; margin-bottom: 30px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
         th { background: #f1f5f9; padding: 10px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
-        td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+        td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
         tr:nth-child(even) { background: #f8fafc; }
+        .audit-trail { margin-top: 4px; }
+        .audit-stage { background: #f0fdf4; border-left: 3px solid #10b981; padding: 5px 8px; margin-bottom: 3px; border-radius: 0 4px 4px 0; font-size: 10px; }
+        .audit-stage .sname { font-weight: 800; color: #065f46; text-transform: uppercase; letter-spacing: 0.05em; }
+        .audit-stage .sofficer { color: #334155; margin: 1px 0; }
+        .audit-stage .stime { color: #94a3b8; }
+        .audit-stage .snotes { color: #475569; font-style: italic; border-top: 1px solid #d1fae5; padding-top: 2px; margin-top: 2px; }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
         .stats { display: flex; gap: 20px; margin: 20px 0; }
         .stat-card { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
@@ -145,7 +159,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
         <div class="watermark">ZACC CONFIDENTIAL</div>
         <h1>Zimbabwe Anti-Corruption Commission</h1>
         <h2>Case Report: ${category.charAt(0).toUpperCase() + category.slice(1)} Cases</h2>
-        <p class="meta">Generated: ${now} | Total Cases: ${cases.length}</p>
+        <p class="meta">Generated: ${now} | Total Cases: ${cases.length} | Officer: ${(window as any).__zacc_user_name || 'Authorized Officer'}</p>
         ${
           data?.overview
             ? `
@@ -160,7 +174,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
         }
         <table>
           <thead><tr>
-            <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Date</th>
+            <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Date</th><th>Audit Trail — Who Did What &amp; When</th>
           </tr></thead>
           <tbody>
             ${cases
@@ -176,6 +190,16 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
                 <td>${c.status}</td>
                 <td>${c.risk_score}%</td>
                 <td>${c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}</td>
+                <td>${c.stage_history && c.stage_history.length > 0
+                  ? `<div class="audit-trail">${c.stage_history.map((s: any) =>
+                      `<div class="audit-stage">
+                        <div class="sname">${s.stage.replace('_',' ')}</div>
+                        <div class="sofficer">&#128100; ${s.investigator_name}${s.investigator_email ? ` &lt;${s.investigator_email}&gt;` : ''}</div>
+                        <div class="stime">&#128336; ${s.performed_at ? new Date(s.performed_at).toLocaleString() : '\u2014'}${s.final_score != null ? ' &middot; Score: ' + s.final_score + '/100' : ''}</div>
+                        ${s.notes ? `<div class="snotes">${s.notes}</div>` : ''}
+                      </div>`
+                    ).join('')}</div>`
+                  : '<span style="color:#94a3b8;font-size:10px;">No actions recorded</span>'}</td>
               </tr>
             `,
               )
