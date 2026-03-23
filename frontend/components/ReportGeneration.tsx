@@ -159,19 +159,59 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
         <div class="watermark">ZACC CONFIDENTIAL</div>
         <h1>Zimbabwe Anti-Corruption Commission</h1>
         <h2>Case Report: ${category.charAt(0).toUpperCase() + category.slice(1)} Cases</h2>
-        <p class="meta">Generated: ${now} | Total Cases: ${cases.length} | Officer: ${(window as any).__zacc_user_name || 'Authorized Officer'}</p>
-        ${
-          data?.overview
-            ? `
-        <div class="stats">
-          <div class="stat-card"><div class="stat-value">${data.overview.total}</div><div class="stat-label">Total Cases</div></div>
-          <div class="stat-card"><div class="stat-value">${data.overview.successful}</div><div class="stat-label">Successful</div></div>
-          <div class="stat-card"><div class="stat-value">${data.overview.in_progress}</div><div class="stat-label">In Progress</div></div>
-          <div class="stat-card"><div class="stat-value">${data.overview.disputed}</div><div class="stat-label">Disputed</div></div>
-        </div>
-        `
-            : ""
-        }
+        <p class="meta">Generated: ${now} | Officer: ${(window as any).__zacc_user_name || 'Authorized Officer'}</p>
+        ${(() => {
+          const total = cases.length;
+          const avgRisk = total > 0 ? Math.round(cases.reduce((s, c) => s + (c.risk_score || 0), 0) / total) : 0;
+          if (category === 'successful') {
+            const highRisk = cases.filter(c => c.risk_score >= 75).length;
+            const medRisk  = cases.filter(c => c.risk_score >= 40 && c.risk_score < 75).length;
+            return `<div class="stats">
+              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Successful Cases</div></div>
+              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
+              <div class="stat-card"><div class="stat-value">${highRisk}</div><div class="stat-label">High-Risk Resolved</div></div>
+              <div class="stat-card"><div class="stat-value">${medRisk}</div><div class="stat-label">Medium-Risk Resolved</div></div>
+            </div>`;
+          }
+          if (category === 'in_progress') {
+            const submitted    = cases.filter(c => c.status === 'SUBMITTED').length;
+            const underReview  = cases.filter(c => c.status === 'UNDER_REVIEW').length;
+            const investigating= cases.filter(c => c.status === 'INVESTIGATING').length;
+            const referred     = cases.filter(c => c.status === 'REFERRED').length;
+            return `<div class="stats">
+              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Active Cases</div></div>
+              <div class="stat-card"><div class="stat-value">${submitted}</div><div class="stat-label">Submitted</div></div>
+              <div class="stat-card"><div class="stat-value">${underReview}</div><div class="stat-label">Under Review</div></div>
+              <div class="stat-card"><div class="stat-value">${investigating}</div><div class="stat-label">Investigating</div></div>
+              <div class="stat-card"><div class="stat-value">${referred}</div><div class="stat-label">Referred</div></div>
+            </div>`;
+          }
+          if (category === 'closed') {
+            const noDispute = cases.filter(c => !c.dispute_reason).length;
+            const withDispute = cases.filter(c => c.dispute_reason).length;
+            return `<div class="stats">
+              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Closed Cases</div></div>
+              <div class="stat-card"><div class="stat-value">${noDispute}</div><div class="stat-label">Clean Closure</div></div>
+              <div class="stat-card"><div class="stat-value">${withDispute}</div><div class="stat-label">Closed After Dispute</div></div>
+              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
+            </div>`;
+          }
+          if (category === 'disputed') {
+            const critical = cases.filter(c => c.priority === 'CRITICAL').length;
+            const high     = cases.filter(c => c.priority === 'HIGH').length;
+            return `<div class="stats">
+              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Disputed Cases</div></div>
+              <div class="stat-card"><div class="stat-value">${critical}</div><div class="stat-label">Critical Priority</div></div>
+              <div class="stat-card"><div class="stat-value">${high}</div><div class="stat-label">High Priority</div></div>
+              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
+            </div>`;
+          }
+          // overview fallback
+          return `<div class="stats">
+            <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total Cases in Set</div></div>
+            <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
+          </div>`;
+        })()}
         <table>
           <thead><tr>
             <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Date</th><th>Audit Trail — Who Did What &amp; When</th>
