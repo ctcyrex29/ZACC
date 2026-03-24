@@ -6,6 +6,7 @@ interface Message {
   from: "user" | "bot";
   text: string;
   timestamp: Date;
+  attachmentNames?: string[];
 }
 
 interface ChatbotApiPayload {
@@ -14,8 +15,27 @@ interface ChatbotApiPayload {
   suggestions?: string[];
 }
 
-const MAX_INPUT_LENGTH = 1000;
+interface ReportDraft {
+  type: string;
+  institution: string;
+  location: string;
+  description: string;
+  files: File[];
+}
+
+const MAX_INPUT_LENGTH = 2000;
 const MAX_HISTORY_LENGTH = 20;
+const MAX_FILES = 5;
+const MAX_FILE_SIZE_MB = 10;
+
+const CORRUPTION_TYPES = [
+  "Bribery",
+  "Procurement Fraud",
+  "Abuse of Office",
+  "Embezzlement",
+  "Nepotism",
+  "Other",
+];
 
 const QUICK_TOPICS = [
   { label: "How to file a report", key: "file" },
@@ -25,54 +45,19 @@ const QUICK_TOPICS = [
   { label: "What happens after filing?", key: "process" },
   { label: "How to add evidence", key: "evidence" },
   { label: "How to dispute a decision", key: "dispute" },
-  { label: "How long does it take?", key: "timeline" },
 ];
 
-const GUIDED_STEPS = [
-  {
-    id: "welcome",
-    message:
-      "I'd like to guide you through filing a corruption report. This process is **100% anonymous** — no personal information is collected.\n\nAre you ready to begin?",
-    options: ["Yes, guide me", "I have questions first"],
-  },
-  {
-    id: "step1",
-    message:
-      "**Step 1: Choose the type of corruption**\n\nWhich type best describes what you witnessed?\n\n1. Bribery\n2. Procurement Fraud\n3. Abuse of Office\n4. Embezzlement\n5. Nepotism\n6. Other",
-    options: [
-      "Bribery",
-      "Procurement Fraud",
-      "Abuse of Office",
-      "Embezzlement",
-      "Nepotism",
-      "Other",
-    ],
-  },
-  {
-    id: "step2",
-    message:
-      '**Step 2: Identify the institution**\n\nPlease name the government ministry, department, or organization involved. For example: "Ministry of Finance", "Harare City Council", "ZRP Headquarters".',
-    options: [],
-  },
-  {
-    id: "step3",
-    message:
-      "**Step 3: Location**\n\nWhere did this take place? Province or city name helps investigators.",
-    options: [],
-  },
-  {
-    id: "step4",
-    message:
-      "**Step 4: Describe what happened**\n\nPlease provide as much detail as possible. Include:\n- What you witnessed or know\n- When it happened (approximate dates)\n- Who was involved (titles/positions, not names of whistleblowers)\n- Amounts of money if known\n\nMore detail = higher investigation priority.",
-    options: [],
-  },
-  {
-    id: "complete",
-    message:
-      "You now have all the information needed to file your report. Click the **File Report** tab at the top of the page to submit.\n\nAfter submitting, you'll receive a **tracking code** — save it! That's your only way to check on your case.\n\nAnything else I can help with?",
-    options: ["How to track my case", "Tell me about privacy", "Start over"],
-  },
-];
+type GuidedPhase =
+  | "idle"
+  | "confirm_start"
+  | "pick_type"
+  | "enter_institution"
+  | "enter_location"
+  | "enter_description"
+  | "attach_files"
+  | "review"
+  | "submitting"
+  | "done";
 
 function formatBotText(text: string) {
   const lines = text.split("\n");
@@ -99,7 +84,7 @@ let msgId = 0;
 const WELCOME: Message = {
   id: ++msgId,
   from: "bot",
-  text: "Hello! I'm the **ZACC Guide** — your AI assistant for navigating the anti-corruption reporting system.\n\nI can help you:\n- File a report step by step\n- Understand your tracking code\n- Add evidence or dispute a decision\n- Learn about privacy protections\n\nSelect a topic below or type your question.",
+  text: "Hello! I'm the **ZACC Guide** — your AI assistant for navigating the anti-corruption reporting system.\n\nI can help you:\n- **File a report** step by step (right here in this chat!)\n- Understand your tracking code\n- Add evidence or dispute a decision\n- Learn about privacy protections\n\nSelect a topic below or type your question.",
   timestamp: new Date(),
 };
 
@@ -109,14 +94,26 @@ export const ChatBot: React.FC = () => {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [guidedStep, setGuidedStep] = useState<number>(-1);
   const [usingFallback, setUsingFallback] = useState(false);
   const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
   const [conversationHistory, setConversationHistory] = useState<
     { role: "user" | "bot"; text: string }[]
   >([]);
+
+  // Guided filing state
+  const [phase, setPhase] = useState<GuidedPhase>("idle");
+  const [draft, setDraft] = useState<ReportDraft>({
+    type: "",
+    institution: "",
+    location: "",
+    description: "",
+    files: [],
+  });
+  const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -140,81 +137,332 @@ export const ChatBot: React.FC = () => {
     if (!open) setUnread((p) => p + 1);
   };
 
+  const addUserMessage = (text: string, attachmentNames?: string[]) => {
+    const userMsg: Message = {
+      id: ++msgId,
+      from: "user",
+      text,
+      timestamp: new Date(),
+      attachmentNames,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+  };
+
+  /* ---------- Guided filing logic ---------- */
+
+  const startGuidedFiling = () => {
+    setDraft({ type: "", institution: "", location: "", description: "", files: [] });
+    setSubmittedRef(null);
+    setPhase("confirm_start");
+    addBotMessage(
+      "I'd like to guide you through filing a corruption report. This process is **100% anonymous** — no personal information is collected.\n\nAre you ready to begin?",
+    );
+  };
+
+  const handleGuidedInput = (text: string) => {
+    const lower = text.trim().toLowerCase();
+
+    switch (phase) {
+      case "confirm_start": {
+        addUserMessage(text);
+        if (lower.includes("no") || lower.includes("question")) {
+          setPhase("idle");
+          setTimeout(() => {
+            addBotMessage(
+              'No problem! Ask me anything. When you\'re ready to file, just say **"file a report"** or click 🚀 **Guided Filing**.',
+            );
+            setTyping(false);
+          }, 400);
+        } else {
+          setPhase("pick_type");
+          setTimeout(() => {
+            addBotMessage(
+              "**Step 1 of 5 — Type of Corruption**\n\nWhich type best describes what you witnessed?\n\n" +
+                CORRUPTION_TYPES.map((t, i) => `${i + 1}. ${t}`).join("\n"),
+            );
+            setTyping(false);
+          }, 400);
+        }
+        setTyping(true);
+        return true;
+      }
+
+      case "pick_type": {
+        addUserMessage(text);
+        const idx = parseInt(text) - 1;
+        const match =
+          idx >= 0 && idx < CORRUPTION_TYPES.length
+            ? CORRUPTION_TYPES[idx]
+            : CORRUPTION_TYPES.find((t) => t.toLowerCase() === lower) ||
+              (lower.length > 1 ? text.trim() : null);
+        if (!match) {
+          addBotMessage(
+            "Please pick a number (1-6) or type the corruption type name.",
+          );
+          return true;
+        }
+        setDraft((d) => ({ ...d, type: match }));
+        setPhase("enter_institution");
+        setTyping(true);
+        setTimeout(() => {
+          addBotMessage(
+            `✅ Type: **${match}**\n\n**Step 2 of 5 — Institution**\n\nName the government ministry, department, or organization involved.\n\nExample: "Ministry of Finance", "Harare City Council"`,
+          );
+          setTyping(false);
+        }, 400);
+        return true;
+      }
+
+      case "enter_institution": {
+        addUserMessage(text);
+        if (text.trim().length < 2) {
+          addBotMessage("Please provide the institution name (at least 2 characters).");
+          return true;
+        }
+        setDraft((d) => ({ ...d, institution: text.trim() }));
+        setPhase("enter_location");
+        setTyping(true);
+        setTimeout(() => {
+          addBotMessage(
+            `✅ Institution: **${text.trim()}**\n\n**Step 3 of 5 — Location**\n\nWhere did this happen? Province or city name.\n\nType **skip** if you prefer not to specify.`,
+          );
+          setTyping(false);
+        }, 400);
+        return true;
+      }
+
+      case "enter_location": {
+        addUserMessage(text);
+        const loc = lower === "skip" ? "" : text.trim();
+        setDraft((d) => ({ ...d, location: loc }));
+        setPhase("enter_description");
+        setTyping(true);
+        setTimeout(() => {
+          addBotMessage(
+            `✅ Location: **${loc || "Not specified"}**\n\n**Step 4 of 5 — Description**\n\nPlease describe what happened in detail. Include:\n- What you witnessed or know\n- Approximate dates\n- People involved (titles/positions)\n- Amounts of money (if known)\n\n**More detail = higher investigation priority.** (Minimum 20 characters)`,
+          );
+          setTyping(false);
+        }, 400);
+        return true;
+      }
+
+      case "enter_description": {
+        addUserMessage(text);
+        if (text.trim().length < 20) {
+          addBotMessage(
+            "The description needs at least **20 characters** to help investigators. Please provide more detail.",
+          );
+          return true;
+        }
+        setDraft((d) => ({ ...d, description: text.trim() }));
+        setPhase("attach_files");
+        setTyping(true);
+        setTimeout(() => {
+          addBotMessage(
+            `✅ Description recorded.\n\n**Step 5 of 5 — Evidence (Optional)**\n\nYou can attach up to **${MAX_FILES} files** (photos, documents, audio, video — max ${MAX_FILE_SIZE_MB}MB each).\n\nClick the 📎 button below to attach files, or type **skip** to proceed without attachments.`,
+          );
+          setTyping(false);
+        }, 400);
+        return true;
+      }
+
+      case "attach_files": {
+        if (lower === "skip" || lower === "no" || lower === "none" || lower === "done") {
+          addUserMessage(text);
+          showReview();
+          return true;
+        }
+        // If they type something else, remind them
+        addUserMessage(text);
+        addBotMessage(
+          "Use the 📎 button to select files, or type **skip** to proceed without attachments.",
+        );
+        return true;
+      }
+
+      case "review": {
+        addUserMessage(text);
+        if (lower === "yes" || lower === "submit" || lower.includes("confirm")) {
+          submitReport();
+        } else if (lower === "no" || lower === "cancel" || lower.includes("start over")) {
+          setPhase("idle");
+          setDraft({ type: "", institution: "", location: "", description: "", files: [] });
+          addBotMessage("Report cancelled. Say **file a report** any time to start again.");
+        } else if (lower.includes("edit")) {
+          setPhase("pick_type");
+          setTyping(true);
+          setTimeout(() => {
+            addBotMessage(
+              "Let's redo it. **Step 1 — Type of Corruption:**\n\n" +
+                CORRUPTION_TYPES.map((t, i) => `${i + 1}. ${t}`).join("\n"),
+            );
+            setTyping(false);
+          }, 400);
+        } else {
+          addBotMessage(
+            "Please reply **yes** to submit, **edit** to change details, or **cancel** to discard.",
+          );
+        }
+        return true;
+      }
+
+      default:
+        return false;
+    }
+  };
+
+  const showReview = () => {
+    setPhase("review");
+    setTyping(true);
+    const fileInfo =
+      draft.files.length > 0
+        ? `📎 **${draft.files.length} file(s):** ${draft.files.map((f) => f.name).join(", ")}`
+        : "📎 No attachments";
+
+    setTimeout(() => {
+      addBotMessage(
+        `**Review Your Report**\n\n` +
+          `🏷️ **Type:** ${draft.type}\n` +
+          `🏛️ **Institution:** ${draft.institution}\n` +
+          `📍 **Location:** ${draft.location || "Not specified"}\n` +
+          `📝 **Description:** ${draft.description.length > 120 ? draft.description.slice(0, 120) + "…" : draft.description}\n` +
+          `${fileInfo}\n\n` +
+          `Ready to submit? Reply **yes**, **edit**, or **cancel**.`,
+      );
+      setTyping(false);
+    }, 400);
+  };
+
+  const handleFilesSelected = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i];
+      if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        errors.push(`"${f.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+      } else if (draft.files.length + validFiles.length >= MAX_FILES) {
+        errors.push(`Maximum ${MAX_FILES} files allowed.`);
+        break;
+      } else {
+        validFiles.push(f);
+      }
+    }
+
+    if (validFiles.length > 0) {
+      setDraft((d) => ({ ...d, files: [...d.files, ...validFiles] }));
+      addUserMessage(
+        `Attached ${validFiles.length} file(s)`,
+        validFiles.map((f) => f.name),
+      );
+      addBotMessage(
+        `📎 **${validFiles.length} file(s) attached** (${draft.files.length + validFiles.length}/${MAX_FILES} total).\n\nAttach more, or type **done** to review your report.`,
+      );
+    }
+    if (errors.length > 0) {
+      addBotMessage("⚠️ " + errors.join(" "));
+    }
+  };
+
+  const submitReport = async () => {
+    setPhase("submitting");
+    setTyping(true);
+    addBotMessage("Submitting your report securely… Please wait.");
+
+    try {
+      const res = await apiClient.createAnonymousReport({
+        type: draft.type,
+        institution: draft.institution,
+        location: draft.location || undefined,
+        description: draft.description,
+      });
+
+      const refCode = res?.data?.reference_code || res?.reference_code;
+      const priority = res?.data?.priority || res?.priority;
+
+      // Upload files if any
+      if (draft.files.length > 0 && refCode) {
+        try {
+          await apiClient.uploadEvidence(refCode, draft.files);
+        } catch {
+          // Files failed but report succeeded — inform user
+          addBotMessage(
+            `⚠️ Report submitted but file upload encountered an issue. You can upload evidence later using your tracking code in the **Track Case** section.`,
+          );
+        }
+      }
+
+      setSubmittedRef(refCode);
+      setPhase("done");
+      setTyping(false);
+      addBotMessage(
+        `🎉 **Report Submitted Successfully!**\n\n` +
+          `📋 **Your Tracking Code:**\n**${refCode}**\n\n` +
+          `${priority ? `⚡ Priority: **${priority}**\n\n` : ""}` +
+          `⚠️ **SAVE THIS CODE** — it's the only way to check your case!\n\n` +
+          `With this code you can:\n` +
+          `- Track your case status\n` +
+          `- Upload additional evidence\n` +
+          `- Dispute a decision\n\n` +
+          `Is there anything else I can help you with?`,
+      );
+      setDraft({ type: "", institution: "", location: "", description: "", files: [] });
+    } catch (err: any) {
+      setPhase("review");
+      setTyping(false);
+      const errMsg = err?.message || "Unknown error";
+      addBotMessage(
+        `❌ **Submission failed:** ${errMsg}\n\nPlease try again. Reply **yes** to retry or **cancel** to discard.`,
+      );
+    }
+  };
+
+  /* ---------- General chat ---------- */
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || typing) return;
     const normalized = text.trim().slice(0, MAX_INPUT_LENGTH);
 
-    const userMsg: Message = {
-      id: ++msgId,
-      from: "user",
-      text: normalized,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setTyping(true);
+    // If we're in a guided phase, handle it there
+    if (phase !== "idle" && phase !== "done") {
+      handleGuidedInput(normalized);
+      return;
+    }
 
-    // Check for guided flow triggers
+    // Check for filing triggers
+    const lower = normalized.toLowerCase();
     if (
-      normalized.toLowerCase() === "yes, guide me" ||
-      normalized.toLowerCase() === "start over"
+      lower.includes("file a report") ||
+      lower.includes("guide me") ||
+      lower.includes("guided filing") ||
+      lower.includes("submit a report") ||
+      lower.includes("start over") ||
+      lower === "file" ||
+      lower === "report"
     ) {
-      setUsingFallback(false);
-      setGuidedStep(1);
-      setTimeout(() => {
-        addBotMessage(GUIDED_STEPS[1].message);
-        setTyping(false);
-      }, 600);
-      return;
-    }
-
-    if (normalized.toLowerCase() === "i have questions first") {
-      setUsingFallback(false);
-      setGuidedStep(-1);
-      setTimeout(() => {
-        addBotMessage(
-          "Of course! Ask me anything about the process. When you're ready to file, just say **\"guide me\"** and I'll walk you through it step by step.",
-        );
-        setTyping(false);
-      }, 600);
-      return;
-    }
-
-    // If in guided mode, advance steps
-    if (guidedStep >= 1 && guidedStep < GUIDED_STEPS.length - 1) {
-      setUsingFallback(false);
-      const nextStep = guidedStep + 1;
-      setGuidedStep(nextStep);
-      setTimeout(() => {
-        addBotMessage(GUIDED_STEPS[nextStep].message);
-        setTyping(false);
-      }, 600);
-      return;
-    }
-
-    // Check for "guide me" in any message
-    if (normalized.toLowerCase().includes("guide me")) {
-      setUsingFallback(false);
-      setGuidedStep(0);
-      setTimeout(() => {
-        addBotMessage(GUIDED_STEPS[0].message);
-        setTyping(false);
-      }, 600);
+      addUserMessage(normalized);
+      startGuidedFiling();
       return;
     }
 
     // Normal AI-powered chat
-    const newHistory = [...conversationHistory, { role: "user", text: normalized }].slice(
-      -MAX_HISTORY_LENGTH,
-    );
+    addUserMessage(normalized);
+    setTyping(true);
+
+    const newHistory = [
+      ...conversationHistory,
+      { role: "user" as const, text: normalized },
+    ].slice(-MAX_HISTORY_LENGTH);
 
     try {
       const response = await apiClient.chatbotMessage(normalized, newHistory);
       const payload = (response?.data || {}) as ChatbotApiPayload;
       const botText = payload.response || getFallbackResponse(normalized);
-      const updatedHistory = [...newHistory, { role: "bot", text: botText }].slice(
-        -MAX_HISTORY_LENGTH,
-      );
+      const updatedHistory = [
+        ...newHistory,
+        { role: "bot" as const, text: botText },
+      ].slice(-MAX_HISTORY_LENGTH);
 
       setUsingFallback(payload.source === "fallback");
       setDynamicSuggestions(
@@ -226,7 +474,10 @@ export const ChatBot: React.FC = () => {
       const fallback = getFallbackResponse(normalized);
       setUsingFallback(true);
       setDynamicSuggestions([]);
-      setConversationHistory([...newHistory, { role: "bot", text: fallback }]);
+      setConversationHistory([
+        ...newHistory,
+        { role: "bot" as const, text: fallback },
+      ]);
       addBotMessage(fallback);
     } finally {
       setTyping(false);
@@ -237,17 +488,48 @@ export const ChatBot: React.FC = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(input);
+      setInput("");
     }
   };
 
-  // Options buttons for guided mode
-  const currentStepOptions =
-    guidedStep >= 0 && guidedStep < GUIDED_STEPS.length
-      ? GUIDED_STEPS[guidedStep].options
-      : [];
+  /* ---------- Phase-aware option buttons ---------- */
+
+  const getPhaseOptions = (): string[] => {
+    switch (phase) {
+      case "confirm_start":
+        return ["Yes, let's begin", "I have questions first"];
+      case "pick_type":
+        return CORRUPTION_TYPES;
+      case "attach_files":
+        return draft.files.length > 0 ? ["Done", "Skip"] : ["Skip"];
+      case "review":
+        return ["Yes", "Edit", "Cancel"];
+      case "done":
+        return ["File another report", "How to track my case"];
+      default:
+        return [];
+    }
+  };
+
+  const phaseOptions = getPhaseOptions();
+  const isFilingActive = phase !== "idle" && phase !== "done";
+  const showFileButton = phase === "attach_files";
 
   return (
     <>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip"
+        onChange={(e) => {
+          handleFilesSelected(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
       {/* Floating button */}
       <button
         onClick={() => setOpen((p) => !p)}
@@ -264,7 +546,7 @@ export const ChatBot: React.FC = () => {
 
       {/* Chat window */}
       {open && (
-        <div className="fixed bottom-24 left-4 sm:left-6 z-50 w-[min(380px,calc(100vw-2rem))] h-[min(560px,calc(100vh-8rem))] flex flex-col rounded-3xl border border-white/10 bg-[#080c18] shadow-2xl overflow-hidden animate-fade-in">
+        <div className="fixed bottom-24 left-4 sm:left-6 z-50 w-[min(400px,calc(100vw-2rem))] h-[min(600px,calc(100vh-8rem))] flex flex-col rounded-3xl border border-white/10 bg-[#080c18] shadow-2xl overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="flex items-center gap-3 px-5 py-4 bg-gradient-to-r from-emerald-600 to-emerald-800 flex-shrink-0">
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">
@@ -273,11 +555,52 @@ export const ChatBot: React.FC = () => {
             <div className="flex-1 min-w-0">
               <p className="font-black text-white text-sm">ZACC Guide</p>
               <p className="text-emerald-200 text-xs">
-                AI-Powered Whistleblower Assistant
+                {isFilingActive
+                  ? "📝 Filing a Report…"
+                  : "AI-Powered Whistleblower Assistant"}
               </p>
             </div>
-            <div className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></div>
+            <div className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
           </div>
+
+          {/* Filing progress bar */}
+          {isFilingActive && (
+            <div className="px-5 py-2 bg-black/40 border-b border-white/5 flex-shrink-0">
+              <div className="flex items-center gap-1">
+                {["Type", "Institution", "Location", "Description", "Files"].map(
+                  (step, i) => {
+                    const phaseOrder: GuidedPhase[] = [
+                      "pick_type",
+                      "enter_institution",
+                      "enter_location",
+                      "enter_description",
+                      "attach_files",
+                    ];
+                    const currentIdx = phaseOrder.indexOf(phase);
+                    const isDone = i < currentIdx || phase === "review" || phase === "submitting";
+                    const isCurrent = i === currentIdx;
+                    return (
+                      <React.Fragment key={step}>
+                        <div
+                          className={`flex-1 h-1.5 rounded-full transition-all ${isDone ? "bg-emerald-500" : isCurrent ? "bg-emerald-500/50" : "bg-white/10"}`}
+                        />
+                      </React.Fragment>
+                    );
+                  },
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1.5 font-semibold">
+                {phase === "pick_type" && "Step 1/5 — Corruption Type"}
+                {phase === "enter_institution" && "Step 2/5 — Institution"}
+                {phase === "enter_location" && "Step 3/5 — Location"}
+                {phase === "enter_description" && "Step 4/5 — Description"}
+                {phase === "attach_files" && "Step 5/5 — Attach Evidence"}
+                {phase === "review" && "Review & Submit"}
+                {phase === "submitting" && "Submitting…"}
+                {phase === "confirm_start" && "Getting Started"}
+              </p>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
@@ -297,7 +620,21 @@ export const ChatBot: React.FC = () => {
                   {msg.from === "bot" ? (
                     formatBotText(msg.text)
                   ) : (
-                    <p>{msg.text}</p>
+                    <>
+                      <p>{msg.text}</p>
+                      {msg.attachmentNames && msg.attachmentNames.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {msg.attachmentNames.map((name, i) => (
+                            <p
+                              key={i}
+                              className="text-[11px] text-emerald-200 flex items-center gap-1"
+                            >
+                              📎 {name}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                   <p
                     className={`text-[10px] mt-1.5 ${msg.from === "user" ? "text-emerald-200 text-right" : "text-slate-500"}`}
@@ -321,7 +658,7 @@ export const ChatBot: React.FC = () => {
                       key={i}
                       className="w-2 h-2 rounded-full bg-emerald-400 animate-bounce"
                       style={{ animationDelay: `${i * 0.15}s` }}
-                    ></div>
+                    />
                   ))}
                 </div>
               </div>
@@ -329,14 +666,20 @@ export const ChatBot: React.FC = () => {
             <div ref={bottomRef} />
           </div>
 
-          {/* Guided step options */}
-          {currentStepOptions.length > 0 && (
+          {/* Phase option buttons */}
+          {phaseOptions.length > 0 && !typing && (
             <div className="px-4 py-2 border-t border-white/10 flex-shrink-0">
               <div className="flex flex-wrap gap-1.5">
-                {currentStepOptions.map((opt) => (
+                {phaseOptions.map((opt) => (
                   <button
                     key={opt}
-                    onClick={() => sendMessage(opt)}
+                    onClick={() => {
+                      if (phase !== "idle" && phase !== "done") {
+                        handleGuidedInput(opt);
+                      } else {
+                        sendMessage(opt);
+                      }
+                    }}
                     className="px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/30 transition-all"
                   >
                     {opt}
@@ -346,65 +689,110 @@ export const ChatBot: React.FC = () => {
             </div>
           )}
 
-          {/* Quick topics */}
-          <div className="px-4 py-2 border-t border-white/10 flex-shrink-0">
-            {usingFallback && (
-              <p className="mb-2 text-[10px] text-amber-300">
-                AI service is temporarily unavailable. The guide is using trusted built-in responses.
-              </p>
-            )}
-            <div
-              className="flex gap-1.5 overflow-x-auto pb-1"
-              style={{ scrollbarWidth: "none" }}
-            >
-              {dynamicSuggestions.map((topic) => (
-                <button
-                  key={topic}
-                  onClick={() => sendMessage(topic)}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-200 hover:bg-amber-500/25 transition-all whitespace-nowrap"
-                >
-                  {topic}
-                </button>
-              ))}
-              <button
-                onClick={() => sendMessage("Guide me through filing a report")}
-                className="flex-shrink-0 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30 transition-all whitespace-nowrap"
+          {/* Quick topics (only when idle / done) */}
+          {!isFilingActive && (
+            <div className="px-4 py-2 border-t border-white/10 flex-shrink-0">
+              {usingFallback && (
+                <p className="mb-2 text-[10px] text-amber-300">
+                  AI service is temporarily unavailable. Using built-in responses.
+                </p>
+              )}
+              <div
+                className="flex gap-1.5 overflow-x-auto pb-1"
+                style={{ scrollbarWidth: "none" }}
               >
-                🚀 Guided Filing
-              </button>
-              {QUICK_TOPICS.map((topic) => (
+                {dynamicSuggestions.map((topic) => (
+                  <button
+                    key={topic}
+                    onClick={() => sendMessage(topic)}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold text-amber-200 hover:bg-amber-500/25 transition-all whitespace-nowrap"
+                  >
+                    {topic}
+                  </button>
+                ))}
                 <button
-                  key={topic.key}
-                  onClick={() => sendMessage(topic.label)}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-full bg-white/8 border border-white/10 text-[10px] font-bold text-slate-300 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:text-emerald-300 transition-all whitespace-nowrap"
+                  onClick={() => startGuidedFiling()}
+                  className="flex-shrink-0 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30 transition-all whitespace-nowrap"
                 >
-                  {topic.label}
+                  🚀 File a Report
                 </button>
-              ))}
+                {QUICK_TOPICS.map((topic) => (
+                  <button
+                    key={topic.key}
+                    onClick={() => sendMessage(topic.label)}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-full bg-white/8 border border-white/10 text-[10px] font-bold text-slate-300 hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:text-emerald-300 transition-all whitespace-nowrap"
+                  >
+                    {topic.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Submitted ref code copy banner */}
+          {submittedRef && phase === "done" && (
+            <div className="px-4 py-2 bg-emerald-900/40 border-t border-emerald-500/20 flex items-center gap-2 flex-shrink-0">
+              <span className="text-xs text-emerald-300 font-black flex-1 truncate">
+                📋 {submittedRef}
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(submittedRef);
+                  addBotMessage("✅ Tracking code copied to clipboard!");
+                }}
+                className="px-3 py-1 rounded-lg bg-emerald-500/30 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/40 transition-all"
+              >
+                Copy
+              </button>
+            </div>
+          )}
 
           {/* Input */}
           <div className="flex gap-2 px-4 py-3 border-t border-white/10 bg-black/20 flex-shrink-0">
+            {showFileButton && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/30 text-slate-300 flex items-center justify-center transition-all flex-shrink-0"
+                title="Attach files"
+              >
+                📎
+              </button>
+            )}
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKey}
               maxLength={MAX_INPUT_LENGTH}
-              placeholder="Type a question..."
+              placeholder={
+                phase === "enter_description"
+                  ? "Describe what happened…"
+                  : phase === "attach_files"
+                    ? "Type 'done' or attach files…"
+                    : "Type a question…"
+              }
               className="flex-1 bg-white/8 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 min-w-0"
             />
             <button
-              onClick={() => sendMessage(input)}
+              onClick={() => {
+                sendMessage(input);
+                setInput("");
+              }}
               disabled={!input.trim() || typing}
               className="w-9 h-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black flex items-center justify-center disabled:opacity-40 transition-all flex-shrink-0"
             >
               ↑
             </button>
           </div>
-          <div className="px-4 pb-3 text-right text-[10px] text-slate-500">
-            {input.length}/{MAX_INPUT_LENGTH}
+          <div className="px-4 pb-2 flex justify-between text-[10px] text-slate-500">
+            <span>
+              {draft.files.length > 0
+                ? `📎 ${draft.files.length} file(s) attached`
+                : ""}
+            </span>
+            <span>
+              {input.length}/{MAX_INPUT_LENGTH}
+            </span>
           </div>
         </div>
       )}
@@ -420,51 +808,24 @@ function getFallbackResponse(input: string): string {
 
   const responses: { patterns: string[]; response: string }[] = [
     {
-      patterns: [
-        "file",
-        "report",
-        "submit",
-        "how to report",
-        "start",
-        "new report",
-      ],
+      patterns: ["file", "report", "submit", "how to report", "start", "new report"],
       response:
-        "To file an anonymous report:\n\n1. Click the **File Report** tab at the top\n2. Select the type of corruption\n3. Enter the affected institution and location\n4. Write a detailed description\n5. Click **Submit Anonymous Report**\n\nNo account required. You'll receive a **tracking code** — save it!",
+        'To file an anonymous report you can do it **right here in this chat!**\n\nJust say **"file a report"** or click the 🚀 **File a Report** button below and I\'ll walk you through it step by step.\n\nNo account required. You\'ll receive a **tracking code** — save it!',
     },
     {
-      patterns: [
-        "track",
-        "check status",
-        "case status",
-        "my case",
-        "follow up",
-      ],
+      patterns: ["track", "check status", "case status", "my case", "follow up"],
       response:
         "To track your case:\n\n1. Click the **Track Case** tab\n2. Enter your tracking code (e.g. ZACC-REF-XXXXXX)\n3. Click **Track Case**\n\nYou'll see status, timeline, investigator notes, and options to upload evidence or dispute.",
     },
     {
-      patterns: [
-        "safe",
-        "anonymous",
-        "identity",
-        "private",
-        "privacy",
-        "secret",
-      ],
+      patterns: ["safe", "anonymous", "identity", "private", "privacy", "secret"],
       response:
-        "Your identity is **fully protected**:\n\n- Zero personal data collected\n- End-to-end encryption\n- Blockchain anchoring\n- Panic Exit button for safety\n\nNo one at ZACC can identify you through the system.",
+        "Your identity is **fully protected**:\n\n- Zero personal data collected\n- End-to-end encryption\n- Blockchain anchoring\n\nNo one at ZACC can identify you through the system.",
     },
     {
-      patterns: [
-        "evidence",
-        "attach",
-        "upload",
-        "photos",
-        "documents",
-        "proof",
-      ],
+      patterns: ["evidence", "attach", "upload", "photos", "documents", "proof"],
       response:
-        "Upload evidence via the **Track Case** tab. Accepted: photos, videos, audio, documents. Max 10 files, 10MB each.",
+        'You can attach evidence **while filing a report** through this chat (just say **"file a report"**), or later via the **Track Case** tab using your tracking code.\n\nAccepted: photos, videos, audio, documents. Max 5 files, 10MB each.',
     },
     {
       patterns: ["dispute", "disagree", "appeal", "challenge"],
@@ -472,9 +833,14 @@ function getFallbackResponse(input: string): string {
         "To dispute a closed case: go to **Track Case**, enter your code, scroll to the closure section, click **Dispute This Decision**, and provide your reasoning.",
     },
     {
-      patterns: ["help", "hi", "hello", "hey", "guide"],
+      patterns: ["help", "hi", "hello", "hey"],
       response:
-        "Hello! I'm the **ZACC Guide**. I can help with filing reports, tracking cases, adding evidence, disputing decisions, and understanding the process. What would you like to know?",
+        'Hello! I\'m the **ZACC Guide**. I can:\n\n- **File a report** for you right here (say **"file a report"**)\n- Answer questions about tracking, evidence, privacy, and more\n\nWhat would you like to do?',
+    },
+    {
+      patterns: ["what", "how long", "timeline", "time", "process", "after"],
+      response:
+        "After filing, your report goes through these stages:\n\n1. **Submitted** — AI & expert systems classify priority\n2. **Under Review** — An investigator is assigned\n3. **Investigating** — Active investigation underway\n4. **Referred** — May be sent to law enforcement\n5. **Closed** — Case resolved (you can dispute if needed)\n\nHigher-priority cases are processed faster.",
     },
   ];
 
@@ -482,5 +848,5 @@ function getFallbackResponse(input: string): string {
     if (item.patterns.some((p) => lower.includes(p))) return item.response;
   }
 
-  return "I can help with:\n\n- Filing a report\n- Tracking codes\n- Adding evidence\n- Disputing decisions\n- Privacy protections\n\nTry clicking a topic button or rephrase your question!";
+  return 'I can help with:\n\n- **Filing a report** (say "file a report")\n- Tracking codes\n- Adding evidence\n- Disputing decisions\n- Privacy protections\n\nTry clicking a topic button or rephrase your question!';
 }

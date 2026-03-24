@@ -180,12 +180,12 @@ class ReportController extends Controller
                 // Create the report
                 $report = new Report($reportData);
 
-                // Encrypt sensitive data
+                // Encrypt sensitive data (AES-256 via Laravel Crypt)
                 $report->setEncryptedData([
                     'description' => $validated['description'],
                     'location' => $validated['location'] ?? null,
                     'institution' => $validated['institution'],
-                ], $user->public_key);
+                ]);
 
                 // Save the report
                 $report->save();
@@ -197,6 +197,9 @@ class ReportController extends Controller
 
                 // Submit to blockchain
                 $report->submitToBlockchain();
+
+                // Run AI classification (non-blocking — stores results in ai_summary)
+                $this->runAIClassification($report, $validated);
 
                 $this->logReportAction($report, 'REPORT_SUBMITTED', 'Report submitted successfully', [
                     'status' => $report->status,

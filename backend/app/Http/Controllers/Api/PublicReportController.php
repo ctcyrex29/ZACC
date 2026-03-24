@@ -48,11 +48,6 @@ class PublicReportController extends Controller
 
         try {
             $report = DB::transaction(function () use ($validated, $expertPriority, $request) {
-                $adminWithKey = User::query()
-                    ->where('role', User::ROLE_ADMIN)
-                    ->whereNotNull('public_key')
-                    ->first();
-
                 $report = new Report([
                     'case_id'      => Report::generateCaseId(),
                     'reference_code' => Report::generateReferenceCode(),
@@ -70,17 +65,21 @@ class PublicReportController extends Controller
                     'is_encrypted' => true,
                 ]);
 
+                // Encrypt sensitive data (AES-256 via Laravel Crypt)
                 $report->setEncryptedData([
                     'description' => $validated['description'],
                     'location'    => $validated['location'] ?? null,
                     'institution' => $validated['institution'],
-                ], $adminWithKey?->public_key);
+                ]);
 
                 $report->save();
                 $report->submitToBlockchain();
 
                 return $report;
             });
+
+            // Run AI classification (non-blocking — stores results in ai_summary)
+            $this->runAIClassification($report, $validated);
 
             $this->auditService->record(
                 action: 'ANONYMOUS_REPORT_SUBMITTED',

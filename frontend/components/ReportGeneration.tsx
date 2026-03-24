@@ -128,135 +128,368 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 
   const generatePDF = (category: string, cases: ReportCase[]) => {
     const now = new Date().toLocaleString();
-    const html = `
-      <html>
-      <head><title>ZACC Report - ${category}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; color: #1e293b; }
-        h1 { color: #065f46; border-bottom: 3px solid #10b981; padding-bottom: 10px; }
-        h2 { color: #334155; margin-top: 30px; }
-        .meta { color: #64748b; font-size: 13px; margin-bottom: 30px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-        th { background: #f1f5f9; padding: 10px 8px; text-align: left; border-bottom: 2px solid #e2e8f0; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
-        td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-        tr:nth-child(even) { background: #f8fafc; }
-        .audit-trail { margin-top: 4px; }
-        .audit-stage { background: #f0fdf4; border-left: 3px solid #10b981; padding: 5px 8px; margin-bottom: 3px; border-radius: 0 4px 4px 0; font-size: 10px; }
-        .audit-stage .sname { font-weight: 800; color: #065f46; text-transform: uppercase; letter-spacing: 0.05em; }
-        .audit-stage .sofficer { color: #334155; margin: 1px 0; }
-        .audit-stage .stime { color: #94a3b8; }
-        .audit-stage .snotes { color: #475569; font-style: italic; border-top: 1px solid #d1fae5; padding-top: 2px; margin-top: 2px; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
-        .stats { display: flex; gap: 20px; margin: 20px 0; }
-        .stat-card { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: center; }
-        .stat-value { font-size: 28px; font-weight: 800; color: #065f46; }
-        .stat-label { font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.1em; margin-top: 4px; }
-        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; color: rgba(16,185,129,0.06); font-weight: 900; pointer-events: none; z-index: 0; }
-        .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
-        @media print { body { padding: 20px; } }
-      </style></head>
-      <body>
-        <div class="watermark">ZACC CONFIDENTIAL</div>
-        <h1>Zimbabwe Anti-Corruption Commission</h1>
-        <h2>Case Report: ${category.charAt(0).toUpperCase() + category.slice(1)} Cases</h2>
-        <p class="meta">Generated: ${now} | Officer: ${(window as any).__zacc_user_name || 'Authorized Officer'}</p>
-        ${(() => {
-          const total = cases.length;
-          const avgRisk = total > 0 ? Math.round(cases.reduce((s, c) => s + (c.risk_score || 0), 0) / total) : 0;
-          if (category === 'successful') {
-            const highRisk = cases.filter(c => c.risk_score >= 75).length;
-            const medRisk  = cases.filter(c => c.risk_score >= 40 && c.risk_score < 75).length;
-            return `<div class="stats">
-              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Successful Cases</div></div>
-              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
-              <div class="stat-card"><div class="stat-value">${highRisk}</div><div class="stat-label">High-Risk Resolved</div></div>
-              <div class="stat-card"><div class="stat-value">${medRisk}</div><div class="stat-label">Medium-Risk Resolved</div></div>
-            </div>`;
-          }
-          if (category === 'in_progress') {
-            const submitted    = cases.filter(c => c.status === 'SUBMITTED').length;
-            const underReview  = cases.filter(c => c.status === 'UNDER_REVIEW').length;
-            const investigating= cases.filter(c => c.status === 'INVESTIGATING').length;
-            const referred     = cases.filter(c => c.status === 'REFERRED').length;
-            return `<div class="stats">
-              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Active Cases</div></div>
-              <div class="stat-card"><div class="stat-value">${submitted}</div><div class="stat-label">Submitted</div></div>
-              <div class="stat-card"><div class="stat-value">${underReview}</div><div class="stat-label">Under Review</div></div>
-              <div class="stat-card"><div class="stat-value">${investigating}</div><div class="stat-label">Investigating</div></div>
-              <div class="stat-card"><div class="stat-value">${referred}</div><div class="stat-label">Referred</div></div>
-            </div>`;
-          }
-          if (category === 'closed') {
-            const noDispute = cases.filter(c => !c.dispute_reason).length;
-            const withDispute = cases.filter(c => c.dispute_reason).length;
-            return `<div class="stats">
-              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Closed Cases</div></div>
-              <div class="stat-card"><div class="stat-value">${noDispute}</div><div class="stat-label">Clean Closure</div></div>
-              <div class="stat-card"><div class="stat-value">${withDispute}</div><div class="stat-label">Closed After Dispute</div></div>
-              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
-            </div>`;
-          }
-          if (category === 'disputed') {
-            const critical = cases.filter(c => c.priority === 'CRITICAL').length;
-            const high     = cases.filter(c => c.priority === 'HIGH').length;
-            return `<div class="stats">
-              <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Disputed Cases</div></div>
-              <div class="stat-card"><div class="stat-value">${critical}</div><div class="stat-label">Critical Priority</div></div>
-              <div class="stat-card"><div class="stat-value">${high}</div><div class="stat-label">High Priority</div></div>
-              <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
-            </div>`;
-          }
-          // overview fallback
-          return `<div class="stats">
-            <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total Cases in Set</div></div>
-            <div class="stat-card"><div class="stat-value">${avgRisk}%</div><div class="stat-label">Avg Risk Score</div></div>
-          </div>`;
-        })()}
-        <table>
-          <thead><tr>
-            <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Date</th><th>Audit Trail — Who Did What &amp; When</th>
-          </tr></thead>
-          <tbody>
-            ${cases
-              .map(
-                (c, i) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td><strong>${c.reference_code || c.case_id}</strong></td>
-                <td>${c.type}</td>
-                <td>${c.institution || "-"}</td>
-                <td>${c.location || "-"}</td>
-                <td>${c.priority}</td>
-                <td>${c.status}</td>
-                <td>${c.risk_score}%</td>
-                <td>${c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}</td>
-                <td>${c.stage_history && c.stage_history.length > 0
-                  ? `<div class="audit-trail">${c.stage_history.map((s: any) =>
-                      `<div class="audit-stage">
-                        <div class="sname">${s.stage.replace('_',' ')}</div>
-                        <div class="sofficer">&#128100; ${s.investigator_name}${s.investigator_email ? ` &lt;${s.investigator_email}&gt;` : ''}</div>
-                        <div class="stime">&#128336; ${s.performed_at ? new Date(s.performed_at).toLocaleString() : '\u2014'}${s.final_score != null ? ' &middot; Score: ' + s.final_score + '/100' : ''}</div>
-                        ${s.notes ? `<div class="snotes">${s.notes}</div>` : ''}
-                      </div>`
-                    ).join('')}</div>`
-                  : '<span style="color:#94a3b8;font-size:10px;">No actions recorded</span>'}</td>
-              </tr>
-            `,
-              )
-              .join("")}
-          </tbody>
-        </table>
-        <div class="footer">
-          <p>ZACC Anti-Corruption Case Management System — Official Document</p>
-          <p>This report is confidential and intended for authorized personnel only.</p>
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    const officer = (window as any).__zacc_user_name || 'Authorized Officer';
+    const total = cases.length;
+    const avgRisk = total > 0 ? Math.round(cases.reduce((s, c) => s + (c.risk_score || 0), 0) / total) : 0;
+    const categoryLabel = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+    // Priority breakdown
+    const critical = cases.filter(c => c.priority === 'CRITICAL').length;
+    const high = cases.filter(c => c.priority === 'HIGH').length;
+    const medium = cases.filter(c => c.priority === 'MEDIUM').length;
+    const low = cases.filter(c => c.priority === 'LOW').length;
+
+    // Type breakdown
+    const typeMap: Record<string, number> = {};
+    cases.forEach(c => { typeMap[c.type] = (typeMap[c.type] || 0) + 1; });
+
+    // Status breakdown for in_progress
+    const statusMap: Record<string, number> = {};
+    cases.forEach(c => { statusMap[c.status] = (statusMap[c.status] || 0) + 1; });
+
+    const priorityBarColor = (p: string) => {
+      if (p === 'CRITICAL') return '#ef4444';
+      if (p === 'HIGH') return '#f97316';
+      if (p === 'MEDIUM') return '#eab308';
+      return '#22c55e';
+    };
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>ZACC Official Report — ${categoryLabel}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1e293b;background:#fff;font-size:11px;line-height:1.5;}
+    .page{padding:40px 48px;max-width:1100px;margin:0 auto;}
+    .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:72px;color:rgba(16,185,129,0.04);font-weight:900;pointer-events:none;z-index:0;letter-spacing:8px;white-space:nowrap;}
+
+    /* Cover header */
+    .cover{border-bottom:3px solid #059669;padding-bottom:24px;margin-bottom:28px;}
+    .cover-top{display:flex;justify-content:space-between;align-items:flex-start;}
+    .logo-area{display:flex;align-items:center;gap:16px;}
+    .logo-box{width:56px;height:56px;background:linear-gradient(135deg,#059669,#065f46);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff;}
+    .org-name{font-size:18px;font-weight:900;color:#065f46;text-transform:uppercase;letter-spacing:2px;}
+    .org-sub{font-size:11px;color:#64748b;margin-top:2px;font-weight:600;}
+    .cover-badge{text-align:right;}
+    .confidential{font-size:9px;font-weight:900;color:#dc2626;letter-spacing:3px;text-transform:uppercase;background:#fef2f2;border:1px solid #fecaca;padding:4px 12px;border-radius:4px;}
+    .cover-title{margin-top:20px;font-size:22px;font-weight:900;color:#0f172a;letter-spacing:0.5px;}
+    .cover-meta{margin-top:8px;display:flex;gap:24px;flex-wrap:wrap;}
+    .cover-meta span{font-size:10px;color:#64748b;font-weight:600;}
+    .cover-meta strong{color:#334155;}
+
+    /* Executive summary */
+    .exec-summary{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #bbf7d0;border-radius:12px;padding:24px;margin-bottom:24px;}
+    .section-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#059669;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid #d1fae5;}
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+    .kpi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;text-align:center;}
+    .kpi-value{font-size:32px;font-weight:900;color:#065f46;}
+    .kpi-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-top:4px;}
+    .kpi-sub{font-size:9px;color:#94a3b8;margin-top:2px;}
+
+    /* Charts via CSS */
+    .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+    .chart-box{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;}
+    .chart-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#334155;margin-bottom:14px;}
+    .bar-chart{display:flex;flex-direction:column;gap:8px;}
+    .bar-row{display:flex;align-items:center;gap:10px;}
+    .bar-label{font-size:10px;font-weight:700;color:#475569;width:80px;text-align:right;}
+    .bar-track{flex:1;height:22px;background:#f1f5f9;border-radius:6px;overflow:hidden;position:relative;}
+    .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;}
+    .bar-count{font-size:9px;font-weight:800;color:#fff;}
+    .type-list{display:flex;flex-direction:column;gap:6px;}
+    .type-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #f1f5f9;}
+    .type-name{font-size:10px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;}
+    .type-dot{width:8px;height:8px;border-radius:50%;}
+    .type-count{font-size:12px;font-weight:900;color:#0f172a;}
+
+    /* Table */
+    .table-section{margin-top:28px;}
+    .table-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+    .table-count{font-size:10px;font-weight:700;color:#64748b;}
+    table{width:100%;border-collapse:collapse;font-size:10px;}
+    thead th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e2e8f0;font-weight:800;text-transform:uppercase;font-size:8px;letter-spacing:1px;color:#475569;}
+    tbody td{padding:10px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+    tbody tr:nth-child(even){background:#fafbfc;}
+    tbody tr:hover{background:#f0fdf4;}
+    .ref-code{font-weight:800;color:#059669;font-size:10px;background:#f0fdf4;padding:2px 6px;border-radius:4px;border:1px solid #d1fae5;}
+    .priority-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}
+    .priority-CRITICAL{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+    .priority-HIGH{background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;}
+    .priority-MEDIUM{background:#fefce8;color:#ca8a04;border:1px solid #fef08a;}
+    .priority-LOW{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+    .status-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;}
+    .risk-bar{display:flex;align-items:center;gap:6px;}
+    .risk-track{width:50px;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;}
+    .risk-fill{height:100%;border-radius:3px;}
+    .risk-high{background:#ef4444;}
+    .risk-med{background:#eab308;}
+    .risk-low{background:#22c55e;}
+
+    /* Audit trail within table */
+    .audit-trail{margin-top:6px;}
+    .audit-entry{background:#f8fafc;border-left:3px solid #059669;padding:6px 10px;margin-bottom:4px;border-radius:0 6px 6px 0;}
+    .audit-stage{font-weight:800;color:#065f46;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;}
+    .audit-officer{font-size:9px;color:#475569;margin-top:2px;}
+    .audit-time{font-size:8px;color:#94a3b8;margin-top:1px;}
+    .audit-notes{font-size:9px;color:#64748b;font-style:italic;margin-top:3px;padding-top:3px;border-top:1px solid #e2e8f0;}
+    .audit-score{font-size:8px;font-weight:700;color:#059669;margin-top:2px;}
+
+    /* Case detail cards (for smaller sets) */
+    .case-cards{display:flex;flex-direction:column;gap:16px;margin-top:16px;}
+    .case-card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;page-break-inside:avoid;}
+    .case-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;}
+    .case-card-ref{font-size:14px;font-weight:900;color:#059669;}
+    .case-card-meta{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;}
+    .case-card-field .label{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:2px;}
+    .case-card-field .value{font-size:11px;font-weight:600;color:#1e293b;}
+    .case-card-stages{margin-top:12px;}
+    .case-card-stages-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#059669;margin-bottom:8px;}
+
+    /* Footer */
+    .report-footer{margin-top:40px;padding-top:16px;border-top:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;}
+    .footer-left{font-size:9px;color:#94a3b8;line-height:1.6;}
+    .footer-right{text-align:right;font-size:8px;color:#cbd5e1;}
+
+    @media print {
+      body{padding:0;}
+      .page{padding:24px 32px;}
+      .watermark{font-size:60px;}
+    }
+  </style>
+</head>
+<body>
+<div class="watermark">ZACC CONFIDENTIAL</div>
+<div class="page">
+  <!-- Cover Header -->
+  <div class="cover">
+    <div class="cover-top">
+      <div class="logo-area">
+        <div class="logo-box">Z</div>
+        <div>
+          <div class="org-name">Zimbabwe Anti-Corruption Commission</div>
+          <div class="org-sub">Integrity Management System — Official Report</div>
         </div>
-      </body></html>
-    `;
+      </div>
+      <div class="cover-badge">
+        <div class="confidential">CONFIDENTIAL</div>
+      </div>
+    </div>
+    <div class="cover-title">${categoryLabel} Cases Report</div>
+    <div class="cover-meta">
+      <span>Date: <strong>${dateStr}</strong></span>
+      <span>Generated: <strong>${now}</strong></span>
+      <span>Officer: <strong>${officer}</strong></span>
+      <span>Total Cases: <strong>${total}</strong></span>
+      ${dateFrom ? `<span>From: <strong>${dateFrom}</strong></span>` : ''}
+      ${dateTo ? `<span>To: <strong>${dateTo}</strong></span>` : ''}
+      ${typeFilter ? `<span>Type Filter: <strong>${typeFilter}</strong></span>` : ''}
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  <div class="exec-summary">
+    <div class="section-title">Executive Summary</div>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-value">${total}</div>
+        <div class="kpi-label">Total Cases</div>
+        <div class="kpi-sub">In this report</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value" style="color:${avgRisk > 74 ? '#ef4444' : avgRisk > 40 ? '#eab308' : '#22c55e'}">${avgRisk}%</div>
+        <div class="kpi-label">Avg Risk Score</div>
+        <div class="kpi-sub">${avgRisk > 74 ? 'High risk portfolio' : avgRisk > 40 ? 'Moderate risk' : 'Low risk portfolio'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value" style="color:#ef4444">${critical + high}</div>
+        <div class="kpi-label">High/Critical Priority</div>
+        <div class="kpi-sub">${total > 0 ? Math.round(((critical + high) / total) * 100) : 0}% of total</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value" style="color:#059669">${Object.keys(typeMap).length}</div>
+        <div class="kpi-label">Corruption Types</div>
+        <div class="kpi-sub">Distinct categories</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analysis Charts -->
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-title">Priority Distribution</div>
+      <div class="bar-chart">
+        ${[
+          { label: 'Critical', count: critical, color: '#ef4444' },
+          { label: 'High', count: high, color: '#f97316' },
+          { label: 'Medium', count: medium, color: '#eab308' },
+          { label: 'Low', count: low, color: '#22c55e' },
+        ].map(p => `
+          <div class="bar-row">
+            <div class="bar-label">${p.label}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${total > 0 ? Math.max((p.count / total) * 100, p.count > 0 ? 8 : 0) : 0}%;background:${p.color}">
+                ${p.count > 0 ? `<span class="bar-count">${p.count}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">By Corruption Type</div>
+      <div class="type-list">
+        ${Object.entries(typeMap).sort((a, b) => b[1] - a[1]).map(([name, count], i) => {
+          const colors = ['#10b981','#6366f1','#f59e0b','#f43f5e','#a855f7','#06b6d4'];
+          return `<div class="type-item">
+            <div class="type-name"><span class="type-dot" style="background:${colors[i % colors.length]}"></span>${name}</div>
+            <div class="type-count">${count}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>
+
+  ${category === 'in_progress' ? `
+  <div class="chart-row">
+    <div class="chart-box" style="grid-column:span 2">
+      <div class="chart-title">Status Distribution — Active Pipeline</div>
+      <div class="bar-chart">
+        ${['SUBMITTED','UNDER_REVIEW','INVESTIGATING','REFERRED'].map(s => {
+          const cnt = statusMap[s] || 0;
+          const colors: Record<string, string> = { SUBMITTED:'#3b82f6', UNDER_REVIEW:'#6366f1', INVESTIGATING:'#f59e0b', REFERRED:'#a855f7' };
+          return `<div class="bar-row">
+            <div class="bar-label">${s.replace('_',' ')}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${total > 0 ? Math.max((cnt / total) * 100, cnt > 0 ? 8 : 0) : 0}%;background:${colors[s] || '#94a3b8'}">
+                ${cnt > 0 ? `<span class="bar-count">${cnt}</span>` : ''}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>` : ''}
+
+  <!-- Detailed Case Listing -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="section-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0">Detailed Case Register</div>
+      <div class="table-count">${total} case${total === 1 ? '' : 's'} listed</div>
+    </div>
+
+    ${total <= 20 ? `
+    <!-- Card view for manageable number of cases -->
+    <div class="case-cards">
+      ${cases.map((c, i) => `
+      <div class="case-card">
+        <div class="case-card-header">
+          <div>
+            <span class="ref-code">${c.reference_code || c.case_id}</span>
+            <span style="font-size:9px;color:#94a3b8;margin-left:8px;">#${i + 1}</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span class="priority-badge priority-${c.priority}">${c.priority}</span>
+            <span class="status-badge">${c.status.replace('_', ' ')}</span>
+          </div>
+        </div>
+        <div class="case-card-meta">
+          <div class="case-card-field"><div class="label">Corruption Type</div><div class="value">${c.type}</div></div>
+          <div class="case-card-field"><div class="label">Institution</div><div class="value">${c.institution || 'Not specified'}</div></div>
+          <div class="case-card-field"><div class="label">Location</div><div class="value">${c.location || 'Not specified'}</div></div>
+          <div class="case-card-field">
+            <div class="label">Risk Score</div>
+            <div class="value">
+              <div class="risk-bar">
+                <div class="risk-track"><div class="risk-fill ${c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low'}" style="width:${c.risk_score}%"></div></div>
+                <span>${c.risk_score}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:10px;">
+          <div><span style="color:#94a3b8;font-weight:700;">Filed:</span> ${c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</div>
+          <div><span style="color:#94a3b8;font-weight:700;">Last Updated:</span> ${c.last_updated ? new Date(c.last_updated).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</div>
+        </div>
+        ${c.dispute_reason ? `<div style="margin-top:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;"><span style="font-size:9px;font-weight:800;color:#dc2626;text-transform:uppercase;">Dispute Statement:</span><p style="font-size:10px;color:#7f1d1d;margin-top:4px;">${c.dispute_reason}</p></div>` : ''}
+        ${c.stage_history && c.stage_history.length > 0 ? `
+        <div class="case-card-stages">
+          <div class="case-card-stages-title">Investigation Audit Trail</div>
+          <div class="audit-trail">
+            ${c.stage_history.map((s: any) => `
+            <div class="audit-entry">
+              <div class="audit-stage">${s.stage.replace(/_/g, ' ')}</div>
+              <div class="audit-officer">${s.investigator_name}${s.investigator_email ? ' (' + s.investigator_email + ')' : ''}</div>
+              <div class="audit-time">${s.performed_at ? new Date(s.performed_at).toLocaleString() : '—'}</div>
+              ${s.final_score != null ? `<div class="audit-score">Assessment Score: ${s.final_score}/100</div>` : ''}
+              ${s.notes ? `<div class="audit-notes">${s.notes}</div>` : ''}
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>`).join('')}
+    </div>
+    ` : `
+    <!-- Table view for large datasets -->
+    <table>
+      <thead><tr>
+        <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Filed</th><th>Audit Trail</th>
+      </tr></thead>
+      <tbody>
+        ${cases.map((c, i) => `
+        <tr>
+          <td style="font-weight:700;color:#94a3b8;">${i + 1}</td>
+          <td><span class="ref-code">${c.reference_code || c.case_id}</span></td>
+          <td style="font-weight:600;">${c.type}</td>
+          <td>${c.institution || '—'}</td>
+          <td>${c.location || '—'}</td>
+          <td><span class="priority-badge priority-${c.priority}">${c.priority}</span></td>
+          <td><span class="status-badge">${c.status.replace(/_/g, ' ')}</span></td>
+          <td>
+            <div class="risk-bar">
+              <div class="risk-track"><div class="risk-fill ${c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low'}" style="width:${c.risk_score}%"></div></div>
+              <span style="font-weight:700;font-size:9px;">${c.risk_score}%</span>
+            </div>
+          </td>
+          <td style="white-space:nowrap;">${c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</td>
+          <td>${c.stage_history && c.stage_history.length > 0
+            ? `<div class="audit-trail">${c.stage_history.map((s: any) =>
+                `<div class="audit-entry">
+                  <div class="audit-stage">${s.stage.replace(/_/g,' ')}</div>
+                  <div class="audit-officer">${s.investigator_name}${s.investigator_email ? ' (' + s.investigator_email + ')' : ''}</div>
+                  <div class="audit-time">${s.performed_at ? new Date(s.performed_at).toLocaleString() : '—'}${s.final_score != null ? ' · Score: ' + s.final_score + '/100' : ''}</div>
+                  ${s.notes ? `<div class="audit-notes">${s.notes}</div>` : ''}
+                </div>`).join('')}</div>`
+            : '<span style="color:#cbd5e1;font-size:9px;">No actions recorded</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    `}
+  </div>
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <div class="footer-left">
+      <strong>Zimbabwe Anti-Corruption Commission</strong><br/>
+      Integrity Management System — Official Document<br/>
+      This report is confidential and intended for authorized personnel only.
+    </div>
+    <div class="footer-right">
+      Report ID: ZACC-RPT-${Date.now().toString(36).toUpperCase()}<br/>
+      Generated: ${now}<br/>
+      Page 1 of 1
+    </div>
+  </div>
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),600);</script>
+</body>
+</html>`;
+
     const w = window.open("", "_blank");
     if (w) {
       w.document.write(html);
       w.document.close();
-      w.print();
     }
   };
 

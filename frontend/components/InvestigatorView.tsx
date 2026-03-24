@@ -785,6 +785,154 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                     </div>
                   </div>
 
+                  {/* AI Case Classification */}
+                  {dossierData.ai_summary && (
+                    <div className="rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/5 p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest">
+                          AI Case Classification
+                        </p>
+                        {dossierData.ai_summary.confidence != null && (
+                          <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-500/20">
+                            {dossierData.ai_summary.confidence}% confidence
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Primary metrics row */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {dossierData.ai_summary.urgency && (
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Urgency</p>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                              dossierData.ai_summary.urgency === 'CRITICAL' ? 'bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20' :
+                              dossierData.ai_summary.urgency === 'HIGH' ? 'bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-500/20' :
+                              dossierData.ai_summary.urgency === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20' :
+                              'bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20'
+                            }`}>{dossierData.ai_summary.urgency}</span>
+                          </div>
+                        )}
+                        {dossierData.ai_summary.category && (
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Category</p>
+                            <p className="text-xs font-semibold text-slate-900 dark:text-white">{dossierData.ai_summary.category}</p>
+                            {dossierData.ai_summary.sub_category && (
+                              <p className="text-[10px] text-slate-500 mt-0.5">{dossierData.ai_summary.sub_category}</p>
+                            )}
+                          </div>
+                        )}
+                        {dossierData.ai_summary.risk_score != null && (
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Risk Score</p>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-[60px]">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    dossierData.ai_summary.risk_score > 75 ? 'bg-rose-500' :
+                                    dossierData.ai_summary.risk_score > 50 ? 'bg-orange-500' :
+                                    dossierData.ai_summary.risk_score > 25 ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`}
+                                  style={{ width: `${dossierData.ai_summary.risk_score}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-black text-slate-900 dark:text-white">{dossierData.ai_summary.risk_score}/100</span>
+                            </div>
+                          </div>
+                        )}
+                        {dossierData.ai_summary.investigation_complexity && (
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexity</p>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              dossierData.ai_summary.investigation_complexity === 'HIGH' ? 'bg-purple-500/10 text-purple-600 border-purple-200 dark:border-purple-500/20' :
+                              dossierData.ai_summary.investigation_complexity === 'MEDIUM' ? 'bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-500/20' :
+                              'bg-slate-500/10 text-slate-600 border-slate-200 dark:border-slate-500/20'
+                            }`}>{dossierData.ai_summary.investigation_complexity}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Urgency explanation */}
+                      {dossierData.ai_summary.urgency_reason && (
+                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
+                          {dossierData.ai_summary.urgency_reason}
+                        </p>
+                      )}
+
+                      {/* Evidence & Pattern row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {dossierData.ai_summary.evidence_assessment && (
+                          <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Evidence Assessment</p>
+                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{dossierData.ai_summary.evidence_assessment}</p>
+                          </div>
+                        )}
+                        {dossierData.ai_summary.pattern_indicators && (
+                          <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Pattern Analysis</p>
+                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{dossierData.ai_summary.pattern_indicators}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Key Findings */}
+                      {dossierData.ai_summary.key_findings?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Key Findings</p>
+                          <ul className="space-y-1.5">
+                            {dossierData.ai_summary.key_findings.map((f: string, i: number) => (
+                              <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2">
+                                <span className="text-blue-500 mt-0.5 font-bold">{i + 1}.</span> {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Recommended Actions */}
+                      {dossierData.ai_summary.recommended_actions?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Recommended Actions</p>
+                          <ul className="space-y-1.5">
+                            {dossierData.ai_summary.recommended_actions.map((a: string, i: number) => (
+                              <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg px-3 py-2 border border-emerald-100 dark:border-emerald-500/10">
+                                <span className="text-emerald-500 mt-0.5 font-bold">→</span> {a}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Applicable Laws */}
+                      {dossierData.ai_summary.applicable_laws?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Applicable Legislation</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {dossierData.ai_summary.applicable_laws.map((law: string, i: number) => (
+                              <span key={i} className="px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
+                                {law}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Impact + Model info footer */}
+                      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pt-2 border-t border-blue-100 dark:border-blue-500/10">
+                        {dossierData.ai_summary.estimated_impact && (
+                          <p className="text-xs text-slate-500 italic flex-1">
+                            <span className="font-bold not-italic text-slate-600 dark:text-slate-400">Impact:</span> {dossierData.ai_summary.estimated_impact}
+                          </p>
+                        )}
+                        {dossierData.ai_summary.model_used && (
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            Model: {dossierData.ai_summary.model_used}
+                            {dossierData.ai_summary.classified_at && ` · ${new Date(dossierData.ai_summary.classified_at).toLocaleString()}`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Case Book */}
                   <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

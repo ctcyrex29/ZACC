@@ -28,10 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     document.documentElement.classList.toggle("stealth-blur");
   };
 
-  const panicExit = () => {
-    window.location.href = "https://www.google.com/search?q=zimbabwe+weather";
-  };
-
   const commonItems = [
     {
       id: "dashboard",
@@ -155,17 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <option value="to">Tonga</option>
           </select>
 
-          <button
-            onClick={panicExit}
-            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-rose-500/10 border border-transparent hover:border-rose-500/40 text-rose-500 transition-all group mt-2"
-          >
-            <span className="text-xl group-hover:rotate-12 transition-transform">
-              🚪
-            </span>
-            <span className="font-black text-[10px] uppercase tracking-widest">
-              Panic Exit
-            </span>
-          </button>
+
         </div>
       </nav>
 

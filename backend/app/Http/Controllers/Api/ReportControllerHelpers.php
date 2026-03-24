@@ -14,6 +14,251 @@ use Illuminate\Support\Str;
 trait ReportControllerHelpers
 {
     /**
+     * Run AI classification on a submitted report.
+     * Uses a two-layer approach: expert system sets a baseline, then Gemini AI
+     * refines with deeper contextual analysis of description + file contents.
+     * AI can only upgrade priority (never downgrade), ensuring the expert system
+     * acts as a minimum floor.
+     */
+    protected function runAIClassification(Report $report, array $validated): void
+    {
+        try {
+            $apiKey = (string) config('services.gemini.api_key');
+            $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
+
+            if (!$apiKey) {
+                Log::info('AI classification skipped: no API key configured', [
+                    'case_id' => $report->case_id,
+                ]);
+                return;
+            }
+
+            // Gather file contents from attachments
+            $fileContents = [];
+            foreach ($report->attachments as $attachment) {
+                $readableTypes = [
+                    'text/plain', 'text/csv', 'application/json', 'text/html',
+                    'application/xml', 'text/xml', 'text/markdown',
+                ];
+                $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
+                $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+
+                if ((in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts))
+                    && $attachment->size < 100000) {
+                    try {
+                        $content = \Illuminate\Support\Facades\Storage::disk($attachment->disk ?? 'private')
+                            ->get($attachment->file_name);
+                        if ($content) {
+                            $fileContents[] = [
+                                'name' => $attachment->original_name,
+                                'content' => mb_substr($content, 0, 5000),
+                            ];
+                        }
+                    } catch (\Exception $e) {
+                        // Skip unreadable files
+                    }
+                } else {
+                    // Include metadata for non-readable files (images, PDFs, etc.)
+                    $fileContents[] = [
+                        'name' => $attachment->original_name,
+                        'type' => $attachment->mime_type,
+                        'size_bytes' => $attachment->size,
+                        'note' => 'Binary file — content not readable, but its existence is evidence.',
+                    ];
+                }
+            }
+
+            $caseData = json_encode([
+                'type' => $validated['type'],
+                'description' => $validated['description'],
+                'institution' => $validated['institution'] ?? '',
+                'location' => $validated['location'] ?? '',
+                'attached_files' => $fileContents,
+                'expert_system_priority' => $report->priority,
+                'expert_system_risk_score' => $report->risk_score,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+            $prompt = <<<PROMPT
+You are a senior anti-corruption intelligence analyst at the Zimbabwe Anti-Corruption Commission (ZACC). You have 20+ years of experience investigating public sector corruption in Zimbabwe.
+
+TASK: Perform a comprehensive analysis of the submitted corruption case below. Your analysis directly determines investigation priority and resource allocation.
+
+ANALYSIS FRAMEWORK — Evaluate each dimension:
+
+1. URGENCY ASSESSMENT
+   - Is corruption ongoing or completed?
+   - Is there risk of evidence destruction or tampering?
+   - Are suspects likely to flee or transfer assets?
+   - Is there imminent harm to public safety, health, or finances?
+   - Are there statutory deadlines at risk (e.g. tender closing dates)?
+
+2. CORRUPTION CLASSIFICATION
+   - Primary category (e.g. Procurement Fraud, Grand Corruption, Petty Bribery, State Capture)
+   - Sub-category (e.g. Bid-Rigging, Phantom Workers, Misuse of Constituency Development Funds)
+   - Applicable Zimbabwe legislation (Prevention of Corruption Act, Public Finance Management Act, etc.)
+
+3. PRIORITY DETERMINATION
+   - Weight of evidence presented
+   - Seniority of officials involved
+   - Financial magnitude (absolute and relative to institution budget)
+   - Public interest and media sensitivity
+   - Pattern indicators (isolated vs systematic corruption)
+
+4. RISK SCORING (0-100)
+   - 0-25: Low risk — minor, isolated, low-value
+   - 26-50: Moderate risk — noteworthy but contained
+   - 51-75: High risk — significant amounts, senior officials, or systematic
+   - 76-100: Critical risk — large-scale, high-level officials, ongoing harm
+
+5. KEY FINDINGS — Extract specific factual claims from the description and file contents
+
+6. RECOMMENDED ACTIONS — What should investigators do immediately?
+
+7. EVIDENCE ASSESSMENT — Quality, sufficiency, and gaps in the submitted evidence
+
+8. IMPACT ESTIMATION — Financial, social, and institutional impact scope
+
+CASE DATA:
+{$caseData}
+
+IMPORTANT RULES:
+- Be objective and analytical. Base conclusions strictly on the provided evidence.
+- If the description is vague, note evidence gaps but still classify based on available information.
+- The expert system already assigned priority "{$report->priority}" — you may keep or UPGRADE it but never downgrade.
+- Provide your confidence level (0-100) in the classification.
+- Write key_findings and recommended_actions as actionable, specific items.
+
+Return ONLY valid JSON matching this exact schema:
+{
+  "urgency": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+  "urgency_reason": "2-3 sentence explanation",
+  "category": "Primary corruption category",
+  "sub_category": "Specific sub-type",
+  "applicable_laws": ["Array of relevant Zimbabwe laws"],
+  "priority": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+  "risk_score": 0-100,
+  "confidence": 0-100,
+  "key_findings": ["Array of specific factual findings from the report"],
+  "recommended_actions": ["Array of specific next steps for investigators"],
+  "evidence_assessment": "Assessment of evidence quality and gaps",
+  "estimated_impact": "Financial and social impact estimation",
+  "pattern_indicators": "Whether this suggests isolated or systematic corruption",
+  "investigation_complexity": "LOW" | "MEDIUM" | "HIGH"
+}
+PROMPT;
+
+            $url = sprintf(
+                'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                urlencode($model),
+                urlencode($apiKey)
+            );
+
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->retry(2, 500)
+                ->acceptJson()
+                ->post($url, [
+                    'contents' => [['parts' => [['text' => $prompt]]]],
+                    'generationConfig' => [
+                        'responseMimeType' => 'application/json',
+                        'temperature' => 0.2,
+                    ],
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('AI classification Gemini API error', [
+                    'case_id' => $report->case_id,
+                    'http_status' => $response->status(),
+                ]);
+                return;
+            }
+
+            $text = $response->json('candidates.0.content.parts.0.text');
+
+            if (!is_string($text) || trim($text) === '') {
+                Log::warning('AI classification returned empty response', [
+                    'case_id' => $report->case_id,
+                ]);
+                return;
+            }
+
+            $aiResult = json_decode($text, true);
+            if (!$aiResult) {
+                // Try extracting JSON from markdown code blocks or surrounding text
+                if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $text, $matches)) {
+                    $aiResult = json_decode($matches[1], true);
+                } elseif (preg_match('/\{.*\}/s', $text, $matches)) {
+                    $aiResult = json_decode($matches[0], true);
+                }
+            }
+
+            if (!$aiResult || !is_array($aiResult)) {
+                Log::warning('AI classification could not parse JSON response', [
+                    'case_id' => $report->case_id,
+                    'raw_text_preview' => mb_substr($text, 0, 200),
+                ]);
+                return;
+            }
+
+            // Validate required fields
+            $requiredFields = ['urgency', 'priority', 'risk_score'];
+            foreach ($requiredFields as $field) {
+                if (!isset($aiResult[$field])) {
+                    Log::warning("AI classification missing required field: {$field}", [
+                        'case_id' => $report->case_id,
+                    ]);
+                    return;
+                }
+            }
+
+            // Normalize priority values
+            $validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+            $aiResult['urgency'] = strtoupper($aiResult['urgency'] ?? 'MEDIUM');
+            $aiResult['priority'] = strtoupper($aiResult['priority'] ?? 'MEDIUM');
+            if (!in_array($aiResult['urgency'], $validPriorities)) $aiResult['urgency'] = 'MEDIUM';
+            if (!in_array($aiResult['priority'], $validPriorities)) $aiResult['priority'] = 'MEDIUM';
+            $aiResult['risk_score'] = max(0, min(100, (int) $aiResult['risk_score']));
+            $aiResult['confidence'] = max(0, min(100, (int) ($aiResult['confidence'] ?? 50)));
+
+            // Add metadata
+            $aiResult['classified_at'] = now()->toIso8601String();
+            $aiResult['model_used'] = $model;
+
+            // Store AI classification
+            $report->ai_summary = $aiResult;
+
+            // AI can only upgrade priority, never downgrade
+            $priorityRank = ['LOW' => 1, 'MEDIUM' => 2, 'HIGH' => 3, 'CRITICAL' => 4];
+            $aiPriority = $aiResult['priority'];
+            $currentPriority = $report->priority;
+
+            if (($priorityRank[$aiPriority] ?? 0) > ($priorityRank[$currentPriority] ?? 0)) {
+                $report->priority = $aiPriority;
+                $aiRisk = $aiResult['risk_score'];
+                $report->risk_score = max($report->risk_score, $aiRisk);
+            }
+
+            $report->save();
+
+            Log::info('AI classification completed', [
+                'case_id' => $report->case_id,
+                'expert_priority' => $currentPriority,
+                'ai_priority' => $aiPriority,
+                'final_priority' => $report->priority,
+                'ai_urgency' => $aiResult['urgency'],
+                'ai_risk_score' => $aiResult['risk_score'],
+                'ai_confidence' => $aiResult['confidence'],
+                'category' => $aiResult['category'] ?? 'unknown',
+            ]);
+        } catch (\Exception $e) {
+            // Non-blocking — report is already saved; AI is an enhancement
+            Log::warning('AI classification failed (non-blocking)', [
+                'case_id' => $report->case_id ?? 'unknown',
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Handle file attachments for reports.
      *
      * @param Report $report

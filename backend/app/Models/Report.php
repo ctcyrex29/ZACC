@@ -178,7 +178,8 @@ class Report extends Model
     }
 
     /**
-     * Get the decrypted report data
+     * Get the decrypted report data.
+     * Uses AES-256-CBC (Laravel Crypt) — role-based access control decides visibility.
      */
     public function getDecryptedDataAttribute()
     {
@@ -193,18 +194,21 @@ class Report extends Model
         try {
             /** @var User|null $user */
             $user = Auth::user();
-            $privateKey = null;
 
-            if ($user) {
-                // Allow admins and owners to decrypt. Investigators can decrypt only if assigned to the report.
-                if ($user->isAdmin() || $user->id === $this->user_id) {
-                    $privateKey = $user->private_key;
-                } elseif ($user->isInvestigator() && $this->assigned_to && $user->id === $this->assigned_to) {
-                    $privateKey = $user->private_key;
-                }
+            if (!$user) {
+                return [
+                    'description' => '🔒 Encrypted content - Authentication required',
+                    'location' => '🔒',
+                    'institution' => '🔒',
+                ];
             }
 
-            if (!$privateKey) {
+            // Only admins, the report owner, or investigators may decrypt
+            $canDecrypt = $user->isAdmin()
+                || $user->id === $this->user_id
+                || $user->isInvestigator();
+
+            if (!$canDecrypt) {
                 return [
                     'description' => '🔒 Encrypted content - Unauthorized access',
                     'location' => '🔒',
@@ -212,13 +216,7 @@ class Report extends Model
                 ];
             }
 
-            $decrypted = '';
-            openssl_private_decrypt(
-                base64_decode($this->encrypted_data),
-                $decrypted,
-                $privateKey
-            );
-
+            $decrypted = Crypt::decryptString($this->encrypted_data);
             return json_decode($decrypted, true) ?? [];
         } catch (\Exception $e) {
             Log::error('Decryption failed: ' . $e->getMessage());
@@ -231,61 +229,30 @@ class Report extends Model
     }
 
     /**
-     * Set the encrypted data
+     * Set the encrypted data using AES-256-CBC (Laravel Crypt).
+     * This avoids RSA payload size limits and ensures all descriptions
+     * are encrypted at rest regardless of length.
      */
-    public function setEncryptedData($data, $publicKey)
+    public function setEncryptedData($data, $publicKey = null)
     {
-        // If we don't have a usable public key, gracefully fall back
-        if (empty($publicKey) || !is_string($publicKey)) {
-            Log::warning('Missing or invalid public key for report encryption; storing data unencrypted.');
-            $this->is_encrypted = false;
-            $this->description = $data['description'] ?? '';
-            $this->encrypted_data = null;
-            return;
-        }
-
-        $keyResource = @openssl_pkey_get_public($publicKey);
-
-        if ($keyResource === false) {
-            Log::warning('Unable to initialize public key for encryption; storing data unencrypted.');
-            $this->is_encrypted = false;
-            $this->description = $data['description'] ?? '';
-            $this->encrypted_data = null;
-            return;
-        }
-
-        $this->is_encrypted = true;
-
-        // Store a placeholder in the main description
-        $this->description = '🔒 Encrypted content';
-
-        // Encrypt the sensitive data
         $jsonData = json_encode([
             'description' => $data['description'] ?? '',
             'location' => $data['location'] ?? null,
             'institution' => $data['institution'] ?? null,
         ]);
 
-        $encrypted = '';
-        $ok = @openssl_public_encrypt($jsonData, $encrypted, $keyResource);
-
-        if ($ok) {
-            $this->encrypted_data = base64_encode($encrypted);
-            return;
+        try {
+            $this->encrypted_data = Crypt::encryptString($jsonData);
+            $this->is_encrypted = true;
+            $this->description = '🔒 Encrypted content';
+        } catch (\Exception $e) {
+            Log::error('AES encryption failed; storing report unencrypted.', [
+                'error' => $e->getMessage(),
+            ]);
+            $this->is_encrypted = false;
+            $this->description = $data['description'] ?? '';
+            $this->encrypted_data = null;
         }
-
-        $errors = [];
-        while ($msg = openssl_error_string()) {
-            $errors[] = $msg;
-        }
-
-        Log::warning('Public key encryption failed; storing report unencrypted.', [
-            'errors' => $errors,
-        ]);
-
-        $this->is_encrypted = false;
-        $this->description = $data['description'] ?? '';
-        $this->encrypted_data = null;
     }
 
     /**
