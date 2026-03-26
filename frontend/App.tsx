@@ -12,6 +12,7 @@ import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
 import { ChatBot } from "./components/ChatBot";
 import { ReportGeneration } from "./components/ReportGeneration";
 import { CorruptionHotspots } from "./components/CorruptionHotspots";
+import { Toaster } from "react-hot-toast";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -172,6 +173,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-[#04060b] dark:text-slate-300 overflow-hidden">
+      <Toaster position="top-right" />
       <Sidebar
         user={user}
         currentView={currentView}

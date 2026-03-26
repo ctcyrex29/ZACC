@@ -97,13 +97,14 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
   const stages = [
     { key: CaseStatus.SUBMITTED, label: "Submitted", icon: "📥" },
     { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
-    { key: CaseStatus.INVESTIGATING, label: "Action", icon: "⚡" },
-    { key: CaseStatus.REFERRED, label: "Legal", icon: "⚖️" },
+    { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
+    { key: CaseStatus.REFERRED, label: "Courts/ZRP", icon: "⚖️" },
+    { key: CaseStatus.SUCCESSFUL, label: "Successful", icon: "🏆" },
     { key: CaseStatus.CLOSED, label: "Closed", icon: "✅" },
   ];
 
   const getStatusIndex = (status: CaseStatus) => {
-    if (status === CaseStatus.DISPUTED) return 2; // Show it back at 'Action' stage
+    if (status === CaseStatus.DISPUTED) return 2; // Show it back at 'Investigation' stage
     return stages.findIndex((s) => s.key === status);
   };
 

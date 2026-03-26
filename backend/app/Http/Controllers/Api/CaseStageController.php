@@ -17,8 +17,9 @@ class CaseStageController extends Controller
         'SUBMITTED' => ['UNDER_REVIEW'],
         'UNDER_REVIEW' => ['INVESTIGATING', 'CLOSED'],
         'INVESTIGATING' => ['REFERRED', 'CLOSED'],
-        'REFERRED' => ['CLOSED'],
-        'DISPUTED' => ['CLOSED'],
+        'REFERRED' => ['SUCCESSFUL', 'CLOSED'],
+        'SUCCESSFUL' => ['CLOSED'],
+        'DISPUTED' => ['UNDER_REVIEW', 'INVESTIGATING', 'REFERRED', 'CLOSED'],
         'CLOSED' => [],
     ];
 
@@ -66,7 +67,7 @@ class CaseStageController extends Controller
         }
 
         $validated = $request->validate([
-            'stage' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,CLOSED,DISPUTED',
+            'stage' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,SUCCESSFUL,CLOSED,DISPUTED',
             'investigator_notes' => 'required|string|min:10',
             'manual_score' => 'nullable|integer|min:0|max:100',
         ]);
@@ -107,11 +108,18 @@ class CaseStageController extends Controller
             'expert_context' => $expert,
         ]);
 
-        $report->update([
+        $updateData = [
             'status' => $validated['stage'],
             'risk_score' => $finalScore,
             'last_updated' => now(),
-        ]);
+        ];
+
+        // Record the stage at which the case was closed (for dispute re-entry)
+        if ($validated['stage'] === 'CLOSED') {
+            $updateData['closed_at_stage'] = $currentStage;
+        }
+
+        $report->update($updateData);
 
         $this->auditService->record(
             action: 'STAGE_EVALUATION_RECORDED',
@@ -154,7 +162,11 @@ class CaseStageController extends Controller
 
         $notifications = \App\Models\StakeholderNotification::query()
             ->where(function ($query) use ($user) {
-                $query->where('user_id', $user->id)->orWhereNull('user_id');
+                $query->where('user_id', $user->id);
+                // System-wide notifications (user_id=null) only visible to admins/investigators
+                if ($user->isAdmin() || $user->isInvestigator()) {
+                    $query->orWhereNull('user_id');
+                }
             })
             ->latest('created_at')
             ->limit(50)

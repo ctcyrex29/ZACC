@@ -34,7 +34,7 @@ class ReportGenerationController extends Controller
 
         $all = $query->get();
 
-        $successful = $all->filter(fn($r) => $r->status === 'CLOSED' && !$r->dispute_reason);
+        $successful = $all->filter(fn($r) => $r->status === 'SUCCESSFUL');
         $inProgress = $all->filter(fn($r) => in_array($r->status, ['SUBMITTED', 'UNDER_REVIEW', 'INVESTIGATING', 'REFERRED']));
         $closed = $all->filter(fn($r) => $r->status === 'CLOSED');
         $disputed = $all->filter(fn($r) => $r->status === 'DISPUTED');
@@ -52,7 +52,7 @@ class ReportGenerationController extends Controller
         $monthlyTrend = Report::select(
             DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"),
             DB::raw('COUNT(*) as total'),
-            DB::raw("SUM(CASE WHEN status = 'CLOSED' AND dispute_reason IS NULL THEN 1 ELSE 0 END) as successful"),
+            DB::raw("SUM(CASE WHEN status = 'SUCCESSFUL' THEN 1 ELSE 0 END) as successful"),
             DB::raw("SUM(CASE WHEN status IN ('SUBMITTED','UNDER_REVIEW','INVESTIGATING','REFERRED') THEN 1 ELSE 0 END) as in_progress"),
             DB::raw("SUM(CASE WHEN status = 'CLOSED' THEN 1 ELSE 0 END) as closed"),
             DB::raw("SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed")
@@ -104,7 +104,7 @@ class ReportGenerationController extends Controller
 
         switch ($category) {
             case 'successful':
-                $query->where('status', 'CLOSED')->whereNull('dispute_reason');
+                $query->where('status', 'SUCCESSFUL');
                 break;
             case 'in_progress':
                 $query->whereIn('status', ['SUBMITTED', 'UNDER_REVIEW', 'INVESTIGATING', 'REFERRED']);

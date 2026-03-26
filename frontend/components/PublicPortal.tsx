@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { User, UserRole } from "../types";
 import { Language, t } from "../i18n";
@@ -794,7 +795,10 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                       <div className="flex items-center gap-3">
                         <p className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-2xl tracking-widest flex-1">{submitted.reference_code}</p>
                         <button
-                          onClick={() => navigator.clipboard.writeText(submitted.reference_code)}
+                          onClick={() => {
+                            navigator.clipboard.writeText(submitted.reference_code);
+                            toast.success("Copied to clipboard!");
+                          }}
                           className="flex-shrink-0 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-wider transition-all"
                         >
                           Copy

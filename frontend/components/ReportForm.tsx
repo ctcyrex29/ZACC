@@ -3,6 +3,7 @@ import { analyzeCase } from "../services/gemini";
 import { apiClient } from "../services/api";
 import { CorruptionType, User } from "../types";
 import { Language, t } from "../i18n";
+import { toast } from "react-hot-toast";
 
 interface ReportFormProps {
   user: User;
@@ -403,9 +404,10 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
                 {submittedReport.reference_code}
               </code>
               <button
-                onClick={() =>
-                  navigator.clipboard.writeText(submittedReport.reference_code)
-                }
+                onClick={() => {
+                  navigator.clipboard.writeText(submittedReport.reference_code);
+                  toast.success(t(language, "copy") + " successful!");
+                }}
                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg transition-all"
               >
                 {t(language, "copy")}

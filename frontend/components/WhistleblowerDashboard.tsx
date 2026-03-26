@@ -57,7 +57,10 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
   const stats = useMemo(() => {
     const total = cases.length;
     const active = cases.filter(
-      (item) => item.status !== CaseStatus.CLOSED,
+      (item) => item.status !== CaseStatus.CLOSED && item.status !== CaseStatus.SUCCESSFUL,
+    ).length;
+    const successful = cases.filter(
+      (item) => item.status === CaseStatus.SUCCESSFUL,
     ).length;
     const closed = cases.filter(
       (item) => item.status === CaseStatus.CLOSED,
@@ -66,7 +69,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
       (item) => item.priority === "HIGH" || item.priority === "CRITICAL",
     ).length;
 
-    return { total, active, closed, highPriority };
+    return { total, active, successful, closed, highPriority };
   }, [cases]);
 
   const recentCases = useMemo(
@@ -114,7 +117,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
           <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
             Total Reports
@@ -129,6 +132,14 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
           </p>
           <p className="text-3xl font-black mt-2 text-slate-900 dark:text-white">
             {loading ? "..." : stats.active}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-400/20 bg-white dark:bg-[#080c18] p-5">
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold tracking-wider">
+            Successful
+          </p>
+          <p className="text-3xl font-black mt-2 text-emerald-500">
+            {loading ? "..." : stats.successful}
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">

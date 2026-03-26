@@ -4,6 +4,7 @@ export enum CaseStatus {
   UNDER_REVIEW = 'UNDER_REVIEW',
   INVESTIGATING = 'INVESTIGATING',
   REFERRED = 'REFERRED',
+  SUCCESSFUL = 'SUCCESSFUL',
   CLOSED = 'CLOSED',
   DISPUTED = 'DISPUTED'
 }
@@ -25,6 +26,8 @@ export enum UserRole {
 
 export interface User {
   id: string;
+  name?: string;
+  email?: string;
   nexusKey: string;
   role: UserRole;
   isStealth?: boolean;
@@ -44,6 +47,7 @@ export interface CaseReport {
   reporterId: string;
   referenceCode: string;
   disputeReason?: string;
+  closedAtStage?: string;
   lastUpdated?: string;
   blockchain_tx_hash?: string;
   blockchain_block_number?: number;

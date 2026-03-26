@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -31,6 +31,7 @@ const statusBadge = (s: string) => {
     UNDER_REVIEW: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20",
     INVESTIGATING: "bg-amber-500/10 text-amber-500 border-amber-500/20",
     REFERRED: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    SUCCESSFUL: "bg-teal-500/10 text-teal-500 border-teal-500/20",
     CLOSED: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
     DISPUTED: "bg-rose-500/10 text-rose-500 border-rose-500/20",
   };
@@ -133,6 +134,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
     const total = cases.length;
     const avgRisk = total > 0 ? Math.round(cases.reduce((s, c) => s + (c.risk_score || 0), 0) / total) : 0;
     const categoryLabel = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const reportId = 'ZACC/RPT/' + new Date().getFullYear() + '/' + Date.now().toString(36).toUpperCase();
 
     // Priority breakdown
     const critical = cases.filter(c => c.priority === 'CRITICAL').length;
@@ -144,9 +146,25 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
     const typeMap: Record<string, number> = {};
     cases.forEach(c => { typeMap[c.type] = (typeMap[c.type] || 0) + 1; });
 
-    // Status breakdown for in_progress
+    // Status breakdown
     const statusMap: Record<string, number> = {};
     cases.forEach(c => { statusMap[c.status] = (statusMap[c.status] || 0) + 1; });
+
+    // Location breakdown
+    const locationMap: Record<string, number> = {};
+    cases.forEach(c => { const loc = c.location || 'Unspecified'; locationMap[loc] = (locationMap[loc] || 0) + 1; });
+
+    // Institution breakdown
+    const instMap: Record<string, number> = {};
+    cases.forEach(c => { const inst = c.institution || 'Unspecified'; instMap[inst] = (instMap[inst] || 0) + 1; });
+
+    const pdfStatusLabel = (s: string) => {
+      const map: Record<string, string> = {
+        SUBMITTED: 'Submitted', UNDER_REVIEW: 'Under Review', INVESTIGATING: 'Under Investigation',
+        REFERRED: 'Referred to Courts/ZRP', SUCCESSFUL: 'Successfully Resolved', CLOSED: 'Closed', DISPUTED: 'Under Dispute'
+      };
+      return map[s] || s;
+    };
 
     const priorityBarColor = (p: string) => {
       if (p === 'CRITICAL') return '#ef4444';
@@ -159,327 +177,227 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>ZACC Official Report — ${categoryLabel}</title>
+  <title>ZACC Official Filing - ${categoryLabel} Cases - ${reportId}</title>
   <style>
+    @page { size: A4; margin: 20mm 18mm 25mm 18mm; }
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1e293b;background:#fff;font-size:11px;line-height:1.5;}
-    .page{padding:40px 48px;max-width:1100px;margin:0 auto;}
-    .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:72px;color:rgba(16,185,129,0.04);font-weight:900;pointer-events:none;z-index:0;letter-spacing:8px;white-space:nowrap;}
-
-    /* Cover header */
-    .cover{border-bottom:3px solid #059669;padding-bottom:24px;margin-bottom:28px;}
-    .cover-top{display:flex;justify-content:space-between;align-items:flex-start;}
-    .logo-area{display:flex;align-items:center;gap:16px;}
-    .logo-box{width:56px;height:56px;background:linear-gradient(135deg,#059669,#065f46);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff;}
-    .org-name{font-size:18px;font-weight:900;color:#065f46;text-transform:uppercase;letter-spacing:2px;}
-    .org-sub{font-size:11px;color:#64748b;margin-top:2px;font-weight:600;}
-    .cover-badge{text-align:right;}
-    .confidential{font-size:9px;font-weight:900;color:#dc2626;letter-spacing:3px;text-transform:uppercase;background:#fef2f2;border:1px solid #fecaca;padding:4px 12px;border-radius:4px;}
-    .cover-title{margin-top:20px;font-size:22px;font-weight:900;color:#0f172a;letter-spacing:0.5px;}
-    .cover-meta{margin-top:8px;display:flex;gap:24px;flex-wrap:wrap;}
-    .cover-meta span{font-size:10px;color:#64748b;font-weight:600;}
-    .cover-meta strong{color:#334155;}
-
-    /* Executive summary */
-    .exec-summary{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border:1px solid #bbf7d0;border-radius:12px;padding:24px;margin-bottom:24px;}
-    .section-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#059669;margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid #d1fae5;}
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
-    .kpi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;text-align:center;}
-    .kpi-value{font-size:32px;font-weight:900;color:#065f46;}
-    .kpi-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-top:4px;}
-    .kpi-sub{font-size:9px;color:#94a3b8;margin-top:2px;}
-
-    /* Charts via CSS */
-    .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
-    .chart-box{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;}
-    .chart-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#334155;margin-bottom:14px;}
-    .bar-chart{display:flex;flex-direction:column;gap:8px;}
-    .bar-row{display:flex;align-items:center;gap:10px;}
-    .bar-label{font-size:10px;font-weight:700;color:#475569;width:80px;text-align:right;}
-    .bar-track{flex:1;height:22px;background:#f1f5f9;border-radius:6px;overflow:hidden;position:relative;}
-    .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;}
-    .bar-count{font-size:9px;font-weight:800;color:#fff;}
-    .type-list{display:flex;flex-direction:column;gap:6px;}
-    .type-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #f1f5f9;}
-    .type-name{font-size:10px;font-weight:700;color:#334155;display:flex;align-items:center;gap:8px;}
-    .type-dot{width:8px;height:8px;border-radius:50%;}
-    .type-count{font-size:12px;font-weight:900;color:#0f172a;}
-
-    /* Table */
-    .table-section{margin-top:28px;}
-    .table-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
-    .table-count{font-size:10px;font-weight:700;color:#64748b;}
-    table{width:100%;border-collapse:collapse;font-size:10px;}
-    thead th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e2e8f0;font-weight:800;text-transform:uppercase;font-size:8px;letter-spacing:1px;color:#475569;}
-    tbody td{padding:10px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
-    tbody tr:nth-child(even){background:#fafbfc;}
-    tbody tr:hover{background:#f0fdf4;}
-    .ref-code{font-weight:800;color:#059669;font-size:10px;background:#f0fdf4;padding:2px 6px;border-radius:4px;border:1px solid #d1fae5;}
-    .priority-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}
-    .priority-CRITICAL{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
-    .priority-HIGH{background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;}
-    .priority-MEDIUM{background:#fefce8;color:#ca8a04;border:1px solid #fef08a;}
-    .priority-LOW{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
-    .status-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;}
+    body{font-family:'Times New Roman',Georgia,'Segoe UI',serif;color:#1a1a1a;background:#fff;font-size:11pt;line-height:1.6;}
+    .page{max-width:760px;margin:0 auto;padding:30px 40px;}
+    .official-header{text-align:center;padding-bottom:18px;border-bottom:3px double #1a472a;margin-bottom:20px;}
+    .coat-of-arms{width:72px;height:72px;margin:0 auto 10px;background:linear-gradient(135deg,#1a472a,#2d6a4f);border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #b5985a;}
+    .coat-text{font-size:28px;font-weight:bold;color:#b5985a;font-family:serif;}
+    .state-name{font-size:9pt;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#666;margin-bottom:2px;}
+    .commission-name{font-size:15pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#1a472a;margin-bottom:2px;}
+    .commission-sub{font-size:9pt;color:#555;font-style:italic;margin-bottom:8px;}
+    .motto{font-size:8pt;color:#888;font-style:italic;letter-spacing:1px;}
+    .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding:12px 16px;background:#f9f7f2;border:1px solid #e5e0d5;border-radius:4px;}
+    .doc-meta-left{text-align:left;} .doc-meta-right{text-align:right;}
+    .doc-meta .label{font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#888;display:block;}
+    .doc-meta .value{font-size:10pt;font-weight:bold;color:#1a1a1a;}
+    .doc-meta .ref-num{font-size:11pt;font-weight:bold;color:#1a472a;font-family:'Courier New',monospace;}
+    .classification{display:inline-block;font-size:8pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#b91c1c;border:2px solid #b91c1c;padding:2px 10px;border-radius:2px;margin-top:4px;}
+    .doc-title{text-align:center;margin:20px 0;padding:16px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;}
+    .doc-title h1{font-size:16pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#1a1a1a;margin-bottom:4px;}
+    .doc-title .subtitle{font-size:10pt;color:#555;}
+    .section{margin-bottom:22px;}
+    .section-num{font-size:11pt;font-weight:bold;color:#1a472a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+    .section-body{font-size:10.5pt;color:#333;text-align:justify;}
+    .section-body p{margin-bottom:8px;}
+    .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0;}
+    .summary-item{padding:12px;border:1px solid #ddd;border-radius:4px;background:#fafaf7;}
+    .summary-item .s-label{font-size:8pt;text-transform:uppercase;letter-spacing:1px;color:#888;font-weight:bold;display:block;margin-bottom:2px;}
+    .summary-item .s-value{font-size:18pt;font-weight:bold;color:#1a472a;}
+    .summary-item .s-note{font-size:8pt;color:#999;margin-top:2px;}
+    .priority-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:10pt;}
+    .priority-table th{background:#1a472a;color:#fff;padding:8px 12px;text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:1px;}
+    .priority-table td{padding:8px 12px;border-bottom:1px solid #e5e5e5;}
+    .priority-table tr:nth-child(even) td{background:#fafaf7;}
+    .p-indicator{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+    .p-critical{background:#dc2626;} .p-high{background:#ea580c;} .p-medium{background:#ca8a04;} .p-low{background:#16a34a;}
+    .breakdown-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9.5pt;}
+    .breakdown-table th{text-align:left;padding:6px 10px;background:#f2f0eb;font-size:8pt;text-transform:uppercase;letter-spacing:1px;color:#666;border-bottom:2px solid #ddd;}
+    .breakdown-table td{padding:6px 10px;border-bottom:1px solid #eee;}
+    .breakdown-table td:last-child{text-align:right;font-weight:bold;}
+    .pct-bar{display:inline-block;height:12px;background:#1a472a;border-radius:2px;margin-right:6px;vertical-align:middle;}
+    .case-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:9.5pt;}
+    .case-table th{background:#1a472a;color:#fff;padding:8px 10px;text-align:left;font-size:8pt;text-transform:uppercase;letter-spacing:0.5px;font-weight:bold;}
+    .case-table td{padding:8px 10px;border-bottom:1px solid #e5e5e5;vertical-align:top;}
+    .case-table tr:nth-child(even) td{background:#fafaf7;}
+    .case-ref{font-weight:bold;color:#1a472a;font-family:'Courier New',monospace;font-size:9pt;}
+    .case-priority{display:inline-block;padding:1px 8px;border-radius:2px;font-size:8pt;font-weight:bold;text-transform:uppercase;}
+    .cp-CRITICAL{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
+    .cp-HIGH{background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;}
+    .cp-MEDIUM{background:#fefce8;color:#ca8a04;border:1px solid #fef08a;}
+    .cp-LOW{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+    .dossier{page-break-inside:avoid;border:1px solid #ddd;border-radius:4px;padding:16px;margin:14px 0;background:#fff;}
+    .dossier-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid #eee;margin-bottom:10px;}
+    .dossier-ref{font-size:12pt;font-weight:bold;color:#1a472a;font-family:'Courier New',monospace;}
+    .dossier-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;}
+    .dossier-field .df-label{font-size:8pt;text-transform:uppercase;letter-spacing:1px;color:#999;font-weight:bold;display:block;}
+    .dossier-field .df-value{font-size:10pt;color:#1a1a1a;font-weight:600;}
+    .audit-section{margin-top:10px;padding-top:8px;border-top:1px solid #eee;}
+    .audit-title{font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#1a472a;margin-bottom:6px;}
+    .audit-entry{border-left:3px solid #1a472a;padding:6px 10px;margin-bottom:6px;background:#f9f7f2;border-radius:0 4px 4px 0;}
+    .a-stage{font-weight:bold;color:#1a472a;text-transform:uppercase;font-size:9pt;}
+    .a-officer{font-size:9pt;color:#555;margin-top:1px;}
+    .a-time{font-size:8pt;color:#999;} .a-score{font-size:8pt;font-weight:bold;color:#1a472a;margin-top:1px;}
+    .a-notes{font-size:9pt;color:#666;font-style:italic;margin-top:3px;padding-top:3px;border-top:1px solid #e5e5e5;}
     .risk-bar{display:flex;align-items:center;gap:6px;}
-    .risk-track{width:50px;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;}
+    .risk-track{width:50px;height:6px;background:#e5e5e5;border-radius:3px;overflow:hidden;}
     .risk-fill{height:100%;border-radius:3px;}
-    .risk-high{background:#ef4444;}
-    .risk-med{background:#eab308;}
-    .risk-low{background:#22c55e;}
-
-    /* Audit trail within table */
-    .audit-trail{margin-top:6px;}
-    .audit-entry{background:#f8fafc;border-left:3px solid #059669;padding:6px 10px;margin-bottom:4px;border-radius:0 6px 6px 0;}
-    .audit-stage{font-weight:800;color:#065f46;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;}
-    .audit-officer{font-size:9px;color:#475569;margin-top:2px;}
-    .audit-time{font-size:8px;color:#94a3b8;margin-top:1px;}
-    .audit-notes{font-size:9px;color:#64748b;font-style:italic;margin-top:3px;padding-top:3px;border-top:1px solid #e2e8f0;}
-    .audit-score{font-size:8px;font-weight:700;color:#059669;margin-top:2px;}
-
-    /* Case detail cards (for smaller sets) */
-    .case-cards{display:flex;flex-direction:column;gap:16px;margin-top:16px;}
-    .case-card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;page-break-inside:avoid;}
-    .case-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;}
-    .case-card-ref{font-size:14px;font-weight:900;color:#059669;}
-    .case-card-meta{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;}
-    .case-card-field .label{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:2px;}
-    .case-card-field .value{font-size:11px;font-weight:600;color:#1e293b;}
-    .case-card-stages{margin-top:12px;}
-    .case-card-stages-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#059669;margin-bottom:8px;}
-
-    /* Footer */
-    .report-footer{margin-top:40px;padding-top:16px;border-top:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;}
-    .footer-left{font-size:9px;color:#94a3b8;line-height:1.6;}
-    .footer-right{text-align:right;font-size:8px;color:#cbd5e1;}
-
-    @media print {
-      body{padding:0;}
-      .page{padding:24px 32px;}
-      .watermark{font-size:60px;}
-    }
+    .risk-high{background:#dc2626;} .risk-med{background:#ca8a04;} .risk-low{background:#16a34a;}
+    .dispute-box{margin-top:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:10px;}
+    .dispute-label{font-size:8pt;font-weight:bold;color:#b91c1c;text-transform:uppercase;letter-spacing:1px;}
+    .dispute-text{font-size:9.5pt;color:#7f1d1d;margin-top:4px;font-style:italic;}
+    .signature-block{margin-top:40px;padding-top:20px;border-top:2px solid #1a472a;}
+    .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:20px;}
+    .sig-item{text-align:center;}
+    .sig-line{border-top:1px solid #333;margin-top:50px;padding-top:6px;}
+    .sig-name{font-weight:bold;font-size:10pt;} .sig-title{font-size:9pt;color:#555;} .sig-date{font-size:8pt;color:#999;margin-top:2px;}
+    .doc-footer{margin-top:30px;padding-top:12px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:8pt;color:#999;}
+    @media print { body{padding:0;} .page{padding:0;} .dossier{break-inside:avoid;} }
   </style>
 </head>
 <body>
-<div class="watermark">ZACC CONFIDENTIAL</div>
 <div class="page">
-  <!-- Cover Header -->
-  <div class="cover">
-    <div class="cover-top">
-      <div class="logo-area">
-        <div class="logo-box">Z</div>
-        <div>
-          <div class="org-name">Zimbabwe Anti-Corruption Commission</div>
-          <div class="org-sub">Integrity Management System — Official Report</div>
+  <div class="official-header">
+    <div class="coat-of-arms"><span class="coat-text">Z</span></div>
+    <div class="state-name">Republic of Zimbabwe</div>
+    <div class="commission-name">Zimbabwe Anti-Corruption Commission</div>
+    <div class="commission-sub">Established under Section 254 of the Constitution of Zimbabwe</div>
+    <div class="motto">"Fighting Corruption, Promoting Integrity"</div>
+  </div>
+
+  <div class="doc-meta">
+    <div class="doc-meta-left">
+      <span class="label">Document Reference</span>
+      <span class="ref-num">${reportId}</span>
+      <br/><span class="classification">CONFIDENTIAL</span>
+    </div>
+    <div class="doc-meta-right">
+      <span class="label">Date of Issue</span>
+      <span class="value">${dateStr}</span><br/>
+      <span class="label" style="margin-top:6px;">Prepared By</span>
+      <span class="value">${officer}</span>
+    </div>
+  </div>
+
+  <div class="doc-title">
+    <h1>${categoryLabel} Cases &mdash; Comprehensive Report</h1>
+    <div class="subtitle">Period: ${dateFrom || 'Inception'} to ${dateTo || dateStr}${typeFilter ? ' | Corruption Type: ' + typeFilter : ''}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-num">1. Purpose &amp; Scope</div>
+    <div class="section-body">
+      <p>This report is compiled by the Zimbabwe Anti-Corruption Commission (ZACC)
+      pursuant to the Commission's mandate under the Anti-Corruption Commission Act
+      [Chapter 9:22]. It presents a detailed account of <strong>${total} case${total !== 1 ? 's' : ''}</strong>
+      classified under the <strong>&ldquo;${categoryLabel}&rdquo;</strong> category as at <strong>${dateStr}</strong>.</p>
+      <p>The report is intended for internal use by authorised ZACC personnel, partner agencies,
+      and where applicable, the National Prosecuting Authority (NPA) and the Zimbabwe Republic
+      Police (ZRP) for referral and prosecution purposes.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-num">2. Executive Summary</div>
+    <div class="section-body">
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="s-label">Total Cases in Report</span>
+          <span class="s-value">${total}</span>
         </div>
-      </div>
-      <div class="cover-badge">
-        <div class="confidential">CONFIDENTIAL</div>
-      </div>
-    </div>
-    <div class="cover-title">${categoryLabel} Cases Report</div>
-    <div class="cover-meta">
-      <span>Date: <strong>${dateStr}</strong></span>
-      <span>Generated: <strong>${now}</strong></span>
-      <span>Officer: <strong>${officer}</strong></span>
-      <span>Total Cases: <strong>${total}</strong></span>
-      ${dateFrom ? `<span>From: <strong>${dateFrom}</strong></span>` : ''}
-      ${dateTo ? `<span>To: <strong>${dateTo}</strong></span>` : ''}
-      ${typeFilter ? `<span>Type Filter: <strong>${typeFilter}</strong></span>` : ''}
-    </div>
-  </div>
-
-  <!-- Executive Summary -->
-  <div class="exec-summary">
-    <div class="section-title">Executive Summary</div>
-    <div class="kpi-grid">
-      <div class="kpi">
-        <div class="kpi-value">${total}</div>
-        <div class="kpi-label">Total Cases</div>
-        <div class="kpi-sub">In this report</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" style="color:${avgRisk > 74 ? '#ef4444' : avgRisk > 40 ? '#eab308' : '#22c55e'}">${avgRisk}%</div>
-        <div class="kpi-label">Avg Risk Score</div>
-        <div class="kpi-sub">${avgRisk > 74 ? 'High risk portfolio' : avgRisk > 40 ? 'Moderate risk' : 'Low risk portfolio'}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" style="color:#ef4444">${critical + high}</div>
-        <div class="kpi-label">High/Critical Priority</div>
-        <div class="kpi-sub">${total > 0 ? Math.round(((critical + high) / total) * 100) : 0}% of total</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" style="color:#059669">${Object.keys(typeMap).length}</div>
-        <div class="kpi-label">Corruption Types</div>
-        <div class="kpi-sub">Distinct categories</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Analysis Charts -->
-  <div class="chart-row">
-    <div class="chart-box">
-      <div class="chart-title">Priority Distribution</div>
-      <div class="bar-chart">
-        ${[
-          { label: 'Critical', count: critical, color: '#ef4444' },
-          { label: 'High', count: high, color: '#f97316' },
-          { label: 'Medium', count: medium, color: '#eab308' },
-          { label: 'Low', count: low, color: '#22c55e' },
-        ].map(p => `
-          <div class="bar-row">
-            <div class="bar-label">${p.label}</div>
-            <div class="bar-track">
-              <div class="bar-fill" style="width:${total > 0 ? Math.max((p.count / total) * 100, p.count > 0 ? 8 : 0) : 0}%;background:${p.color}">
-                ${p.count > 0 ? `<span class="bar-count">${p.count}</span>` : ''}
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">By Corruption Type</div>
-      <div class="type-list">
-        ${Object.entries(typeMap).sort((a, b) => b[1] - a[1]).map(([name, count], i) => {
-          const colors = ['#10b981','#6366f1','#f59e0b','#f43f5e','#a855f7','#06b6d4'];
-          return `<div class="type-item">
-            <div class="type-name"><span class="type-dot" style="background:${colors[i % colors.length]}"></span>${name}</div>
-            <div class="type-count">${count}</div>
-          </div>`;
-        }).join('')}
+        <div class="summary-item">
+          <span class="s-label">Average Risk Assessment</span>
+          <span class="s-value" style="color:${avgRisk > 74 ? '#dc2626' : avgRisk > 40 ? '#ca8a04' : '#16a34a'}">${avgRisk}%</span>
+          <span class="s-note">${avgRisk > 74 ? 'High-risk portfolio' : avgRisk > 40 ? 'Moderate risk level' : 'Low risk level'}</span>
+        </div>
+        <div class="summary-item">
+          <span class="s-label">Critical / High Priority Cases</span>
+          <span class="s-value" style="color:#dc2626">${critical + high}</span>
+          <span class="s-note">${total > 0 ? Math.round(((critical + high) / total) * 100) : 0}% of total case load</span>
+        </div>
+        <div class="summary-item">
+          <span class="s-label">Distinct Corruption Categories</span>
+          <span class="s-value">${Object.keys(typeMap).length}</span>
+        </div>
       </div>
     </div>
   </div>
 
-  ${category === 'in_progress' ? `
-  <div class="chart-row">
-    <div class="chart-box" style="grid-column:span 2">
-      <div class="chart-title">Status Distribution — Active Pipeline</div>
-      <div class="bar-chart">
-        ${['SUBMITTED','UNDER_REVIEW','INVESTIGATING','REFERRED'].map(s => {
-          const cnt = statusMap[s] || 0;
-          const colors: Record<string, string> = { SUBMITTED:'#3b82f6', UNDER_REVIEW:'#6366f1', INVESTIGATING:'#f59e0b', REFERRED:'#a855f7' };
-          return `<div class="bar-row">
-            <div class="bar-label">${s.replace('_',' ')}</div>
-            <div class="bar-track">
-              <div class="bar-fill" style="width:${total > 0 ? Math.max((cnt / total) * 100, cnt > 0 ? 8 : 0) : 0}%;background:${colors[s] || '#94a3b8'}">
-                ${cnt > 0 ? `<span class="bar-count">${cnt}</span>` : ''}
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
+  <div class="section">
+    <div class="section-num">3. Priority Classification Matrix</div>
+    <div class="section-body">
+      <p>Cases are assigned priority levels through ZACC's multi-factor assessment framework,
+      which considers the nature and severity of the alleged corruption, institutional impact,
+      monetary values involved, and evidence strength.</p>
+      <table class="priority-table">
+        <thead><tr><th>Priority Level</th><th>No. of Cases</th><th>Proportion</th><th>Assessment</th></tr></thead>
+        <tbody>
+          <tr><td><span class="p-indicator p-critical"></span>Critical</td><td><strong>${critical}</strong></td><td>${total > 0 ? Math.round((critical/total)*100) : 0}%</td><td>Requires immediate intervention</td></tr>
+          <tr><td><span class="p-indicator p-high"></span>High</td><td><strong>${high}</strong></td><td>${total > 0 ? Math.round((high/total)*100) : 0}%</td><td>Urgent attention within 48 hours</td></tr>
+          <tr><td><span class="p-indicator p-medium"></span>Medium</td><td><strong>${medium}</strong></td><td>${total > 0 ? Math.round((medium/total)*100) : 0}%</td><td>Standard investigation timeline</td></tr>
+          <tr><td><span class="p-indicator p-low"></span>Low</td><td><strong>${low}</strong></td><td>${total > 0 ? Math.round((low/total)*100) : 0}%</td><td>Routine processing</td></tr>
+        </tbody>
+      </table>
     </div>
-  </div>` : ''}
-
-  <!-- Detailed Case Listing -->
-  <div class="table-section">
-    <div class="table-header">
-      <div class="section-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0">Detailed Case Register</div>
-      <div class="table-count">${total} case${total === 1 ? '' : 's'} listed</div>
-    </div>
-
-    ${total <= 20 ? `
-    <!-- Card view for manageable number of cases -->
-    <div class="case-cards">
-      ${cases.map((c, i) => `
-      <div class="case-card">
-        <div class="case-card-header">
-          <div>
-            <span class="ref-code">${c.reference_code || c.case_id}</span>
-            <span style="font-size:9px;color:#94a3b8;margin-left:8px;">#${i + 1}</span>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <span class="priority-badge priority-${c.priority}">${c.priority}</span>
-            <span class="status-badge">${c.status.replace('_', ' ')}</span>
-          </div>
-        </div>
-        <div class="case-card-meta">
-          <div class="case-card-field"><div class="label">Corruption Type</div><div class="value">${c.type}</div></div>
-          <div class="case-card-field"><div class="label">Institution</div><div class="value">${c.institution || 'Not specified'}</div></div>
-          <div class="case-card-field"><div class="label">Location</div><div class="value">${c.location || 'Not specified'}</div></div>
-          <div class="case-card-field">
-            <div class="label">Risk Score</div>
-            <div class="value">
-              <div class="risk-bar">
-                <div class="risk-track"><div class="risk-fill ${c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low'}" style="width:${c.risk_score}%"></div></div>
-                <span>${c.risk_score}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:10px;">
-          <div><span style="color:#94a3b8;font-weight:700;">Filed:</span> ${c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</div>
-          <div><span style="color:#94a3b8;font-weight:700;">Last Updated:</span> ${c.last_updated ? new Date(c.last_updated).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</div>
-        </div>
-        ${c.dispute_reason ? `<div style="margin-top:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;"><span style="font-size:9px;font-weight:800;color:#dc2626;text-transform:uppercase;">Dispute Statement:</span><p style="font-size:10px;color:#7f1d1d;margin-top:4px;">${c.dispute_reason}</p></div>` : ''}
-        ${c.stage_history && c.stage_history.length > 0 ? `
-        <div class="case-card-stages">
-          <div class="case-card-stages-title">Investigation Audit Trail</div>
-          <div class="audit-trail">
-            ${c.stage_history.map((s: any) => `
-            <div class="audit-entry">
-              <div class="audit-stage">${s.stage.replace(/_/g, ' ')}</div>
-              <div class="audit-officer">${s.investigator_name}${s.investigator_email ? ' (' + s.investigator_email + ')' : ''}</div>
-              <div class="audit-time">${s.performed_at ? new Date(s.performed_at).toLocaleString() : '—'}</div>
-              ${s.final_score != null ? `<div class="audit-score">Assessment Score: ${s.final_score}/100</div>` : ''}
-              ${s.notes ? `<div class="audit-notes">${s.notes}</div>` : ''}
-            </div>`).join('')}
-          </div>
-        </div>` : ''}
-      </div>`).join('')}
-    </div>
-    ` : `
-    <!-- Table view for large datasets -->
-    <table>
-      <thead><tr>
-        <th>#</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Filed</th><th>Audit Trail</th>
-      </tr></thead>
-      <tbody>
-        ${cases.map((c, i) => `
-        <tr>
-          <td style="font-weight:700;color:#94a3b8;">${i + 1}</td>
-          <td><span class="ref-code">${c.reference_code || c.case_id}</span></td>
-          <td style="font-weight:600;">${c.type}</td>
-          <td>${c.institution || '—'}</td>
-          <td>${c.location || '—'}</td>
-          <td><span class="priority-badge priority-${c.priority}">${c.priority}</span></td>
-          <td><span class="status-badge">${c.status.replace(/_/g, ' ')}</span></td>
-          <td>
-            <div class="risk-bar">
-              <div class="risk-track"><div class="risk-fill ${c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low'}" style="width:${c.risk_score}%"></div></div>
-              <span style="font-weight:700;font-size:9px;">${c.risk_score}%</span>
-            </div>
-          </td>
-          <td style="white-space:nowrap;">${c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</td>
-          <td>${c.stage_history && c.stage_history.length > 0
-            ? `<div class="audit-trail">${c.stage_history.map((s: any) =>
-                `<div class="audit-entry">
-                  <div class="audit-stage">${s.stage.replace(/_/g,' ')}</div>
-                  <div class="audit-officer">${s.investigator_name}${s.investigator_email ? ' (' + s.investigator_email + ')' : ''}</div>
-                  <div class="audit-time">${s.performed_at ? new Date(s.performed_at).toLocaleString() : '—'}${s.final_score != null ? ' · Score: ' + s.final_score + '/100' : ''}</div>
-                  ${s.notes ? `<div class="audit-notes">${s.notes}</div>` : ''}
-                </div>`).join('')}</div>`
-            : '<span style="color:#cbd5e1;font-size:9px;">No actions recorded</span>'}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    `}
   </div>
 
-  <!-- Footer -->
-  <div class="report-footer">
-    <div class="footer-left">
-      <strong>Zimbabwe Anti-Corruption Commission</strong><br/>
-      Integrity Management System — Official Document<br/>
-      This report is confidential and intended for authorized personnel only.
+  <div class="section">
+    <div class="section-num">4. Corruption Type Analysis</div>
+    <div class="section-body">
+      <table class="breakdown-table">
+        <thead><tr><th>Type of Corruption</th><th>Cases</th><th>%</th></tr></thead>
+        <tbody>
+          ${Object.entries(typeMap).sort((a, b) => b[1] - a[1]).map(([name, count]) =>
+          '<tr><td><span class="pct-bar" style="width:' + (total > 0 ? Math.max((count/total)*120, 8) : 0) + 'px"></span>' + name + '</td><td style="text-align:right"><strong>' + count + '</strong></td><td style="text-align:right">' + (total > 0 ? Math.round((count/total)*100) : 0) + '%</td></tr>').join('')}
+        </tbody>
+      </table>
     </div>
-    <div class="footer-right">
-      Report ID: ZACC-RPT-${Date.now().toString(36).toUpperCase()}<br/>
-      Generated: ${now}<br/>
-      Page 1 of 1
+  </div>
+
+  ${Object.keys(instMap).length > 1 ? '<div class="section"><div class="section-num">5. Institutions Cited</div><div class="section-body"><table class="breakdown-table"><thead><tr><th>Institution</th><th>Cases</th></tr></thead><tbody>' + Object.entries(instMap).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([name, count]) => '<tr><td>' + name + '</td><td style="text-align:right"><strong>' + count + '</strong></td></tr>').join('') + '</tbody></table></div></div>' : ''}
+
+  ${category === 'in_progress' ? '<div class="section"><div class="section-num">' + (Object.keys(instMap).length > 1 ? '6' : '5') + '. Active Pipeline Status</div><div class="section-body"><p>Distribution of cases across investigation pipeline stages:</p><table class="priority-table"><thead><tr><th>Stage</th><th>No. of Cases</th><th>Description</th></tr></thead><tbody>' + [{ key: 'SUBMITTED', label: 'Submitted', desc: 'Awaiting initial review and triage' },{ key: 'UNDER_REVIEW', label: 'Under Review', desc: 'Being evaluated for investigation merit' },{ key: 'INVESTIGATING', label: 'Under Investigation', desc: 'Active investigation in progress' },{ key: 'REFERRED', label: 'Referred to Courts/ZRP', desc: 'Forwarded to NPA or ZRP for prosecution' }].map(s => '<tr><td><strong>' + s.label + '</strong></td><td><strong>' + (statusMap[s.key] || 0) + '</strong></td><td>' + s.desc + '</td></tr>').join('') + '</tbody></table></div></div>' : ''}
+
+  <div class="section">
+    <div class="section-num">${(() => { let n = 5; if (Object.keys(instMap).length > 1) n++; if (category === 'in_progress') n++; return n; })()}. Detailed Case Register</div>
+    <div class="section-body">
+      <p>The following presents the complete record of all ${total} case${total !== 1 ? 's' : ''}
+      included in this report, with identifying information, classification details,
+      and the full investigation audit trail where available.</p>
     </div>
+
+    ${total <= 25 ? cases.map((c, i) =>
+    '<div class="dossier"><div class="dossier-header"><div><span class="dossier-ref">' + (c.reference_code || c.case_id) + '</span><span style="font-size:9pt;color:#999;margin-left:8px;">Case ' + (i + 1) + ' of ' + total + '</span></div><div><span class="case-priority cp-' + c.priority + '">' + c.priority + '</span></div></div><div class="dossier-grid"><div class="dossier-field"><span class="df-label">Corruption Type</span><span class="df-value">' + c.type + '</span></div><div class="dossier-field"><span class="df-label">Institution</span><span class="df-value">' + (c.institution || 'Not specified') + '</span></div><div class="dossier-field"><span class="df-label">Location</span><span class="df-value">' + (c.location || 'Not specified') + '</span></div><div class="dossier-field"><span class="df-label">Current Status</span><span class="df-value">' + pdfStatusLabel(c.status) + '</span></div><div class="dossier-field"><span class="df-label">Risk Assessment</span><span class="df-value"><span class="risk-bar"><span class="risk-track"><span class="risk-fill ' + (c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low') + '" style="width:' + c.risk_score + '%"></span></span>' + c.risk_score + '%</span></span></div><div class="dossier-field"><span class="df-label">Date Filed</span><span class="df-value">' + (c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' }) : '\u2014') + '</span></div></div>' + (c.dispute_reason ? '<div class="dispute-box"><span class="dispute-label">Dispute Statement</span><p class="dispute-text">' + c.dispute_reason + '</p></div>' : '') + (c.stage_history && c.stage_history.length > 0 ? '<div class="audit-section"><div class="audit-title">Investigation Audit Trail</div>' + c.stage_history.map((s: any) => '<div class="audit-entry"><div class="a-stage">' + s.stage.replace(/_/g, ' ') + '</div><div class="a-officer">Officer: ' + s.investigator_name + (s.investigator_email ? ' (' + s.investigator_email + ')' : '') + '</div><div class="a-time">Date: ' + (s.performed_at ? new Date(s.performed_at).toLocaleString() : '\u2014') + '</div>' + (s.final_score != null ? '<div class="a-score">Assessment Score: ' + s.final_score + '/100</div>' : '') + (s.notes ? '<div class="a-notes">' + s.notes + '</div>' : '') + '</div>').join('') + '</div>' : '') + '</div>').join('')
+    : '<table class="case-table"><thead><tr><th>No.</th><th>Reference</th><th>Type</th><th>Institution</th><th>Location</th><th>Priority</th><th>Status</th><th>Risk</th><th>Filed</th></tr></thead><tbody>' + cases.map((c, i) => '<tr><td>' + (i+1) + '</td><td><span class="case-ref">' + (c.reference_code || c.case_id) + '</span></td><td>' + c.type + '</td><td>' + (c.institution || '\u2014') + '</td><td>' + (c.location || '\u2014') + '</td><td><span class="case-priority cp-' + c.priority + '">' + c.priority + '</span></td><td>' + pdfStatusLabel(c.status) + '</td><td><span class="risk-bar"><span class="risk-track"><span class="risk-fill ' + (c.risk_score > 74 ? 'risk-high' : c.risk_score > 40 ? 'risk-med' : 'risk-low') + '" style="width:' + c.risk_score + '%"></span></span><span style="font-size:9pt;font-weight:bold;">' + c.risk_score + '%</span></span></td><td style="white-space:nowrap;">' + (c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '\u2014') + '</td></tr>').join('') + '</tbody></table>'}
+  </div>
+
+  <div class="section">
+    <div class="section-num">${(() => { let n = 6; if (Object.keys(instMap).length > 1) n++; if (category === 'in_progress') n++; return n; })()}. Observations</div>
+    <div class="section-body">
+      <p>Based on the data presented in this report, the following observations are noted:</p>
+      <p>i) A total of <strong>${total}</strong> case${total !== 1 ? 's' : ''} fall${total === 1 ? 's' : ''} under the
+      <strong>${categoryLabel}</strong> classification, with an average risk assessment score of <strong>${avgRisk}%</strong>.</p>
+      ${critical + high > 0 ? '<p>ii) <strong>' + (critical + high) + '</strong> case' + ((critical + high) !== 1 ? 's' : '') + ' (' + (total > 0 ? Math.round(((critical + high)/total)*100) : 0) + '%) ' + ((critical + high) !== 1 ? 'are' : 'is') + ' classified as Critical or High priority, warranting expedited attention.</p>' : ''}
+      ${Object.keys(typeMap).length > 0 ? '<p>' + (critical + high > 0 ? 'iii' : 'ii') + ') The most prevalent corruption type is <strong>' + Object.entries(typeMap).sort((a, b) => b[1] - a[1])[0][0] + '</strong>, accounting for <strong>' + Object.entries(typeMap).sort((a, b) => b[1] - a[1])[0][1] + '</strong> case' + (Object.entries(typeMap).sort((a, b) => b[1] - a[1])[0][1] !== 1 ? 's' : '') + '.</p>' : ''}
+    </div>
+  </div>
+
+  <div class="signature-block">
+    <p style="font-size:10pt;font-weight:bold;color:#1a472a;margin-bottom:4px;">AUTHORISATION</p>
+    <p style="font-size:9pt;color:#555;">This report has been compiled in accordance with ZACC standard operating procedures
+    and is submitted for the attention and action of the indicated authorising officers.</p>
+    <div class="sig-grid">
+      <div class="sig-item"><div class="sig-line"><div class="sig-name">${officer}</div><div class="sig-title">Preparing Officer</div><div class="sig-date">Date: ${dateStr}</div></div></div>
+      <div class="sig-item"><div class="sig-line"><div class="sig-name">____________________</div><div class="sig-title">Authorising Officer</div><div class="sig-date">Date: ____________________</div></div></div>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <div>Zimbabwe Anti-Corruption Commission<br/>This document is confidential. Unauthorised disclosure is an offence under the Official Secrets Act.</div>
+    <div style="text-align:right;">Ref: ${reportId}<br/>Generated: ${now}<br/>Page 1 of 1</div>
   </div>
 </div>
 <script>window.onload=()=>setTimeout(()=>window.print(),600);</script>
@@ -651,25 +569,25 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               {
                 label: t(language, "totalCases"),
                 value: data.overview.total,
-                icon: "📊",
+                icon: "ðŸ“Š",
                 color: "text-slate-900 dark:text-white",
               },
               {
                 label: t(language, "successful"),
                 value: data.overview.successful,
-                icon: "✅",
+                icon: "âœ…",
                 color: "text-emerald-500",
               },
               {
                 label: t(language, "inProgress"),
                 value: data.overview.in_progress,
-                icon: "⏳",
+                icon: "â³",
                 color: "text-amber-500",
               },
               {
                 label: t(language, "disputed"),
                 value: data.overview.disputed,
-                icon: "🚨",
+                icon: "ðŸš¨",
                 color: "text-rose-500",
               },
             ].map((s, i) => (
@@ -932,7 +850,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               onClick={() => generatePDF(activeTab, getCasesForTab(activeTab))}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors"
             >
-              📄 {t(language, "exportPdf")}
+              ðŸ“„ {t(language, "exportPdf")}
             </button>
           </div>
 

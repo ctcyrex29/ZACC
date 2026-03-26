@@ -177,8 +177,8 @@ class PublicReportController extends Controller
             return response()->json(['success' => false, 'message' => 'No case found for this tracking code.'], 404);
         }
 
-        if ($report->status !== 'CLOSED') {
-            return response()->json(['success' => false, 'message' => 'Only closed cases can be disputed.'], 422);
+        if (!in_array($report->status, ['CLOSED', 'SUCCESSFUL'])) {
+            return response()->json(['success' => false, 'message' => 'Only closed or successful cases can be disputed.'], 422);
         }
 
         $validator = Validator::make($request->all(), [
@@ -204,13 +204,13 @@ class PublicReportController extends Controller
 
                 if ($request->hasFile('evidence')) {
                     foreach ($request->file('evidence') as $file) {
-                        $stored = $file->store('dispute_evidence/' . $report->case_id, 'public');
+                        $stored = $file->store('dispute_evidence/' . $report->case_id, 'local');
                         $report->attachments()->create([
                             'original_name' => $file->getClientOriginalName(),
                             'file_name'     => $stored,
                             'mime_type'     => $file->getMimeType(),
                             'size'          => $file->getSize(),
-                            'disk'          => 'public',
+                            'disk'          => 'local',
                             'created_by'    => null,
                         ]);
                     }
@@ -252,8 +252,8 @@ class PublicReportController extends Controller
             return response()->json(['success' => false, 'message' => 'No case found for this tracking code.'], 404);
         }
 
-        if (in_array($report->status, ['CLOSED', 'DISPUTED'])) {
-            return response()->json(['success' => false, 'message' => 'Evidence cannot be added to closed or disputed cases.'], 422);
+        if (in_array($report->status, ['CLOSED', 'SUCCESSFUL', 'DISPUTED'])) {
+            return response()->json(['success' => false, 'message' => 'Evidence cannot be added to closed, successful or disputed cases.'], 422);
         }
 
         $validator = Validator::make($request->all(), [
@@ -283,13 +283,13 @@ class PublicReportController extends Controller
 
             $uploaded = [];
             foreach ($newFiles as $file) {
-                $stored = $file->store('evidence/' . $report->case_id, 'public');
+                $stored = $file->store('evidence/' . $report->case_id, 'local');
                 $attachment = $report->attachments()->create([
                     'original_name' => $file->getClientOriginalName(),
                     'file_name'     => $stored,
                     'mime_type'     => $file->getMimeType(),
                     'size'          => $file->getSize(),
-                    'disk'          => 'public',
+                    'disk'          => 'local',
                     'created_by'    => null,
                 ]);
                 $uploaded[] = ['id' => $attachment->id, 'name' => $file->getClientOriginalName(), 'size' => $file->getSize(), 'mime_type' => $file->getMimeType()];
@@ -321,10 +321,11 @@ class PublicReportController extends Controller
         $byStatus = Report::select('status', DB::raw('count(*) as cnt'))->groupBy('status')->pluck('cnt', 'status')->toArray();
         $byType   = Report::select('type',   DB::raw('count(*) as cnt'))->groupBy('type')  ->pluck('cnt', 'type')  ->toArray();
 
-        $resolvedTotal      = $byStatus['CLOSED'] ?? 0;
-        $resolvedLast30Days = Report::where('status', 'CLOSED')->where('updated_at', '>=', now()->subDays(30))->count();
+        $resolvedTotal      = ($byStatus['CLOSED'] ?? 0) + ($byStatus['SUCCESSFUL'] ?? 0);
+        $resolvedLast30Days = Report::whereIn('status', ['CLOSED', 'SUCCESSFUL'])->where('updated_at', '>=', now()->subDays(30))->count();
+        $successfulCount    = $byStatus['SUCCESSFUL'] ?? 0;
         $disputeCount       = $byStatus['DISPUTED'] ?? 0;
-        $activeCount        = ($byStatus['SUBMITTED'] ?? 0) + ($byStatus['UNDER_REVIEW'] ?? 0) + ($byStatus['INVESTIGATING'] ?? 0);
+        $activeCount        = ($byStatus['SUBMITTED'] ?? 0) + ($byStatus['UNDER_REVIEW'] ?? 0) + ($byStatus['INVESTIGATING'] ?? 0) + ($byStatus['REFERRED'] ?? 0);
         $resolutionRate     = $total > 0 ? round(($resolvedTotal / $total) * 100) : 0;
         $disputeRate        = $total > 0 ? round(($disputeCount  / $total) * 100) : 0;
 
@@ -335,6 +336,7 @@ class PublicReportController extends Controller
                 'active_investigations'   => $activeCount,
                 'resolved_total'          => $resolvedTotal,
                 'resolved_last_30_days'   => $resolvedLast30Days,
+                'successful_total'        => $successfulCount,
                 'resolution_rate'         => $resolutionRate,
                 'dispute_rate'            => $disputeRate,
                 'by_status'               => $byStatus,

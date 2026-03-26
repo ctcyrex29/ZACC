@@ -49,15 +49,16 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'nullable|string|in:WHISTLEBLOWER,INVESTIGATOR,ADMIN',
+            'password' => ['required', 'string', 'min:8', 'confirmed', \Illuminate\Validation\Rules\Password::min(8)->mixedCase()->numbers()],
         ]);
 
+        // Public registration is always WHISTLEBLOWER — admin/investigator accounts
+        // must be created via the admin-only UserController::store()
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role'] ?? User::ROLE_WHISTLEBLOWER,
+            'role' => User::ROLE_WHISTLEBLOWER,
         ]);
 
         return response()->json([

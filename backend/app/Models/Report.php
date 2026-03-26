@@ -38,6 +38,7 @@ class Report extends Model
         'priority',
         'risk_score',
         'dispute_reason',
+        'closed_at_stage',
         'last_updated',
         'encrypted_data',
         'blockchain_tx_hash',

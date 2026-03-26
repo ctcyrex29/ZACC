@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus, User, UserRole } from "../types";
 
@@ -12,7 +13,8 @@ const statusLabel = (s: string) => {
     SUBMITTED: "Submitted",
     UNDER_REVIEW: "Under Review",
     INVESTIGATING: "Investigating",
-    REFERRED: "Referred",
+    REFERRED: "Referred to Courts/ZRP",
+    SUCCESSFUL: "Successful",
     CLOSED: "Closed",
     DISPUTED: "Disputed",
   };
@@ -28,6 +30,8 @@ const statusBadge = (s: string) => {
     return "bg-amber-500/10 text-amber-600  dark:text-amber-400  border-amber-200  dark:border-amber-500/20";
   if (s === "REFERRED")
     return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
+  if (s === "SUCCESSFUL")
+    return "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-500/20";
   if (s === "CLOSED")
     return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
   if (s === "DISPUTED")
@@ -47,6 +51,7 @@ const CASE_BOOK_STAGES = [
   "UNDER_REVIEW",
   "INVESTIGATING",
   "REFERRED",
+  "SUCCESSFUL",
   "CLOSED",
 ] as const;
 
@@ -171,6 +176,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const [expertReviewLoading, setExpertReviewLoading] = useState(false);
   const [evidenceScan, setEvidenceScan] = useState<any | null>(null);
   const [evidenceScanLoading, setEvidenceScanLoading] = useState(false);
+
+  // Investigation log entries (detective platform)
+  const [investigationLogs, setInvestigationLogs] = useState<Array<{date: string; account: string; finding: string; progress: string}>>([]);
+  const [logEntry, setLogEntry] = useState({account: "", finding: "", progress: "In Progress"});
 
   // ── Fetch cases ──
   const fetchCases = useCallback(async () => {
@@ -351,6 +360,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     setActionError(null);
     setExpertReview(null);
     setEvidenceScan(null);
+    setInvestigationLogs([]);
+    setLogEntry({account: "", finding: "", progress: "In Progress"});
   };
 
   const runExpertReview = async () => {
@@ -601,7 +612,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         </code>
                         {c.referenceCode && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.referenceCode!); }}
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              navigator.clipboard.writeText(c.referenceCode!); 
+                              toast.success("Copied to clipboard!");
+                            }}
                             title="Copy tracking code"
                             className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 hover:bg-emerald-500/10 border border-slate-200 dark:border-white/10 text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
                           >
@@ -678,7 +693,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                     </code>
                     {!isAdmin && dossierData.reference_code && (
                       <button
-                        onClick={() => navigator.clipboard.writeText(dossierData.reference_code)}
+                        onClick={() => {
+                          navigator.clipboard.writeText(dossierData.reference_code);
+                          toast.success("Copied block hash to clipboard!");
+                        }}
                         title="Copy reference code"
                         className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 transition-all"
                       >
@@ -1107,20 +1125,125 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         </div>
                       )}
 
-                      {/* INVESTIGATING: investigation report */}
+                      {/* INVESTIGATING: Detective Investigation Platform */}
                       {currentStatus === "INVESTIGATING" && (
-                        <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-5 space-y-4">
+                        <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-5 space-y-5">
                           <p className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">
-                            Investigation Stage
+                            Detective Investigation Platform
                           </p>
                           <p className="text-sm text-amber-700 dark:text-amber-300">
-                            Conduct the investigation and record your findings.
-                            Once complete, proceed to the review board or close
-                            the case if insufficient evidence found.
+                            Conduct the investigation by logging findings from different accounts and sources.
+                            Track progress of each line of inquiry before making a final determination.
                           </p>
+
+                          {/* Investigation Log Form */}
+                          <div className="rounded-xl border border-amber-300 dark:border-amber-500/30 bg-white dark:bg-black/20 p-4 space-y-3">
+                            <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                              Add Investigation Entry
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Account / Source <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={logEntry.account}
+                                  onChange={(e) => setLogEntry(prev => ({...prev, account: e.target.value}))}
+                                  placeholder="e.g. Witness A, Bank Records, CCTV Footage..."
+                                  className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-amber-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Progress Status
+                                </label>
+                                <select
+                                  value={logEntry.progress}
+                                  onChange={(e) => setLogEntry(prev => ({...prev, progress: e.target.value}))}
+                                  className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                                >
+                                  <option value="In Progress">In Progress</option>
+                                  <option value="Completed">Completed</option>
+                                  <option value="Blocked">Blocked</option>
+                                  <option value="Needs Follow-up">Needs Follow-up</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                Findings / Notes <span className="text-rose-500">*</span>
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={logEntry.finding}
+                                onChange={(e) => setLogEntry(prev => ({...prev, finding: e.target.value}))}
+                                placeholder="Document what was found from this source, what evidence was collected, and any conclusions..."
+                                className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-amber-500 resize-none"
+                              />
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (logEntry.account.trim().length < 2 || logEntry.finding.trim().length < 5) {
+                                  toast.error("Please fill in both account and findings.");
+                                  return;
+                                }
+                                setInvestigationLogs(prev => [...prev, {
+                                  date: new Date().toLocaleString(),
+                                  account: logEntry.account.trim(),
+                                  finding: logEntry.finding.trim(),
+                                  progress: logEntry.progress,
+                                }]);
+                                setLogEntry({account: "", finding: "", progress: "In Progress"});
+                                toast.success("Investigation entry added!");
+                              }}
+                              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider transition-all"
+                            >
+                              + Add Entry
+                            </button>
+                          </div>
+
+                          {/* Investigation Log Table */}
+                          {investigationLogs.length > 0 && (
+                            <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                              <div className="bg-slate-50 dark:bg-white/5 px-4 py-2 flex items-center justify-between">
+                                <p className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                  Investigation Log — {investigationLogs.length} entries
+                                </p>
+                                <div className="flex gap-2 text-[10px] font-bold">
+                                  <span className="text-emerald-600">{investigationLogs.filter(l => l.progress === "Completed").length} completed</span>
+                                  <span className="text-amber-600">{investigationLogs.filter(l => l.progress === "In Progress").length} in progress</span>
+                                </div>
+                              </div>
+                              <div className="divide-y divide-slate-100 dark:divide-white/5 max-h-60 overflow-y-auto">
+                                {investigationLogs.map((log, idx) => (
+                                  <div key={idx} className="px-4 py-3 flex items-start gap-3">
+                                    <span className={`mt-0.5 px-2 py-0.5 rounded text-[9px] font-black uppercase whitespace-nowrap ${
+                                      log.progress === "Completed" ? "bg-emerald-500/10 text-emerald-600" :
+                                      log.progress === "Blocked" ? "bg-rose-500/10 text-rose-600" :
+                                      log.progress === "Needs Follow-up" ? "bg-blue-500/10 text-blue-600" :
+                                      "bg-amber-500/10 text-amber-600"
+                                    }`}>{log.progress}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold text-slate-900 dark:text-white">{log.account}</p>
+                                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{log.finding}</p>
+                                      <p className="text-[10px] text-slate-400 mt-1">{log.date}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => setInvestigationLogs(prev => prev.filter((_, i) => i !== idx))}
+                                      className="text-slate-400 hover:text-rose-500 text-xs transition-colors flex-shrink-0"
+                                      title="Remove entry"
+                                    >✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Final Investigation Report */}
                           <div>
                             <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                              Investigation Report{" "}
+                              Final Investigation Report{" "}
                               <span className="text-rose-500">*</span>
                             </label>
                             <textarea
@@ -1128,25 +1251,40 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                               value={actionNotes}
                               onChange={(e) => setActionNotes(e.target.value)}
                               disabled={actionProcessing}
-                              placeholder="Document your investigation findings, evidence collected, witnesses interviewed, and conclusions reached (min 10 characters)..."
+                              placeholder="Summarize your full investigation findings. Include evidence collected, witnesses interviewed, conclusions reached, and your recommendation for the case (min 10 characters)..."
                               className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 resize-none font-medium"
                             />
                             <p className="text-xs text-slate-500 mt-1">
                               {actionNotes.length} characters
+                              {investigationLogs.length > 0 && ` · ${investigationLogs.length} investigation entries will be included in the report`}
                             </p>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <button
-                              onClick={() => doAction("REFERRED")}
+                              onClick={() => {
+                                const fullNotes = investigationLogs.length > 0
+                                  ? `${actionNotes}\n\n--- Investigation Log (${investigationLogs.length} entries) ---\n${investigationLogs.map((l, i) => `${i+1}. [${l.progress}] ${l.account}: ${l.finding} (${l.date})`).join('\n')}`
+                                  : actionNotes;
+                                const original = actionNotes;
+                                setActionNotes(fullNotes);
+                                doAction("REFERRED").then(() => setActionNotes(original));
+                              }}
                               disabled={actionProcessing}
                               className="py-3 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
                             >
                               {actionProcessing
                                 ? "Processing..."
-                                : "Proceed to Review Board"}
+                                : "Refer to Courts / ZRP"}
                             </button>
                             <button
-                              onClick={() => doAction("CLOSED")}
+                              onClick={() => {
+                                const fullNotes = investigationLogs.length > 0
+                                  ? `${actionNotes}\n\n--- Investigation Log (${investigationLogs.length} entries) ---\n${investigationLogs.map((l, i) => `${i+1}. [${l.progress}] ${l.account}: ${l.finding} (${l.date})`).join('\n')}`
+                                  : actionNotes;
+                                const original = actionNotes;
+                                setActionNotes(fullNotes);
+                                doAction("CLOSED").then(() => setActionNotes(original));
+                              }}
                               disabled={actionProcessing}
                               className="py-3 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-slate-800 dark:text-slate-200 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
                             >
@@ -1158,16 +1296,83 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         </div>
                       )}
 
-                      {/* REFERRED */}
+                      {/* REFERRED: Awaiting Courts/ZRP decision */}
                       {currentStatus === "REFERRED" && (
-                        <div className="rounded-2xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 p-5">
+                        <div className="rounded-2xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 p-5 space-y-4">
                           <p className="text-xs font-black text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-2">
-                            Referred to Review Board
+                            Referred to Courts / Zimbabwe Republic Police
                           </p>
                           <p className="text-sm text-purple-700 dark:text-purple-300">
-                            This case has been referred to the ZACC Review Board
-                            for final determination. No further investigator
-                            action is required at this stage.
+                            This case has been referred to the relevant authority (Courts or ZRP) for legal action.
+                            A referral report has been generated. Once results are received, upload the outcome files
+                            and record the decision below.
+                          </p>
+
+                          {/* Print Referral Report PDF */}
+                          <button
+                            onClick={() => {
+                              const referralStage = stagesData.find((s: any) => s.stage === "REFERRED");
+                              if (referralStage) {
+                                generateStagePDF(dossierData, referralStage);
+                                toast.success("Referral report generated for printing!");
+                              } else {
+                                toast.error("No referral stage record found.");
+                              }
+                            }}
+                            className="w-full py-3 rounded-xl bg-purple-100 dark:bg-purple-500/20 hover:bg-purple-200 dark:hover:bg-purple-500/30 border border-purple-300 dark:border-purple-500/30 text-purple-700 dark:text-purple-300 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                          >
+                            📄 Print Referral Report for Courts / ZRP
+                          </button>
+
+                          <div className="border-t border-purple-200 dark:border-purple-500/20 pt-4">
+                            <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-3">
+                              Record Court / ZRP Outcome
+                            </p>
+                            <div>
+                              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                                Results Commentary <span className="text-rose-500">*</span>
+                              </label>
+                              <textarea
+                                rows={4}
+                                value={actionNotes}
+                                onChange={(e) => setActionNotes(e.target.value)}
+                                disabled={actionProcessing}
+                                placeholder="Record the court/ZRP decision, case outcome, sentencing details, or acquittal reasons. Attach result documents using the evidence upload feature (min 10 characters)..."
+                                className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none font-medium"
+                              />
+                              <p className="text-xs text-slate-500 mt-1">
+                                {actionNotes.length} characters
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mt-3">
+                              <button
+                                onClick={() => doAction("SUCCESSFUL")}
+                                disabled={actionProcessing}
+                                className="py-3 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                              >
+                                {actionProcessing ? "Processing..." : "Case Successful — Record Results"}
+                              </button>
+                              <button
+                                onClick={() => doAction("CLOSED")}
+                                disabled={actionProcessing}
+                                className="py-3 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-slate-800 dark:text-slate-200 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                              >
+                                {actionProcessing ? "Processing..." : "Close — No Action Taken"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SUCCESSFUL: Case resolved successfully */}
+                      {currentStatus === "SUCCESSFUL" && (
+                        <div className="rounded-2xl border border-teal-200 dark:border-teal-500/20 bg-teal-50 dark:bg-teal-500/10 p-5">
+                          <p className="text-xs font-black text-teal-700 dark:text-teal-400 uppercase tracking-widest mb-2">
+                            Case Resolved Successfully
+                          </p>
+                          <p className="text-sm text-teal-700 dark:text-teal-300">
+                            The courts or ZRP have acted on this case and the results have been recorded.
+                            The case has been successfully concluded with legal action taken.
                           </p>
                         </div>
                       )}
@@ -1192,11 +1397,16 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                             Dispute Filed
                           </p>
                           <p className="text-sm text-rose-700 dark:text-rose-300 mb-3">
-                            The whistleblower has disputed the outcome of this
-                            case.
+                            The whistleblower has disputed the outcome of this case.
+                            {dossierData.closed_at_stage && (
+                              <span className="block mt-1 font-bold">
+                                Case was closed at stage: <span className="text-rose-600 dark:text-rose-300">{statusLabel(dossierData.closed_at_stage)}</span>.
+                                You can re-open it at that stage for further review.
+                              </span>
+                            )}
                           </p>
                           {dossierData.dispute_reason && (
-                            <div className="rounded-xl bg-white dark:bg-black/20 border border-rose-200 dark:border-rose-500/20 px-4 py-3">
+                            <div className="rounded-xl bg-white dark:bg-black/20 border border-rose-200 dark:border-rose-500/20 px-4 py-3 mb-4">
                               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                                 Dispute Statement
                               </p>
@@ -1215,18 +1425,40 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                               value={actionNotes}
                               onChange={(e) => setActionNotes(e.target.value)}
                               disabled={actionProcessing}
-                              placeholder="Provide your response to the dispute..."
+                              placeholder="Provide your response to the dispute and your decision..."
                               className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-500 resize-none font-medium"
                             />
-                            <button
-                              onClick={() => doAction("CLOSED")}
-                              disabled={actionProcessing}
-                              className="w-full mt-3 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
-                            >
-                              {actionProcessing
-                                ? "Processing..."
-                                : "Close Dispute — Uphold Original Decision"}
-                            </button>
+                            <div className="grid grid-cols-2 gap-3 mt-3">
+                              {dossierData.closed_at_stage && dossierData.closed_at_stage !== "SUBMITTED" && (
+                                <button
+                                  onClick={() => doAction(dossierData.closed_at_stage)}
+                                  disabled={actionProcessing}
+                                  className="py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                                >
+                                  {actionProcessing
+                                    ? "Processing..."
+                                    : `Re-open at ${statusLabel(dossierData.closed_at_stage)}`}
+                                </button>
+                              )}
+                              {(!dossierData.closed_at_stage || dossierData.closed_at_stage === "SUBMITTED") && (
+                                <button
+                                  onClick={() => doAction("UNDER_REVIEW")}
+                                  disabled={actionProcessing}
+                                  className="py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                                >
+                                  {actionProcessing ? "Processing..." : "Re-open for Review"}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => doAction("CLOSED")}
+                                disabled={actionProcessing}
+                                className="py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                              >
+                                {actionProcessing
+                                  ? "Processing..."
+                                  : "Uphold — Close Case"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1247,7 +1479,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         {currentStatus === "INVESTIGATING" &&
                           "This case is under active investigation."}
                         {currentStatus === "REFERRED" &&
-                          "This case has been referred to the ZACC Review Board."}
+                          "This case has been referred to the Courts or ZRP for legal action."}
+                        {currentStatus === "SUCCESSFUL" &&
+                          "This case has been successfully resolved through legal proceedings."}
                         {currentStatus === "CLOSED" &&
                           "This case has been closed."}
                         {currentStatus === "DISPUTED" &&
@@ -1267,8 +1501,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                     </div>
                   )}
 
-                  {/* ── Expert Review & Evidence Scan (CLOSED/DISPUTED cases) ── */}
-                  {(currentStatus === "CLOSED" || currentStatus === "DISPUTED") && (
+                  {/* ── Expert Review & Evidence Scan (CLOSED/DISPUTED/SUCCESSFUL cases) ── */}
+                  {(currentStatus === "CLOSED" || currentStatus === "DISPUTED" || currentStatus === "SUCCESSFUL") && (
                     <div className="space-y-4">
                       {/* Expert Case Review */}
                       <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5">

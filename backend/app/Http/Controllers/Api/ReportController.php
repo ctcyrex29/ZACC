@@ -70,6 +70,9 @@ class ReportController extends Controller
             $allowed = $user->allowed_case_types;
             if (!empty($allowed)) {
                 $query->whereIn('type', $allowed);
+            } else {
+                // No types assigned — investigator sees nothing until admin assigns types
+                $query->whereRaw('1 = 0');
             }
         } else {
             // Regular users can only see their own reports
@@ -243,7 +246,7 @@ class ReportController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to submit report. Please try again: ' . $e->getMessage(),
+                'message' => 'Failed to submit report. Please try again.',
             ], 500);
         }
     }
@@ -426,7 +429,7 @@ class ReportController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => 'nullable|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,CLOSED,DISPUTED',
+            'status' => 'nullable|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,SUCCESSFUL,CLOSED,DISPUTED',
             'priority' => 'nullable|in:LOW,MEDIUM,HIGH,CRITICAL',
             'risk_score' => 'nullable|integer|min:0|max:100',
             // only admins may set assignment via this endpoint
@@ -481,7 +484,7 @@ class ReportController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,CLOSED,DISPUTED',
+            'status' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,SUCCESSFUL,CLOSED,DISPUTED',
             'comment' => 'nullable|string|min:3',
         ]);
 
@@ -607,6 +610,7 @@ class ReportController extends Controller
 
         $this->logReportAction($report, 'REPORT_DISPUTED', 'Whistleblower disputed final outcome', [
             'reason' => $validated['reason'],
+            'closed_at_stage' => $report->closed_at_stage,
         ]);
 
         return response()->json([

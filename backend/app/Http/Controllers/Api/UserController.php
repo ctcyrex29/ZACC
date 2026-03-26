@@ -93,9 +93,10 @@ class UserController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create user', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create user: ' . $e->getMessage(),
+                'message' => 'Failed to create user. Please try again.',
             ], 500);
         }
     }
@@ -164,9 +165,10 @@ class UserController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to update user', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update user: ' . $e->getMessage(),
+                'message' => 'Failed to update user. Please try again.',
             ], 500);
         }
     }
@@ -210,9 +212,10 @@ class UserController extends Controller
                 'message' => 'User deleted successfully',
             ]);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to delete user', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to delete user: ' . $e->getMessage(),
+                'message' => 'Failed to delete user. Please try again.',
             ], 500);
         }
     }
