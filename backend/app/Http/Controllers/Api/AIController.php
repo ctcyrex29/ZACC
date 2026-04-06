@@ -35,7 +35,7 @@ class AIController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'AI service is not configured. Please set GEMINI_API_KEY in your .env file.',
-                ], 500);
+                ], 503);
             }
 
             $url = sprintf(
@@ -262,7 +262,7 @@ PROMPT;
             $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
 
             if (!$apiKey) {
-                return response()->json(['success' => false, 'message' => 'AI service is not configured'], 500);
+                return response()->json(['success' => false, 'message' => 'AI service is not configured. Please ask the administrator to set GEMINI_API_KEY.'], 503);
             }
 
             // Build comprehensive case summary for review
@@ -352,7 +352,7 @@ PROMPT;
             $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
 
             if (!$apiKey) {
-                return response()->json(['success' => false, 'message' => 'AI service is not configured'], 500);
+                return response()->json(['success' => false, 'message' => 'AI service is not configured. Please ask the administrator to set GEMINI_API_KEY.'], 503);
             }
 
             $decrypted = $report->decrypted_data;
@@ -430,7 +430,7 @@ PROMPT;
             $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
 
             if (!$apiKey) {
-                return response()->json(['success' => false, 'message' => 'AI service is not configured'], 500);
+                return response()->json(['success' => false, 'message' => 'AI service is not configured. Please ask the administrator to set GEMINI_API_KEY.'], 503);
             }
 
             $draftData = json_encode([

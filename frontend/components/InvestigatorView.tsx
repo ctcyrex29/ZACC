@@ -243,7 +243,26 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const downloadEvidence = async (url: string, fileName: string) => {
     try {
       const token = localStorage.getItem("nexus_token");
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+
+      // Normalize the download URL: extract the /api/... path and prepend the correct API origin
+      let downloadUrl = url;
+      try {
+        const parsed = new URL(url);
+        if (parsed.pathname.startsWith('/api/')) {
+          downloadUrl = apiBase + parsed.pathname;
+        }
+      } catch {
+        // url was relative — prepend API base
+        downloadUrl = apiBase + (url.startsWith('/') ? url : '/' + url);
+      }
+
+      const resp = await fetch(downloadUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: '*/*',
+        },
+      });
       if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
       const blob = await resp.blob();
       const objUrl = URL.createObjectURL(blob);
@@ -254,6 +273,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       URL.revokeObjectURL(objUrl);
     } catch (err) {
       console.error("Evidence download error:", err);
+      toast.error("Failed to download evidence file. Please try again.");
     }
   };
 
