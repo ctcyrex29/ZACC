@@ -77,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/ai/analyze-report', [AIController::class, 'analyzeReport']);
     Route::get('/ai/expert-review/{id}', [AIController::class, 'expertCaseReview'])->where('id', '[A-Za-z0-9-]+');
     Route::get('/ai/scan-evidence/{id}', [AIController::class, 'scanEvidence'])->where('id', '[A-Za-z0-9-]+');
+    Route::get('/ai/pre-review-analysis/{id}', [AIController::class, 'preReviewAnalysis'])->where('id', '[A-Za-z0-9-]+');
     Route::post('/ai/pre-submission-suggestions', [AIController::class, 'preSubmissionSuggestions']);
 
     // User management routes (admin only)

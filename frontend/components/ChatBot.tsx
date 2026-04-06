@@ -45,6 +45,8 @@ const QUICK_TOPICS = [
   { label: "What happens after filing?", key: "process" },
   { label: "How to add evidence", key: "evidence" },
   { label: "How to dispute a decision", key: "dispute" },
+  { label: "Types of corruption", key: "corruption_types" },
+  { label: "What is blockchain verification?", key: "blockchain" },
 ];
 
 type GuidedPhase =
@@ -808,39 +810,54 @@ function getFallbackResponse(input: string): string {
 
   const responses: { patterns: string[]; response: string }[] = [
     {
-      patterns: ["file", "report", "submit", "how to report", "start", "new report"],
+      patterns: ["file", "report", "submit", "how to report", "start", "new report", "make a report"],
       response:
-        'To file an anonymous report you can do it **right here in this chat!**\n\nJust say **"file a report"** or click the 🚀 **File a Report** button below and I\'ll walk you through it step by step.\n\nNo account required. You\'ll receive a **tracking code** — save it!',
+        'You can file an anonymous corruption report **right here in this chat!**\n\nJust say **"file a report"** or click the 🚀 **File a Report** button below.\n\nI\'ll guide you through 5 simple steps:\n1. Type of corruption\n2. Institution involved\n3. Location\n4. Detailed description\n5. Optional evidence files\n\n**No account, email, or personal info required.** You\'ll receive a unique **tracking code** — save it securely!',
     },
     {
-      patterns: ["track", "check status", "case status", "my case", "follow up"],
+      patterns: ["track", "check status", "case status", "my case", "follow up", "update", "progress", "code"],
       response:
-        "To track your case:\n\n1. Click the **Track Case** tab\n2. Enter your tracking code (e.g. ZACC-REF-XXXXXX)\n3. Click **Track Case**\n\nYou'll see status, timeline, investigator notes, and options to upload evidence or dispute.",
+        "To track your case:\n\n1. Click the **Track Case** tab\n2. Enter your tracking code (e.g., ZACC-REF-XXXXXX)\n3. Click **Track Case**\n\nYou'll see:\n- 📊 Current case status and stage\n- 📅 Timeline and progress through investigation\n- 📝 Investigator notes at each stage\n- 📎 Option to upload additional evidence\n- ⚖️ Option to dispute a closure\n\nIf you've lost your tracking code, you'll need to file a new report (for anonymity, codes can't be recovered).",
     },
     {
-      patterns: ["safe", "anonymous", "identity", "private", "privacy", "secret"],
+      patterns: ["safe", "anonymous", "identity", "private", "privacy", "secret", "confidential", "protect"],
       response:
-        "Your identity is **fully protected**:\n\n- Zero personal data collected\n- End-to-end encryption\n- Blockchain anchoring\n\nNo one at ZACC can identify you through the system.",
+        "Your identity is **completely protected** through multiple layers:\n\n🔒 **Zero personal data** — no name, email, or phone collected\n🔐 **AES-256 encryption** — military-grade encryption for all case data\n⛓️ **Blockchain anchoring** — tamper-proof, verifiable record\n🕵️ **Anonymous by design** — reports aren't linked to any account\n🚪 **Panic Exit** — instantly hides the page if someone approaches\n\nEven ZACC investigators cannot identify who filed an anonymous report. You are safe.",
     },
     {
-      patterns: ["evidence", "attach", "upload", "photos", "documents", "proof"],
+      patterns: ["evidence", "attach", "upload", "photos", "documents", "proof", "files"],
       response:
-        'You can attach evidence **while filing a report** through this chat (just say **"file a report"**), or later via the **Track Case** tab using your tracking code.\n\nAccepted: photos, videos, audio, documents. Max 5 files, 10MB each.',
+        'You can attach evidence while filing or add it later:\n\n**During filing:** Say **"file a report"** — Step 5 lets you attach files\n**After filing:** Go to **Track Case** → enter your code → **Add Evidence**\n\n📷 Photos: JPG, PNG\n🎥 Videos: MP4, MOV\n🎙️ Audio: MP3, WAV\n📄 Documents: PDF, DOC, XLS, TXT\n\n**Limits:** Up to 5 files, 10MB each\n\n💡 **Best evidence:** Screenshots of communications, financial records, photos of documents, audio/video recordings. Even partial evidence helps investigators!',
     },
     {
-      patterns: ["dispute", "disagree", "appeal", "challenge"],
+      patterns: ["dispute", "disagree", "appeal", "challenge", "unfair", "not satisfied", "reopen"],
       response:
-        "To dispute a closed case: go to **Track Case**, enter your code, scroll to the closure section, click **Dispute This Decision**, and provide your reasoning.",
+        "If you disagree with a case closure:\n\n1. Go to **Track Case** and enter your code\n2. Scroll to the **Case Closed** section\n3. Click **Dispute This Decision**\n4. Write a detailed statement explaining why you disagree\n5. Optionally attach new evidence\n6. Submit\n\nYour case will be marked **DISPUTED** and ZACC management will conduct a fresh review. Disputes are taken seriously — they ensure accountability.",
     },
     {
-      patterns: ["help", "hi", "hello", "hey"],
+      patterns: ["brib", "corrupt", "fraud", "embezzl", "nepotism", "abuse", "steal", "theft", "procurement"],
       response:
-        'Hello! I\'m the **ZACC Guide**. I can:\n\n- **File a report** for you right here (say **"file a report"**)\n- Answer questions about tracking, evidence, privacy, and more\n\nWhat would you like to do?',
+        'It sounds like you may have witnessed corruption. ZACC investigates:\n\n🏷️ **Bribery** — giving/receiving money for official action\n📦 **Procurement Fraud** — rigged tenders, inflated contracts\n👔 **Abuse of Office** — misusing position for personal gain\n💰 **Embezzlement** — stealing public funds\n👨‍👩‍👦 **Nepotism** — favouring relatives in hiring or contracts\n\n**To make your report impactful, include:**\n- What happened and when\n- Job titles/positions involved\n- Which institution or department\n- Financial amounts (even estimates)\n\nSay **"file a report"** and I\'ll guide you through it!',
     },
     {
-      patterns: ["what", "how long", "timeline", "time", "process", "after"],
+      patterns: ["stage", "investigation", "process", "what happens", "timeline", "how long", "after"],
       response:
-        "After filing, your report goes through these stages:\n\n1. **Submitted** — AI & expert systems classify priority\n2. **Under Review** — An investigator is assigned\n3. **Investigating** — Active investigation underway\n4. **Referred** — May be sent to law enforcement\n5. **Closed** — Case resolved (you can dispute if needed)\n\nHigher-priority cases are processed faster.",
+        "The ZACC investigation process:\n\n📥 **Submitted** — AI expert system classifies priority automatically\n🔍 **Under Review** — Investigator assigned, initial assessment\n🕵️ **Investigating** — Active evidence gathering and analysis\n📋 **Referred** — May be sent to National Prosecuting Authority\n✅ **Closed** — Case resolved with documented findings\n\nHigher-priority cases (more detail, more evidence) are investigated faster. You can track progress anytime with your tracking code.",
+    },
+    {
+      patterns: ["blockchain", "verify", "hash", "tamper", "integrity"],
+      response:
+        "Your report is protected by **blockchain verification**:\n\n⛓️ A unique SHA-256 hash (digital fingerprint) is created from your report\n📦 This hash is recorded on an immutable blockchain ledger\n🔍 Any tampering would change the hash, instantly revealing modification\n\nThis means your report **cannot be altered or deleted** by anyone — providing an independent, verifiable audit trail that protects both whistleblowers and the integrity of investigations.",
+    },
+    {
+      patterns: ["help", "hi", "hello", "hey", "guide", "good morning", "good afternoon"],
+      response:
+        'Hello! I\'m the **ZACC Guide** — your AI-powered anti-corruption assistant. 🛡️\n\nI can help you:\n- 📝 **File a corruption report** (say "file a report")\n- 🔍 **Track your case** with a tracking code\n- 📎 **Submit evidence** to strengthen your case\n- ⚖️ **Dispute a decision** you disagree with\n- 🔒 **Understand your protections** and anonymity\n- 📚 **Learn about corruption types** and the investigation process\n\nWhat would you like help with?',
+    },
+    {
+      patterns: ["shona", "ndebele", "tonga", "language", "chivanhu"],
+      response:
+        "Ndinogona kukubatsira muShona, Ndebele, English, kana Tonga! 🇿🇼\n\nNyora mubvunzo wako mumutauro waunoda!\n\nI can assist in English, Shona, Ndebele, or Tonga — just write in your preferred language and I'll respond in the same language.",
     },
   ];
 
@@ -848,5 +865,5 @@ function getFallbackResponse(input: string): string {
     if (item.patterns.some((p) => lower.includes(p))) return item.response;
   }
 
-  return 'I can help with:\n\n- **Filing a report** (say "file a report")\n- Tracking codes\n- Adding evidence\n- Disputing decisions\n- Privacy protections\n\nTry clicking a topic button or rephrase your question!';
+  return 'I\'m the **ZACC Guide**, your anti-corruption assistant. I can help with:\n\n- 📝 **Filing a report** — say "file a report" to start\n- 🔍 **Tracking a case** — ask about tracking\n- 📎 **Submitting evidence** — ask about evidence\n- ⚖️ **Disputing a decision** — ask about disputes\n- 🔒 **Privacy & security** — ask about anonymity\n- 📚 **Investigation process** — ask about stages\n\nTry asking a specific question or click a topic button below!';
 }

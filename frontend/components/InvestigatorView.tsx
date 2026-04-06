@@ -177,6 +177,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const [evidenceScan, setEvidenceScan] = useState<any | null>(null);
   const [evidenceScanLoading, setEvidenceScanLoading] = useState(false);
 
+  // Pre-review findings report state
+  const [preReviewReport, setPreReviewReport] = useState<any | null>(null);
+  const [preReviewLoading, setPreReviewLoading] = useState(false);
+
   // Investigation log entries (detective platform)
   const [investigationLogs, setInvestigationLogs] = useState<Array<{date: string; account: string; finding: string; progress: string}>>([]);
   const [logEntry, setLogEntry] = useState({account: "", finding: "", progress: "In Progress"});
@@ -273,6 +277,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     setStagesData([]);
     setActionNotes("");
     setActionError(null);
+    setPreReviewReport(null);
 
     const resolvedId = (c as any).case_id || c.id;
 
@@ -302,6 +307,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       if (resp?.success) {
         setDossierData(resp.data);
         await loadStages(resolvedId);
+        // Auto-run pre-review analysis in background
+        runPreReviewAnalysis(resolvedId);
       } else {
         setDossierData({ error: resp?.message || "Failed to load case" });
       }
@@ -360,6 +367,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     setActionError(null);
     setExpertReview(null);
     setEvidenceScan(null);
+    setPreReviewReport(null);
     setInvestigationLogs([]);
     setLogEntry({account: "", finding: "", progress: "In Progress"});
   };
@@ -394,7 +402,23 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     }
   };
 
+  const runPreReviewAnalysis = async (reportId?: string) => {
+    const id = reportId || dossierData?.case_id || dossierData?.id;
+    if (!id) return;
+    setPreReviewLoading(true);
+    try {
+      const resp = await apiClient.preReviewAnalysis(id);
+      if (resp.success) setPreReviewReport(resp.data);
+      else setPreReviewReport({ error: resp.message || "Analysis failed" });
+    } catch (err: any) {
+      setPreReviewReport({ error: err.message || "Analysis failed" });
+    } finally {
+      setPreReviewLoading(false);
+    }
+  };
+
   // ── Derived lists ──
+  const priorityRank: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
   const filteredCases = cases.filter((c) => {
     const matchesFilter = filter === "ALL" || c.status === filter;
     const matchesSearch =
@@ -404,6 +428,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       (c.referenceCode || "").toLowerCase().includes(search.toLowerCase()) ||
       (c.id || "").toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
+  }).sort((a, b) => {
+    // Sort by priority (CRITICAL first), then by risk score (highest first)
+    const pa = priorityRank[a.priority] || 0;
+    const pb = priorityRank[b.priority] || 0;
+    if (pb !== pa) return pb - pa;
+    return (b.riskScore || 0) - (a.riskScore || 0);
   });
 
   const currentStatus: string = dossierData?.status ?? "";
@@ -952,6 +982,361 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                   )}
 
                   {/* Case Book */}
+                  {/* ── Pre-Review Findings Report ── */}
+                  <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/20 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-500/5 dark:to-teal-500/5 p-5 space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">
+                          Expert System — Pre-Review Findings Report
+                        </p>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">
+                          Multi-dimensional case analysis with evidence assessment
+                        </p>
+                      </div>
+                      {!preReviewReport && !preReviewLoading && (
+                        <button onClick={() => runPreReviewAnalysis()} className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-bold uppercase tracking-wider transition-all">
+                          Generate Report
+                        </button>
+                      )}
+                      {preReviewReport && !preReviewReport.error && (
+                        <button onClick={() => { setPreReviewReport(null); runPreReviewAnalysis(); }} className="px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/10 transition-all">
+                          Refresh
+                        </button>
+                      )}
+                    </div>
+
+                    {preReviewLoading && (
+                      <div className="flex items-center gap-3 py-6 justify-center">
+                        <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Analyzing case across 7 dimensions...</p>
+                      </div>
+                    )}
+
+                    {preReviewReport?.error && (
+                      <p className="text-xs text-rose-500 py-2">{preReviewReport.error}</p>
+                    )}
+
+                    {preReviewReport && !preReviewReport.error && (() => {
+                      const expert = preReviewReport.expert_analysis;
+                      const ai = preReviewReport.ai_enhancement;
+                      if (!expert) return null;
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Summary Narrative */}
+                          <div className="bg-white/60 dark:bg-white/5 rounded-xl p-4 border border-emerald-100 dark:border-emerald-500/10">
+                            <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Case Summary</p>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{ai?.case_narrative || expert.summary}</p>
+                          </div>
+
+                          {/* Overall Scores Row */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="bg-white/60 dark:bg-white/5 rounded-xl p-3 border border-slate-100 dark:border-white/5 text-center">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Overall Score</p>
+                              <p className={`text-2xl font-black ${
+                                expert.overall_score >= 75 ? 'text-rose-600 dark:text-rose-400' :
+                                expert.overall_score >= 55 ? 'text-orange-600 dark:text-orange-400' :
+                                expert.overall_score >= 35 ? 'text-amber-600 dark:text-amber-400' :
+                                'text-emerald-600 dark:text-emerald-400'
+                              }`}>{expert.overall_score}</p>
+                              <p className="text-[9px] text-slate-500">/100</p>
+                            </div>
+                            <div className="bg-white/60 dark:bg-white/5 rounded-xl p-3 border border-slate-100 dark:border-white/5 text-center">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Urgency</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                                expert.overall_urgency === 'CRITICAL' ? 'bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20' :
+                                expert.overall_urgency === 'HIGH' ? 'bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-500/20' :
+                                expert.overall_urgency === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20' :
+                                'bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20'
+                              }`}>{expert.overall_urgency}</span>
+                            </div>
+                            <div className="bg-white/60 dark:bg-white/5 rounded-xl p-3 border border-slate-100 dark:border-white/5 text-center">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Evidence</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                                expert.evidence_assessment?.quality === 'STRONG' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200' :
+                                expert.evidence_assessment?.quality === 'MODERATE' ? 'bg-amber-500/10 text-amber-600 border-amber-200' :
+                                'bg-rose-500/10 text-rose-600 border-rose-200'
+                              }`}>{expert.evidence_assessment?.quality || 'N/A'}</span>
+                            </div>
+                            <div className="bg-white/60 dark:bg-white/5 rounded-xl p-3 border border-slate-100 dark:border-white/5 text-center">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexity</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                                expert.complexity_level === 'HIGH' ? 'bg-purple-500/10 text-purple-600 border-purple-200' :
+                                expert.complexity_level === 'MEDIUM' ? 'bg-blue-500/10 text-blue-600 border-blue-200' :
+                                'bg-slate-500/10 text-slate-600 border-slate-200'
+                              }`}>{expert.complexity_level}</span>
+                            </div>
+                          </div>
+
+                          {/* Dimensional Breakdown */}
+                          {expert.dimensions && (
+                            <div>
+                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Dimensional Analysis</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {Object.entries(expert.dimensions as Record<string, any>).map(([key, dim]: [string, any]) => (
+                                  <div key={key} className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <p className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                                        {key.replace(/_/g, ' ')}
+                                      </p>
+                                      <span className={`text-xs font-black ${
+                                        dim.score >= 70 ? 'text-rose-600' : dim.score >= 45 ? 'text-amber-600' : dim.score >= 20 ? 'text-blue-600' : 'text-slate-500'
+                                      }`}>{dim.score}/100</span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                      <div className={`h-full rounded-full transition-all ${
+                                        dim.score >= 70 ? 'bg-rose-500' : dim.score >= 45 ? 'bg-amber-500' : dim.score >= 20 ? 'bg-blue-500' : 'bg-slate-400'
+                                      }`} style={{ width: `${dim.score}%` }} />
+                                    </div>
+                                    {dim.factors?.length > 0 && (
+                                      <div className="mt-1.5 space-y-0.5">
+                                        {dim.factors.slice(0, 3).map((f: string, i: number) => (
+                                          <p key={i} className="text-[9px] text-slate-500 dark:text-slate-500 truncate">• {f}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Red Flags */}
+                          {expert.flags?.length > 0 && (
+                            <div className="bg-rose-50/50 dark:bg-rose-500/5 rounded-xl p-4 border border-rose-100 dark:border-rose-500/10">
+                              <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider mb-2">Red Flags &amp; Concerns</p>
+                              <div className="space-y-1.5">
+                                {expert.flags.map((f: string, i: number) => (
+                                  <div key={i} className="flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
+                                    <span className="text-rose-500 mt-0.5 font-bold">⚠</span> {f}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Corruption Indicators */}
+                          {expert.corruption_indicators?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Detected Corruption Indicators</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {expert.corruption_indicators.map((ind: string, i: number) => (
+                                  <span key={i} className="px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-[10px] font-semibold text-orange-700 dark:text-orange-300">
+                                    {ind}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Evidence Assessment */}
+                          {expert.evidence_assessment && (
+                            <div>
+                              <p className="text-[10px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-2">Evidence Assessment</p>
+                              {expert.evidence_assessment.file_assessments?.length > 0 && (
+                                <div className="space-y-1.5 mb-3">
+                                  {expert.evidence_assessment.file_assessments.map((f: any, i: number) => (
+                                    <div key={i} className="flex items-center gap-2 text-xs bg-white/50 dark:bg-white/5 rounded-lg px-3 py-2 border border-slate-100 dark:border-white/5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                        f.relevance === 'HIGH' ? 'bg-emerald-500/10 text-emerald-600' :
+                                        f.relevance === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600' :
+                                        'bg-slate-500/10 text-slate-500'
+                                      }`}>{f.relevance}</span>
+                                      <span className="font-medium text-slate-700 dark:text-slate-300">{f.file}</span>
+                                      <span className="text-slate-500 truncate">— {f.note}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {expert.evidence_assessment.missing_evidence?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Missing Evidence</p>
+                                  <ul className="space-y-1">
+                                    {expert.evidence_assessment.missing_evidence.map((m: string, i: number) => (
+                                      <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                                        <span className="text-amber-500 mt-0.5">⚠</span> {m}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Key Claims */}
+                          {expert.key_claims?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Key Claims Extracted</p>
+                              <ul className="space-y-1.5">
+                                {expert.key_claims.map((c: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2">
+                                    <span className="text-indigo-500 mt-0.5 font-bold">{i + 1}.</span> {c}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* AI Enhancement (if available) */}
+                          {ai && (
+                            <div className="border-t border-emerald-100 dark:border-emerald-500/10 pt-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">AI-Enhanced Intelligence</p>
+                                {ai.confidence != null && (
+                                  <span className="text-[9px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full">{ai.confidence}% confidence</span>
+                                )}
+                              </div>
+
+                              {/* Corruption Pattern */}
+                              {ai.corruption_pattern && (
+                                <div className="bg-blue-50/50 dark:bg-blue-500/5 rounded-lg p-3 border border-blue-100 dark:border-blue-500/10">
+                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Corruption Pattern</p>
+                                  <p className="text-xs font-semibold text-slate-900 dark:text-white">{ai.corruption_pattern.primary_type}</p>
+                                  {ai.corruption_pattern.modus_operandi && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{ai.corruption_pattern.modus_operandi}</p>
+                                  )}
+                                  {ai.corruption_pattern.pattern_analysis && (
+                                    <p className="text-xs text-slate-500 mt-1 italic">{ai.corruption_pattern.pattern_analysis}</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* AI Evidence Review */}
+                              {ai.evidence_review && (
+                                <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">AI Evidence Review</p>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                      ai.evidence_review.sufficiency_for_prosecution === 'SUFFICIENT' ? 'bg-emerald-500/10 text-emerald-600' :
+                                      ai.evidence_review.sufficiency_for_prosecution === 'PARTIAL' ? 'bg-amber-500/10 text-amber-600' :
+                                      'bg-rose-500/10 text-rose-600'
+                                    }`}>{ai.evidence_review.sufficiency_for_prosecution}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-600 dark:text-slate-400">{ai.evidence_review.evidence_summary}</p>
+                                </div>
+                              )}
+
+                              {/* Persons of Interest */}
+                              {ai.persons_of_interest?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Persons of Interest</p>
+                                  <div className="space-y-1">
+                                    {ai.persons_of_interest.map((p: any, i: number) => (
+                                      <div key={i} className="flex items-center gap-2 text-xs bg-white/50 dark:bg-white/5 rounded-lg px-3 py-2 border border-slate-100 dark:border-white/5">
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                          p.risk_level === 'HIGH' ? 'bg-rose-500/10 text-rose-600' :
+                                          p.risk_level === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600' :
+                                          'bg-slate-500/10 text-slate-500'
+                                        }`}>{p.risk_level}</span>
+                                        <span className="font-semibold text-slate-900 dark:text-white">{p.name_or_role}</span>
+                                        <span className="text-slate-500">— {p.alleged_involvement}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Risk Assessment */}
+                              {ai.risk_assessment && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {[
+                                    { label: 'Evidence Tampering', value: ai.risk_assessment.evidence_tampering_risk },
+                                    { label: 'Suspect Flight', value: ai.risk_assessment.suspect_flight_risk },
+                                    { label: 'Ongoing Harm', value: ai.risk_assessment.ongoing_harm_risk },
+                                    { label: 'Overall Risk', value: ai.risk_assessment.overall_risk },
+                                  ].map((r, i) => (
+                                    <div key={i} className="bg-white/50 dark:bg-white/5 rounded-lg p-2 border border-slate-100 dark:border-white/5 text-center">
+                                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">{r.label}</p>
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
+                                        r.value === 'CRITICAL' || r.value === 'HIGH' ? 'bg-rose-500/10 text-rose-600' :
+                                        r.value === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600' :
+                                        'bg-emerald-500/10 text-emerald-600'
+                                      }`}>{r.value}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Investigation Strategy */}
+                              {ai.investigation_strategy?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Recommended Investigation Strategy</p>
+                                  <ol className="space-y-1.5">
+                                    {ai.investigation_strategy.map((s: string, i: number) => (
+                                      <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg px-3 py-2 border border-emerald-100 dark:border-emerald-500/10">
+                                        <span className="text-emerald-600 mt-0.5 font-black text-[10px] min-w-[18px]">{i + 1}.</span> {s}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              )}
+
+                              {/* Applicable Laws */}
+                              {ai.applicable_laws?.length > 0 && (
+                                <div>
+                                  <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Applicable Legislation</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {ai.applicable_laws.map((law: string, i: number) => (
+                                      <span key={i} className="px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
+                                        {law}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {ai.model_used && (
+                                <p className="text-[9px] text-slate-400 font-mono pt-1">
+                                  AI Model: {ai.model_used}
+                                  {ai.ai_generated_at && ` · ${new Date(ai.ai_generated_at).toLocaleString()}`}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Recommendations */}
+                          {expert.recommendations?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Expert System Recommendations</p>
+                              <ul className="space-y-1.5">
+                                {expert.recommendations.map((r: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2">
+                                    <span className="text-emerald-500 mt-0.5 font-bold">→</span> {r}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Investigation Checklist */}
+                          {expert.investigation_checklist?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Investigation Checklist</p>
+                              <div className="space-y-1">
+                                {expert.investigation_checklist.map((item: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2 text-xs bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2 border border-slate-100 dark:border-white/5">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                      item.priority === 'HIGH' ? 'bg-rose-500/10 text-rose-600' :
+                                      item.priority === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600' :
+                                      'bg-slate-500/10 text-slate-500'
+                                    }`}>{item.priority}</span>
+                                    <span className="text-slate-700 dark:text-slate-300">{item.task}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Report timestamp */}
+                          <p className="text-[9px] text-slate-400 font-mono pt-1 text-right">
+                            Expert report generated: {expert.generated_at ? new Date(expert.generated_at).toLocaleString() : 'now'}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Case Book — Timeline */}
                   <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <p className="text-xs font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest">
@@ -1501,103 +1886,23 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                     </div>
                   )}
 
-                  {/* ── Expert Review & Evidence Scan (CLOSED/DISPUTED/SUCCESSFUL cases) ── */}
-                  {(currentStatus === "CLOSED" || currentStatus === "DISPUTED" || currentStatus === "SUCCESSFUL") && (
-                    <div className="space-y-4">
-                      {/* Expert Case Review */}
-                      <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">
-                            Expert System Case Review
-                          </p>
-                          {!expertReview && (
-                            <button onClick={runExpertReview} disabled={expertReviewLoading}
-                              className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
-                              {expertReviewLoading ? "Analyzing..." : "Run Expert Review"}
-                            </button>
-                          )}
-                        </div>
-                        {expertReviewLoading && (
-                          <div className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400">
-                            <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                            Expert system is reviewing the case...
-                          </div>
-                        )}
-                        {expertReview && !expertReview.error && (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                                expertReview.verdict === "HANDLED_CORRECTLY" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" :
-                                expertReview.verdict === "NEEDS_IMPROVEMENT" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" :
-                                "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
-                              }`}>
-                                {expertReview.verdict?.replace(/_/g, " ")}
-                              </span>
-                              <span className="text-xs font-bold text-slate-500">
-                                Confidence: {expertReview.confidence}% | Investigation Score: {expertReview.investigation_score}/100
-                              </span>
-                            </div>
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{expertReview.summary}</p>
-                            {expertReview.strengths?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Strengths</p>
-                                <ul className="space-y-1">
-                                  {expertReview.strengths.map((s: string, i: number) => (
-                                    <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                      <span className="text-emerald-500 mt-0.5">✓</span> {s}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {expertReview.weaknesses?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Areas for Improvement</p>
-                                <ul className="space-y-1">
-                                  {expertReview.weaknesses.map((w: string, i: number) => (
-                                    <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                      <span className="text-amber-500 mt-0.5">!</span> {w}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {expertReview.recommendations?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Recommendations</p>
-                                <ul className="space-y-1">
-                                  {expertReview.recommendations.map((r: string, i: number) => (
-                                    <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                      <span className="text-blue-500 mt-0.5">→</span> {r}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {expertReview?.error && (
-                          <p className="text-xs text-rose-500">{expertReview.error}</p>
-                        )}
-                      </div>
-
-                      {/* Evidence Scan */}
-                      <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/20 bg-cyan-50 dark:bg-cyan-500/5 p-5">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-xs font-black text-cyan-700 dark:text-cyan-400 uppercase tracking-widest">
-                            Evidence Analysis
-                          </p>
-                          {!evidenceScan && (
-                            <button onClick={runEvidenceScan} disabled={evidenceScanLoading}
-                              className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
-                              {evidenceScanLoading ? "Scanning..." : "Scan Evidence"}
-                            </button>
-                          )}
-                        </div>
-                        {evidenceScanLoading && (
-                          <div className="flex items-center gap-2 text-sm text-cyan-600 dark:text-cyan-400">
-                            <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                            Analyzing evidence files...
+                  {/* ── Evidence Scan (Available at ALL stages) ── */}
+                  <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/20 bg-cyan-50 dark:bg-cyan-500/5 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-black text-cyan-700 dark:text-cyan-400 uppercase tracking-widest">
+                        AI Evidence Analysis
+                      </p>
+                      {!evidenceScan && (
+                        <button onClick={runEvidenceScan} disabled={evidenceScanLoading}
+                          className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
+                          {evidenceScanLoading ? "Scanning..." : "Scan Evidence"}
+                        </button>
+                      )}
+                    </div>
+                    {evidenceScanLoading && (
+                      <div className="flex items-center gap-2 text-sm text-cyan-600 dark:text-cyan-400">
+                        <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                        Analyzing evidence files...
                           </div>
                         )}
                         {evidenceScan && !evidenceScan.error && (
@@ -1661,6 +1966,83 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                           <p className="text-xs text-rose-500">{evidenceScan.error}</p>
                         )}
                       </div>
+
+                  {/* ── Post-Case Expert Review (CLOSED/DISPUTED/SUCCESSFUL) ── */}
+                  {(currentStatus === "CLOSED" || currentStatus === "DISPUTED" || currentStatus === "SUCCESSFUL") && (
+                    <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">
+                          Post-Case Expert Review
+                        </p>
+                        {!expertReview && (
+                          <button onClick={runExpertReview} disabled={expertReviewLoading}
+                            className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
+                            {expertReviewLoading ? "Analyzing..." : "Run Expert Review"}
+                          </button>
+                        )}
+                      </div>
+                      {expertReviewLoading && (
+                        <div className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400">
+                          <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                          Expert system is reviewing the case...
+                        </div>
+                      )}
+                      {expertReview && !expertReview.error && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                              expertReview.verdict === "HANDLED_CORRECTLY" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" :
+                              expertReview.verdict === "NEEDS_IMPROVEMENT" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" :
+                              "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
+                            }`}>
+                              {expertReview.verdict?.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-xs font-bold text-slate-500">
+                              Confidence: {expertReview.confidence}% | Investigation Score: {expertReview.investigation_score}/100
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{expertReview.summary}</p>
+                          {expertReview.strengths?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Strengths</p>
+                              <ul className="space-y-1">
+                                {expertReview.strengths.map((s: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                                    <span className="text-emerald-500 mt-0.5">✓</span> {s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {expertReview.weaknesses?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Areas for Improvement</p>
+                              <ul className="space-y-1">
+                                {expertReview.weaknesses.map((w: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                                    <span className="text-amber-500 mt-0.5">!</span> {w}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {expertReview.recommendations?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Recommendations</p>
+                              <ul className="space-y-1">
+                                {expertReview.recommendations.map((r: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                                    <span className="text-blue-500 mt-0.5">→</span> {r}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {expertReview?.error && (
+                        <p className="text-xs text-rose-500">{expertReview.error}</p>
+                      )}
                     </div>
                   )}
 
