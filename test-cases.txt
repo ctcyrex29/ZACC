@@ -1,0 +1,290 @@
+================================================================================
+                    ZACC TEST CASES — Example Reports
+================================================================================
+Submit these via the Report Form. Evidence files are up to you.
+Fields: Type | Institution | Location | Description
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 1 — Expected: CRITICAL priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Embezzlement
+Institution: Ministry of Finance and Economic Development
+Location:    Harare
+Description:
+The Permanent Secretary in the Ministry of Finance has been systematically
+diverting public funds allocated for rural development projects into personal
+offshore bank accounts held in Mauritius. Approximately USD $4.2 million has
+been embezzled over the past 18 months through fraudulent payment vouchers
+and ghost supplier invoices. Internal auditors flagged discrepancies but
+their reports were suppressed by the Director of Internal Audit who is
+allegedly complicit. Bank statements, payment records, and forged supplier
+contracts have been obtained as evidence. Multiple whistleblowers within the
+ministry corroborate the scheme.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 2 — Expected: CRITICAL priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Procurement Fraud
+Institution: Zimbabwe National Roads Administration (ZINARA)
+Location:    Bulawayo
+Description:
+A senior director at ZINARA awarded a $12 million road rehabilitation tender
+to a company owned by his brother-in-law without following competitive bidding
+procedures. The contract price is inflated by approximately 300% compared to
+market rates. The road in question — the Bulawayo-Nkayi highway — remains
+unrepaired 14 months after the contract was signed despite full advance payment
+being released. Documentary evidence includes the tender evaluation report
+showing manipulation of scoring criteria, bank transfer records, and company
+registration documents linking the director to the awarded firm. A cabinet
+minister reportedly intervened to fast-track the payment.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 3 — Expected: HIGH priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Abuse of Office
+Institution: Harare City Council
+Location:    Harare
+Description:
+The Town Clerk has been approving illegal land allocations in Budiriro and
+Glen Norah suburbs to politically connected individuals, bypassing the Urban
+Council's land committee. Over 200 residential stands have been allocated
+without proper planning approval, environmental impact assessments or payment
+of prescribed fees. Several councillors have received stands as inducements
+to keep quiet. The allocations violate the Regional Town and Country Planning
+Act. Affected residents have submitted complaints that were ignored. Meeting
+minutes and allocation letters have been obtained showing irregular approvals.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 4 — Expected: HIGH priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Bribery
+Institution: Zimbabwe Republic Police — Traffic Section
+Location:    Masvingo
+Description:
+Officers at the Masvingo Vehicle Inspection Depot are demanding bribes of
+USD $50–$200 from motorists to pass vehicles that would otherwise fail
+roadworthiness tests. This has been going on for at least two years. Vehicles
+with serious mechanical faults — including faulty brakes and missing
+seatbelts — are being certified as roadworthy after payment. This practice
+directly endangers public safety. Multiple motorists have come forward with
+audio recordings of officers soliciting bribes and mobile money transaction
+records showing payments to the officers' personal EcoCash numbers. The
+officer-in-charge is aware and takes a cut of the proceeds.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 5 — Expected: HIGH priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Embezzlement
+Institution: Grain Marketing Board (GMB)
+Location:    Mashonaland Central
+Description:
+The depot manager at GMB Bindura has been selling government-owned maize
+stocks to private buyers and pocketing the proceeds. An estimated 800 tonnes
+of strategic grain reserves worth USD $320,000 are unaccounted for over the
+past harvest season. Stock records have been falsified to show the grain was
+distributed to drought-relief beneficiaries, but the communities in question
+confirm they never received the supplies. Truck weighbridge logs at the depot
+contradict the official dispatch records. Three junior staff members witnessed
+the unauthorized sales and are willing to provide statements.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 6 — Expected: MEDIUM priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Nepotism
+Institution: National Social Security Authority (NSSA)
+Location:    Harare
+Description:
+The General Manager at NSSA has hired 15 members of his extended family into
+various positions within the organization over the past three years, including
+his wife as Head of Human Resources, his nephew as IT Manager, and several
+cousins in mid-level administrative roles. None of these individuals went
+through proper recruitment processes and several lack the minimum
+qualifications for their positions. Staff morale is extremely low and
+qualified internal candidates were passed over for promotions. HR records and
+organograms showing the family connections have been compiled by concerned
+employees.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 7 — Expected: MEDIUM priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Abuse of Office
+Institution: District Development Fund (DDF)
+Location:    Matabeleland South
+Description:
+The Provincial Administrator has been commandeering DDF equipment — graders,
+water bowsers, and tractors — for use on his private farm in Gwanda district.
+Government vehicles meant for community borehole drilling are regularly
+diverted to service the farm. Fuel allocated for public projects is consumed
+by these private activities. Community water projects in Beitbridge and
+Mangwe districts are months behind schedule as a direct result. DDF workshop
+logbooks and fuel consumption records show unexplained usage spikes that
+coincide with the farming season.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 8 — Expected: MEDIUM priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Procurement Fraud
+Institution: Midlands State University
+Location:    Midlands
+Description:
+The university's procurement department has been consistently awarding
+catering and stationery supply contracts to a single company without open
+tender. The company, registered only six months before winning its first
+contract, charges prices roughly 40% above market value. Over the past two
+academic years the university has paid this supplier approximately USD
+$890,000. The company's registered address is a residential property in
+Gweru. Purchase orders, invoices, and the company's registration documents
+have been gathered by a concerned staff member.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 9 — Expected: LOW priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Other
+Institution: Mutare City Council — Parks Department
+Location:    Manicaland
+Description:
+A parks supervisor has been using council lawnmowers and gardening equipment
+to do private landscaping jobs on weekends and charging customers personally.
+Council fuel is also being used for these side jobs. The total value involved
+is relatively small — perhaps a few hundred dollars over several months —
+but it represents a misuse of public resources. Neighbours of the supervisor
+have witnessed the equipment being loaded onto a council truck on Saturday
+mornings and can provide statements.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 10 — Expected: LOW priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Other
+Institution: Chipinge Rural District Council
+Location:    Manicaland
+Description:
+A clerk at the council office has been charging residents unofficial
+"processing fees" of USD $5–$10 for services that should be free, such as
+issuing certified copies of birth records and confirming residential
+addresses. The amounts are small but the practice affects vulnerable
+community members who cannot afford extra costs. Several residents have
+complained verbally but no written records of the complaints exist yet. The
+clerk has been doing this for approximately six months.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 11 — Expected: CRITICAL priority
+────────────────────────────────────────────────────────────────────────────────
+Type:        Bribery
+Institution: Zimbabwe Anti-Corruption Commission (ZACC)
+Location:    Harare
+Description:
+A Commissioner at ZACC itself has allegedly been accepting bribes from
+individuals under investigation to ensure their cases are either dropped
+or indefinitely delayed. At least three high-profile investigations into
+senior government officials have been stalled after payments of between
+USD $20,000 and $50,000 were reportedly made through intermediaries. A
+former ZACC investigator who resigned in protest has provided a detailed
+sworn affidavit naming the Commissioner, the intermediaries, and the
+suspects whose cases were shelved. Mobile money records and meeting
+photographs corroborate the allegations. This represents corruption at
+the highest level of the very institution mandated to fight it.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 12 — Expected: CRITICAL priority (Shona language test)
+────────────────────────────────────────────────────────────────────────────────
+Type:        Embezzlement
+Institution: Ministry of Health and Child Care
+Location:    Mashonaland East
+Description:
+Mudzimu wekuMinistry of Health akaba mari yezvibhedha zvechipatara
+cheMarondera Provincial Hospital. USD $1.8 million yaifanira kuitiswa
+kuti zvibhedha zviwanikwe uye mishonga ibve itengerwa varwere, asi mari
+yacho haina kusvika. Mukuru weMinistry — Director of Provincial Health
+Services — akasaina mavhaucha ekubhadhara kune makambani asipo. Bank
+statements dzinoratidza mari yakaenda kumaakhaunti ake ari maviri
+nemaakhaunti emhuri yake. Varwere vari kurara pasi muchipatara uye
+mishonga haiwanikwe. Manesi nevashandi vechipatara vanogona kutaura
+zvavakaona. Izvi zviri kukuvadza vanhu varombo vari kufa nekuda kwehuori.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 13 — Expected: HIGH priority (Ndebele language test)
+────────────────────────────────────────────────────────────────────────────────
+Type:        Procurement Fraud
+Institution: Bulawayo City Council — Water Department
+Location:    Bulawayo
+Description:
+Umkhokheli ophezulu eBulawayo City Council Water Department uthenge
+amapayipi amanzi ngentengo ephezulu kakhulu enkampanini engekho enye
+ngaphandle kwaleyo yakhe. Isivumelwano se-tender sasingavulwanga
+emphakathini njengomthetho. Intengo yayiphezulu nge-200% ukwedlula
+intengo yezimakethe. Imali engaba yi-USD $500,000 isebenzisiwe
+ngonyaka edlulileyo kodwa amapayipi amanzi amanengi awakafikanga.
+Amarekhodi e-procurement kanye lezincwadi ze-tender zikhona njengobufakazi.
+Abantu baseBulawayo abalamthombo wamanzi ngenxa yalokhu.
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 14 — Expected: HIGH priority (Anonymous submission test)
+────────────────────────────────────────────────────────────────────────────────
+Type:        Abuse of Office
+Institution: Zimbabwe Electoral Commission (ZEC)
+Location:    Mashonaland West
+Description:
+A senior ZEC official in Chinhoyi has been using voter registration data to
+identify and intimidate opposition supporters before by-elections. Voter
+roll information — including home addresses and ID numbers — has been
+shared with political party operatives who then visit these individuals to
+threaten them. Multiple voters in Chinhoyi and Karoi have reported receiving
+threatening visits days after registering. The official also diverted
+election materials and funding meant for voter education campaigns in rural
+wards. I am submitting this anonymously because I fear for my safety as a
+ZEC employee.
+
+** Submit this one with "Submit Anonymously" checked **
+
+
+────────────────────────────────────────────────────────────────────────────────
+CASE 15 — Expected: MEDIUM priority (Minimal detail test)
+────────────────────────────────────────────────────────────────────────────────
+Type:        Bribery
+Institution: Immigration Department
+Location:    Harare
+Description:
+Officials at Makombe Building are asking for bribes to process passport
+applications faster. People are being told to pay between USD $100 and $300
+on top of the official fee to get their passports within two weeks instead
+of the usual three-month wait. This has been happening for a long time and
+everyone in the queue knows about it. I do not have documents but I
+personally experienced this last month.
+
+
+================================================================================
+                         TESTING NOTES
+================================================================================
+
+Priority expectations are based on the expert system scoring:
+  - CRITICAL (76-100): Senior officials + large amounts + strong evidence
+  - HIGH (51-75): Significant corruption + some evidence/officials
+  - MEDIUM (26-50): Moderate cases + limited evidence
+  - LOW (0-25): Minor cases with minimal detail
+
+Things to verify for each case:
+  1. Case is submitted successfully and assigned a case ID
+  2. Priority and risk score match the expected range
+  3. Pre-review findings report loads when opening the case dossier
+  4. Evidence scan works after uploading attachments
+  5. Cases sort correctly by priority/risk in the investigator view
+  6. Stage advancement triggers expert evaluation
+  7. Cases 12-13 test multilingual keyword detection (Shona/Ndebele)
+  8. Case 14 tests anonymous submission flow
+
+================================================================================
