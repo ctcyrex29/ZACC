@@ -179,12 +179,15 @@ class ExpertEvaluationService
             'attorney general', 'chief justice', 'governor', 'mayor',
             'managing director', 'board chairman', 'deputy minister',
             'inspector general', 'auditor general', 'speaker of parliament',
-            'senator', 'member of parliament',
+            'senator', 'member of parliament', 'director', 'town clerk',
+            'general manager', 'chief executive', 'provincial administrator',
+            'officer-in-charge', 'depot manager', 'head of',
             // Shona
             'mutungamiriri', 'mukuru wehurumende', 'gweta rehurumende',
-            'mutongi mukuru', 'gavhuna', 'meya',
+            'mutongi mukuru', 'gavhuna', 'meya', 'mukuru we',
             // Ndebele
             'umongameli', 'undunankulu', 'ungqongqoshe', 'imeya',
+            'umkhokheli', 'umphathi',
         ];
         foreach ($seniorOfficials as $kw) {
             if (str_contains($text, $kw)) {
@@ -198,6 +201,46 @@ class ExpertEvaluationService
         foreach (self::WEIGHTS as $dim => $weight) {
             $composite += ($dimensions[$dim]['score'] ?? 0) * $weight;
         }
+
+        // ── Senior official involvement boosts score (not just a flag) ──
+        foreach ($seniorOfficials as $kw) {
+            if (str_contains($text, $kw)) {
+                $composite += 15;
+                break;
+            }
+        }
+
+        // ── Large financial amounts boost ──
+        if (preg_match('/(?:\$|us\$|usd)\s*[\d,.]+\s*(?:million|billion)/i', $text)) {
+            $composite += 12;
+        } elseif (preg_match('/million|billion|miriyoni|bhiriyoni|isigidi/i', $text)) {
+            $composite += 8;
+        }
+
+        // ── Severity floor — high-severity cases can't score too low ──
+        $severityScore = $dimensions['severity']['score'] ?? 0;
+        if ($severityScore >= 80) {
+            $composite = max($composite, 55);
+        } elseif ($severityScore >= 60) {
+            $composite = max($composite, 40);
+        }
+
+        // ── Multi-flag bonus — compounding red flags amplify risk ──
+        $flagCount = count(array_unique($flags));
+        if ($flagCount >= 5) $composite += 15;
+        elseif ($flagCount >= 4) $composite += 12;
+        elseif ($flagCount >= 3) $composite += 8;
+        elseif ($flagCount >= 2) $composite += 5;
+
+        // ── Peak dimensions bonus — multiple strong dimensions compound ──
+        $strongDimCount = 0;
+        foreach ($dimensions as $dim) {
+            if (($dim['score'] ?? 0) >= 50) $strongDimCount++;
+        }
+        if ($strongDimCount >= 4) $composite += 12;
+        elseif ($strongDimCount >= 3) $composite += 8;
+        elseif ($strongDimCount >= 2) $composite += 4;
+
         $composite = (int) round(min(100, max(0, $composite)));
 
         return [
@@ -245,12 +288,34 @@ class ExpertEvaluationService
             'siphon' => 10, 'collusion' => 10, 'conspiracy' => 10,
             'intimidat' => 14, 'threaten' => 12, 'violence' => 15,
             'extort' => 12, 'coercion' => 10, 'plunder' => 10,
-            'fictitious' => 10, 'falsified' => 10,
-            // Shona
-            'kuba mari' => 10, 'kushungurudza' => 12, 'kushandisa simba' => 10,
-            'kupamba' => 10,
-            // Ndebele
+            'fictitious' => 10, 'falsified' => 10, 'fabricat' => 10,
+            'divert' => 8, 'misappropriat' => 12, 'kickback' => 10,
+            'bid-rig' => 12, 'overpricing' => 10, 'inflated' => 8,
+            'ghost' => 10, 'misuse' => 6, 'stolen' => 8,
+            // Shona (root forms match conjugated verbs: akaba, vakuba, etc.)
+            'huori' => 10, 'uori' => 8,                   // corruption
+            'kuba mari' => 10, 'akab' => 8,                // stole (matches akaba, akabira)
+            'kushungurudza' => 12, 'kushandisa simba' => 10,
+            'kupamba' => 10, 'kubir' => 8,                 // steal from
+            'kunyep' => 8,                                  // lie/fabricate
+            'makambani asipo' => 14, 'asipo' => 6,         // ghost companies
+            'kushandiswa kwemari' => 10,                    // misuse of funds
+            'kutora mari' => 10,                            // taking money
+            'furira' => 7, 'chiokomuhomwe' => 10,          // bribe/kickback
+            'kupamba mari' => 12,                           // embezzle money
+            'kunzvenga mutemo' => 10,                       // evade the law
+            'kuvhara maziso' => 8,                          // cover up
+            'mhosva' => 6,                                  // crime
+            // Ndebele (root forms)
             'ukuphanga' => 10, 'ukwesabisa' => 12, 'ukudla imali' => 10,
+            'inkohlakalo' => 10, 'ukukhwabanisa' => 10,    // corruption/fraud
+            'ukuqilibezela' => 10, 'intshontshela' => 10,  // deceive/theft
+            'ukufumbathisa' => 8, 'umkhonyovu' => 10,      // bribe/fraud
+            'ukuthungela' => 8,                             // conspire
+            // Tonga
+            'bumpelenge' => 10, 'bubi' => 6,               // corruption/evil
+            'kwiiba' => 8, 'kupelengesa' => 8,             // steal/defraud
+            'rushwa' => 10,                                 // bribery
         ];
         $amp = 0;
         foreach ($crimeAmplifiers as $kw => $pts) {
@@ -277,7 +342,23 @@ class ExpertEvaluationService
             'invoice' => 8, 'contract copy' => 8, 'payslip' => 8,
             'voucher' => 7, 'document' => 6, 'email' => 7, 'screenshot' => 7,
             'photo' => 6, 'letter' => 5, 'witness' => 8, 'minutes' => 6,
-            'proof' => 4, 'evidence' => 3,
+            'proof' => 4, 'evidence' => 3, 'sworn statement' => 10,
+            'logbook' => 7, 'weighbridge' => 8, 'log' => 4,
+            'mobile money' => 8, 'ecocash' => 8, 'transaction record' => 10,
+            'company registration' => 8, 'tender document' => 9,
+            'allocation letter' => 8, 'organogram' => 7,
+            'bank transfer' => 10, 'payment record' => 9,
+            // Shona
+            'mavhaucha' => 7, 'zvinyorwa' => 6, 'umboo' => 8,
+            'uchapupu' => 8, 'matsamba' => 5, 'bhuku' => 5,
+            'zvakanyorwa' => 6, 'rekodhi' => 6, 'chipupu' => 7,
+            'kutaura zvavakaona' => 8,                      // testify to what they saw
+            'vanogona kutaura' => 8,                        // can testify
+            'manesi' => 5,                                  // nurses (as witnesses)
+            'vashandi' => 5,                                // workers (as witnesses)
+            // Ndebele
+            'ubufakazi' => 8, 'amarekhodi' => 7, 'izincwadi' => 5,
+            'amabhuku' => 5, 'izitatimende' => 7, 'ofakazi' => 8,
         ];
         foreach ($evidenceKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
@@ -341,14 +422,22 @@ class ExpertEvaluationService
             'fleeing' => 22, 'leaving the country' => 25, 'destroy' => 15,
             'shred' => 18, 'delete' => 12, 'transfer assets' => 20,
             'tender closing' => 15, 'before it' => 10,
+            'has been going on' => 14, 'for years' => 12, 'for months' => 10,
+            'for at least' => 10, 'continues' => 8, 'every day' => 12,
+            'endanger' => 15, 'endangers' => 15, 'at risk' => 10,
+            'still happening' => 15, 'unresolved' => 8, 'cover up' => 12,
             // Shona
             'zviri kuitika' => 18, 'nhasi' => 12, 'pari zvino' => 15,
-            'nekukurumidza' => 15, 'kutiza' => 22,
-            'uchapupu hunogona kuparadzwa' => 25,
+            'nekukurumidza' => 15, 'kutiza' => 22, 'ichiri kuitika' => 15,
+            'uchapupu hunogona kuparadzwa' => 25, 'kwenguva refu' => 10,
+            'hazvina kugadziriswa' => 8,                    // unresolved
             // Ndebele
             'kuyenzeka' => 18, 'lamuhla' => 12, 'khathesi' => 15,
-            'ngokuphangisa' => 15, 'ukubaleka' => 22,
-            'ubufakazi bungalahlwa' => 25,
+            'ngokuphangisa' => 15, 'ukubaleka' => 22, 'kusenzeka' => 15,
+            'ubufakazi bungalahlwa' => 25, 'isikhathi eside' => 10,
+            // Tonga
+            'cicitika' => 18, 'sunu' => 12, 'lino' => 10,
+            'cakufwambaana' => 15,
         ];
         foreach ($urgencyKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
@@ -376,14 +465,34 @@ class ExpertEvaluationService
             'community' => 8, 'residents' => 8, 'village' => 6,
             'infrastructure' => 8, 'road' => 6, 'bridge' => 6,
             'dam' => 8, 'hospital' => 10, 'school' => 8,
-            // Shona
-            'hutano hweveruzhinji' => 15, 'mvura' => 14, 'mushonga' => 14,
+            'public safety' => 15, 'endanger' => 12, 'motorist' => 8,
+            'road safety' => 12, 'accident' => 10, 'taxpayer' => 8,
+            'public funds' => 10, 'rural development' => 8,
+            'drought' => 10, 'grain' => 8, 'maize' => 8,
+            'borehole' => 8, 'water project' => 10,
+            // Shona (singular + plural forms)
+            'hutano hweveruzhinji' => 15, 'mvura' => 14,
+            'mushonga' => 14, 'mishonga' => 14,        // medicine sg/pl
+            'chipatara' => 12,                          // hospital
             'vana' => 10, 'varwere' => 12, 'nherera' => 14,
-            'rufu' => 20, 'vakafa' => 18, 'nzara' => 14,
+            'rufu' => 20, 'vakafa' => 18, 'kufa' => 16, // kufa matches "vari kufa"
+            'nzara' => 14, 'vanhu varombo' => 10,       // poor people
+            'manesi' => 6,                              // nurses
+            'kukuvadza' => 10,                           // harming
+            'mari yechikoro' => 8, 'penisheni' => 10,   // school fees, pension
+            'mushahara' => 7, 'musha' => 6,             // salary, village
+            'nharaunda' => 6,                           // community
             // Ndebele
-            'impilakahle' => 15, 'amanzi' => 14, 'umuthi' => 14,
+            'impilakahle' => 15, 'amanzi' => 14,
+            'umuthi' => 14, 'imithi' => 14,             // medicine sg/pl
+            'isibhedlela' => 12,                        // hospital
             'abantwana' => 10, 'izigulane' => 12, 'izintandane' => 14,
             'ukufa' => 20, 'indlala' => 14,
+            'abantu' => 6, 'umphakathi' => 8,           // people, community
+            'imali yesikolo' => 8, 'umpensheni' => 10,  // school fees, pension
+            // Tonga
+            'buumi bwabantu' => 12, 'maanzi' => 10, 'musamu' => 10,
+            'bana' => 8, 'lufu' => 20, 'nzala' => 14,  // children, death, hunger
         ];
         foreach ($impactKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
@@ -444,6 +553,22 @@ class ExpertEvaluationService
             $factors[] = "{$nameCount} possible named individual(s)";
         }
 
+        // Named titles/roles (Director, Manager, etc. with context)
+        $titleMatches = 0;
+        if (preg_match_all('/\b(?:Director|Manager|Secretary|Commissioner|Minister|Officer|Inspector|Chief|Head|Clerk)\b/i', $description, $m)) {
+            $titleMatches = min(count($m[0]), 3);
+        }
+        if ($titleMatches > 0) {
+            $score += $titleMatches * 4;
+            $factors[] = "{$titleMatches} institutional title(s) referenced — specificity";
+        }
+
+        // Time duration specificity (e.g. "18 months", "two years", "6 months")
+        if (preg_match('/\b\d+\s*(?:month|year|week|day)s?\b/i', $text)) {
+            $score += 8;
+            $factors[] = 'Specific time duration mentioned';
+        }
+
         // Authenticated reporter bonus
         if ($report->user_id) {
             $score += 10;
@@ -466,9 +591,14 @@ class ExpertEvaluationService
             'cartel' => 20, 'systematic' => 15, 'organised' => 15,
             'organized' => 15, 'widespread' => 15, 'large scale' => 15,
             'network' => 10, 'ring' => 10, 'scheme' => 8,
-            // Shona/Ndebele
-            'bhiriyoni' => 35, 'miriyoni' => 25, 'izigidigidi' => 35,
-            'isigidi' => 25, 'kwakawanda' => 15,
+            // Shona
+            'bhiriyoni' => 35, 'miriyoni' => 25, 'kwakawanda' => 15,
+            'zhinji' => 10, 'hombe' => 8,
+            // Ndebele
+            'izigidigidi' => 35, 'isigidi' => 25, 'okukhulu' => 15,
+            'okubanzi' => 12,
+            // Tonga
+            'zyuulu zyuulu' => 25, 'cipimo cipati' => 15,
         ];
         foreach ($scaleKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
@@ -503,6 +633,17 @@ class ExpertEvaluationService
             'tender rigging' => 12, 'bid-rigging' => 12, 'procurement' => 8,
             'forensic' => 8, 'several departments' => 10, 'multiple ministries' => 12,
             'foreign' => 8, 'wire transfer' => 10,
+            'ghost' => 8, 'inflated' => 8, 'overpricing' => 10,
+            'account' => 5, 'bank account' => 8, 'transfer' => 6,
+            // Shona
+            'makambani' => 10, 'maakhaunti' => 10,     // companies/accounts
+            'mavhaucha' => 8,                           // vouchers (document fraud)
+            'kurongedzwa' => 10,                        // organized/systematic
+            'nyika dzimwe' => 12,                       // other countries
+            // Ndebele
+            'inkampani' => 8, 'ama-akhawunti' => 10,   // companies/accounts
+            'okuhlelelweyo' => 10,                      // organized
+            'amazwe angaphandle' => 12,                 // foreign countries
         ];
         foreach ($complexityKeywords as $kw => $pts) {
             if (str_contains($text, $kw)) {
@@ -709,6 +850,13 @@ class ExpertEvaluationService
                 'awarded', 'contract', 'paid', 'million', 'billion', 'amount', 'fund',
                 'received', 'transferred', 'witnessed', 'document', 'evidence',
                 'inflated', 'overpriced', 'siphon', 'ghost', 'fictitious',
+                'allocated', 'approved', 'hired', 'appointed', 'demanding',
+                'charging', 'recorded', 'photographed', 'confirmed',
+                // Shona
+                'akab', 'mari', 'mavhaucha', 'akasaina', 'huori', 'kupamba',
+                'kunyep', 'makambani', 'varwere', 'vakafa',
+                // Ndebele
+                'imali', 'ithenda', 'inkohlakalo', 'amarekhodi',
             ];
 
             foreach ($claimIndicators as $indicator) {
@@ -737,17 +885,18 @@ class ExpertEvaluationService
     {
         $indicators = [];
         $patterns = [
-            'Bribery / Kickbacks'        => ['bribe', 'kickback', 'chiokomuhomwe', 'ukufumbathisa'],
-            'Embezzlement'               => ['embezzle', 'siphon', 'divert funds', 'kuba mari', 'ukudla imali'],
-            'Procurement Fraud'          => ['tender', 'bid-rig', 'overpricing', 'inflated', 'phantom'],
-            'Ghost Workers'              => ['ghost worker', 'phantom employee', 'fictitious'],
+            'Bribery / Kickbacks'        => ['bribe', 'kickback', 'chiokomuhomwe', 'ukufumbathisa', 'furira', 'rushwa'],
+            'Embezzlement'               => ['embezzle', 'siphon', 'divert funds', 'kuba mari', 'akab', 'ukudla imali', 'kupamba mari', 'kutora mari'],
+            'Procurement Fraud'          => ['tender', 'bid-rig', 'overpricing', 'inflated', 'phantom', 'ithenda', 'tenda'],
+            'Ghost Workers / Companies'  => ['ghost worker', 'phantom employee', 'fictitious', 'ghost', 'asipo', 'makambani asipo'],
             'Money Laundering'           => ['launder', 'shell company', 'offshore', 'front company'],
-            'Abuse of Office'            => ['abuse of office', 'cushandisa simba', 'ukusebenzisa amandla'],
-            'Nepotism / Favoritism'      => ['nepotism', 'relative', 'family member', 'connected'],
-            'Forgery / Falsification'    => ['forge', 'falsif', 'fake document', 'fabricat'],
-            'Intimidation / Threats'     => ['intimidat', 'threaten', 'violence', 'coercion'],
-            'Collusion / Conspiracy'     => ['collusion', 'conspiracy', 'collude', 'syndicate', 'cartel'],
-            'Conflict of Interest'       => ['conflict of interest', 'dual role', 'self-dealing'],
+            'Abuse of Office'            => ['abuse of office', 'kushandisa simba', 'ukusebenzisa amandla', 'misuse'],
+            'Nepotism / Favoritism'      => ['nepotism', 'relative', 'family member', 'connected', 'hired', 'appointment'],
+            'Forgery / Falsification'    => ['forge', 'falsif', 'fake document', 'fabricat', 'kunyep'],
+            'Intimidation / Threats'     => ['intimidat', 'threaten', 'violence', 'coercion', 'kushungurudza', 'ukwesabisa'],
+            'Collusion / Conspiracy'     => ['collusion', 'conspiracy', 'collude', 'syndicate', 'cartel', 'ukuthungela'],
+            'Conflict of Interest'       => ['conflict of interest', 'dual role', 'self-dealing', 'brother-in-law', 'brother', 'spouse', 'wife', 'husband'],
+            'Misappropriation of Resources' => ['misappropriat', 'divert', 'commandeer', 'private use', 'personal use', 'kupamba'],
         ];
 
         foreach ($patterns as $label => $keywords) {

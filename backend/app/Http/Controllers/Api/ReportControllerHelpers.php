@@ -477,6 +477,12 @@ PROMPT;
             'kutengesa zvakavanzika' => 10, 'kushandisa simba' => 10,
             'kubira' => 8, 'kupamba' => 10, 'kunyima' => 6,
             'kuvhara maziso' => 8, 'kunzvenga mutemo' => 8,
+            // Shona verb root forms (match conjugated: akaba, vakuba, etc.)
+            'huori' => 10, 'akab' => 8, 'kupamba mari' => 10,
+            'kunyep' => 7, 'kubir' => 7,
+            'makambani asipo' => 12, 'asipo' => 5,         // ghost companies
+            'kushandiswa kwemari' => 9, 'kutora mari' => 9,
+            'kukuvadza' => 8,                               // harming
             // Ndebele crime keywords
             'ukweba' => 8, 'ubugebengu' => 8, 'umkhonyovu' => 8,
             'intshontshela' => 10, 'ukuqilibezela' => 8, 'ukutshontsha' => 8,
@@ -508,6 +514,14 @@ PROMPT;
             'letter' => 4, 'contract copy' => 7, 'affidavit' => 8,
             'payslip' => 6, 'voucher' => 6, 'minutes' => 5,
             'cctv' => 8, 'forensic' => 9,
+            'mobile money' => 7, 'ecocash' => 7, 'logbook' => 6,
+            'bank transfer' => 7, 'payment record' => 7,
+            'transaction' => 5, 'weighbridge' => 7,
+            // Shona
+            'mavhaucha' => 6, 'uchapupu' => 7, 'zvinyorwa' => 5,
+            'vanogona kutaura' => 7, 'amarekhodi' => 6,
+            // Ndebele
+            'ubufakazi' => 7, 'izincwadi' => 5, 'ofakazi' => 7,
         ];
         $evidenceBonus = 0;
         foreach ($evidenceKeywords as $kw => $pts) {
@@ -575,6 +589,10 @@ PROMPT;
             'deaths' => 15, 'died' => 12, 'injuries' => 10,
             'hunger' => 10, 'starvation' => 12,
             'infrastructure' => 8, 'road' => 6, 'bridge' => 6, 'dam' => 8,
+            'public safety' => 14, 'endanger' => 12, 'motorist' => 8,
+            'road safety' => 12, 'accident' => 10, 'taxpayer' => 8,
+            'public funds' => 10, 'drought' => 10, 'grain' => 8,
+            'borehole' => 8, 'water project' => 10,
             // Shona
             'hutano hweveruzhinji' => 12, 'mvura' => 10, 'chikafu' => 10,
             'mushonga' => 10, 'vana' => 8, 'mari yechikoro' => 8,
@@ -582,6 +600,9 @@ PROMPT;
             'musha' => 6, 'varwere' => 10, 'nherera' => 10,
             'vakwegura' => 8, 'rufu' => 15, 'vakafa' => 12,
             'kukuvara' => 10, 'nzara' => 10, 'mugwagwa' => 6,
+            'mishonga' => 10, 'mushonga' => 10,             // medicines sg/pl
+            'chipatara' => 8, 'kufa' => 12,                 // hospital, to die
+            'vanhu varombo' => 8,                            // poor people
             // Ndebele
             'impilakahle' => 12, 'amanzi' => 10, 'ukudla' => 10,
             'umuthi' => 10, 'abantwana' => 8, 'imali yesikolo' => 8,
