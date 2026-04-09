@@ -80,6 +80,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ai/pre-review-analysis/{id}', [AIController::class, 'preReviewAnalysis'])->where('id', '[A-Za-z0-9-]+');
     Route::post('/ai/pre-submission-suggestions', [AIController::class, 'preSubmissionSuggestions']);
 
+    // Admin: recalculate all report priorities using latest expert system
+    Route::post('/reports/recalculate-priorities', [ReportController::class, 'recalculatePriorities']);
+
     // User management routes (admin only)
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

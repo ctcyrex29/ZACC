@@ -284,16 +284,165 @@ PROMPT;
     }
 
     /**
-     * Expert system: automatically determines case priority from report attributes.
+     * Raw expert score from the last determineExpertPriority() call.
+     * Used by calculateRiskScore() for proportional risk assessment.
+     */
+    protected int $lastExpertRawScore = 0;
+
+    /**
+     * Extract readable text from a report's uploaded attachments.
+     * Reads .txt, .csv, .json, .md, .log and similar text files.
+     * For binary files (images, PDFs) returns filenames & metadata only.
+     * @return string Combined text content for keyword analysis.
+     */
+    protected function extractTextFromAttachments(Report $report): string
+    {
+        $report->loadMissing('attachments');
+        $fileText = '';
+        $readableTypes = [
+            'text/plain', 'text/csv', 'application/json', 'text/html',
+            'application/xml', 'text/xml', 'text/markdown',
+        ];
+        $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
+
+        foreach ($report->attachments as $attachment) {
+            $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+            $readable = in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts);
+
+            if ($readable && $attachment->size < 200000) {
+                try {
+                    $content = \Illuminate\Support\Facades\Storage::disk($attachment->disk ?? 'private')
+                        ->get($attachment->file_name);
+                    if ($content) {
+                        $fileText .= ' ' . mb_substr($content, 0, 10000);
+                    }
+                } catch (\Exception $e) {
+                    // Skip unreadable files
+                }
+            }
+            // Always contribute file metadata so file count/type is considered
+            $fileText .= ' file:' . strtolower($attachment->original_name ?? '');
+        }
+
+        return $fileText;
+    }
+
+    /**
+     * Score bonus based on number & types of attached files (0-15).
+     */
+    protected function scoreAttachmentBonus(Report $report): int
+    {
+        $report->loadMissing('attachments');
+        $count = $report->attachments->count();
+        if ($count === 0) return 0;
+
+        $bonus = 0;
+
+        // Number of files
+        if ($count >= 5) $bonus += 8;
+        elseif ($count >= 3) $bonus += 5;
+        elseif ($count >= 1) $bonus += 2;
+
+        // High-value file types
+        foreach ($report->attachments as $att) {
+            $mime = strtolower($att->mime_type ?? '');
+            if (str_contains($mime, 'pdf'))   { $bonus += 2; continue; }
+            if (str_contains($mime, 'video')) { $bonus += 3; continue; }
+            if (str_contains($mime, 'audio')) { $bonus += 3; continue; }
+            if (str_contains($mime, 'image')) { $bonus += 1; continue; }
+        }
+
+        return min($bonus, 15);
+    }
+
+    /**
+     * Recalculate priority & risk_score for an existing report.
+     * Decrypts the stored description, combines with file contents,
+     * re-runs the expert system, and persists the updated scores.
+     * Returns true if the priority/risk changed.
+     */
+    public function recalculateReportPriority(Report $report): bool
+    {
+        $report->loadMissing('attachments');
+
+        // Decrypt the description for analysis
+        $decrypted = [];
+        if ($report->is_encrypted && $report->encrypted_data) {
+            try {
+                $raw = \Illuminate\Support\Facades\Crypt::decryptString($report->encrypted_data);
+                $decrypted = json_decode($raw, true) ?? [];
+            } catch (\Exception $e) {
+                Log::warning('Decryption failed during recalculation', ['case_id' => $report->case_id]);
+            }
+        }
+        $description = $decrypted['description'] ?? $report->description ?? '';
+        $institution = $decrypted['institution'] ?? $report->institution ?? '';
+        $location    = $decrypted['location']    ?? $report->location ?? '';
+
+        // Extract text from attached files
+        $fileText = $this->extractTextFromAttachments($report);
+
+        // Build combined data payload for the expert system
+        $data = [
+            'type'        => $report->type,
+            'description' => $description . ' ' . $fileText,
+            'institution' => $institution,
+            'location'    => $location,
+        ];
+
+        $oldPriority  = $report->priority;
+        $oldRisk      = $report->risk_score;
+
+        // Run expert scoring on combined text
+        $newPriority = $this->determineExpertPriority($data);
+
+        // Add attachment bonus to the raw score
+        $attachmentBonus = $this->scoreAttachmentBonus($report);
+        $adjustedScore = $this->lastExpertRawScore + $attachmentBonus;
+
+        // Re-derive priority from the adjusted score
+        if ($adjustedScore >= 80) $newPriority = 'CRITICAL';
+        elseif ($adjustedScore >= 51) $newPriority = 'HIGH';
+        elseif ($adjustedScore >= 26) $newPriority = 'MEDIUM';
+        else $newPriority = 'LOW';
+
+        $newRisk = $this->calculateRiskScore(array_merge($data, ['priority' => $newPriority]));
+
+        $changed = ($newPriority !== $oldPriority || $newRisk !== $oldRisk);
+
+        $report->priority   = $newPriority;
+        $report->risk_score = $newRisk;
+        $report->save();
+
+        if ($changed) {
+            Log::info('Report priority recalculated', [
+                'case_id'      => $report->case_id,
+                'old_priority' => $oldPriority,
+                'new_priority' => $newPriority,
+                'old_risk'     => $oldRisk,
+                'new_risk'     => $newRisk,
+                'raw_score'    => $this->lastExpertRawScore,
+                'file_bonus'   => $attachmentBonus,
+                'adjusted'     => $adjustedScore,
+            ]);
+        }
+
+        return $changed;
+    }
+
+    /**
+     * Expert system: determines case priority via calibrated multi-factor analysis.
      *
-     * Uses multi-factor analysis across 12 dimensions: corruption type severity,
-     * senior official involvement, financial scale, numeric amount detection,
-     * government institution involvement, crime severity keywords, evidence quality,
-     * temporal specificity, description quality, urgency, victim/public impact,
-     * and cross-factor amplification.
+     * The scoring is tuned so that:
+     *   CRITICAL (≥80): Senior national officials + large financial amounts + strong evidence
+     *   HIGH     (51-79): Significant corruption + moderate evidence/officials
+     *   MEDIUM   (26-50): Moderate cases + limited evidence
+     *   LOW      (<26):  Minor cases with minimal detail or impact
      *
-     * Both authenticated and anonymous report flows share this single implementation
-     * to ensure consistent, fair priority assignment.
+     * Key design: financial magnitudes are parsed from the text (not just keyword
+     * presence), so $5 bribes aren't scored the same as $4 million embezzlement.
+     * Government institution keywords are down-weighted because nearly every case
+     * involves a public body.
      */
     protected function determineExpertPriority(array $data): string
     {
@@ -304,16 +453,17 @@ PROMPT;
         $text = strtolower($description . ' ' . $institution . ' ' . $location);
 
         $score = 0;
-        $factorHits = 0; // track how many distinct factor groups fire
+        $factorHits = 0;
 
-        // ── Factor 1: Corruption Type Severity ──
+        // ── Factor 1: Corruption Type Severity (0-15) ──
         $typeScores = [
-            'embezzlement'      => 40,
-            'procurement fraud' => 35,
-            'abuse of office'   => 25,
-            'bribery'           => 20,
-            'nepotism'          => 12,
-            'other'             => 8,
+            'embezzlement'      => 15,
+            'procurement fraud' => 12,
+            'bribery'           => 12,
+            'abuse of office'   => 10,
+            'abuse'             => 10,
+            'nepotism'          => 5,
+            'other'             => 2,
         ];
         foreach ($typeScores as $t => $pts) {
             if (str_contains($type, $t)) {
@@ -323,349 +473,369 @@ PROMPT;
             }
         }
 
-        // ── Factor 2: High-value targets / senior officials (English + Shona + Ndebele + Tonga) ──
-        $seniorOfficials = [
-            // English
+        // ── Factor 2: Senior Officials — Tiered (0-35) ──
+        // Tier 1 = national-level (first match 25, additional +5)
+        // Tier 2 = regional/institutional (first match 12, additional +5)
+        $tier1Officials = [
             'president', 'vice president', 'prime minister', 'minister',
             'permanent secretary', 'director general', 'commissioner',
-            'attorney general', 'chief justice', 'governor', 'mayor',
-            'secretary', 'chief executive', 'managing director',
-            'board chairman', 'deputy minister', 'ambassador', 'consul',
-            'speaker of parliament', 'senator', 'member of parliament',
-            'provincial governor', 'town clerk', 'city council chairman',
-            'commandant', 'inspector general', 'auditor general',
-            // Shona
+            'attorney general', 'chief justice', 'auditor general',
+            'inspector general', 'speaker of parliament',
+            // Shona T1
             'mutungamiriri', 'mukuru wehurumende', 'gweta rehurumende',
-            'mutongi mukuru', 'gavhuna', 'meya', 'nhengo yeparamende',
-            'mumiririri', 'mukuru wemutemo',
-            // Ndebele
+            'mutongi mukuru',
+            // Ndebele T1
             'umongameli', 'undunankulu', 'ungqongqoshe',
+        ];
+        $tier2Officials = [
+            'governor', 'provincial governor', 'town clerk', 'mayor',
+            'director', 'general manager', 'managing director',
+            'chief executive', 'board chairman', 'provincial administrator',
+            'deputy minister', 'ambassador', 'member of parliament',
+            'senator', 'deputy director', 'commandant', 'consul',
+            'city council chairman', 'secretary', 'councillor',
+            // Shona T2
+            'gavhuna', 'meya', 'nhengo yeparamende', 'mumiririri',
+            'mukuru wemutemo', 'mukuru',
+            // Ndebele T2
             'umphathiswa', 'imeya', 'ilungu lephalamende',
-            'umgcinimafa', 'umbusi',
-            // Tonga
+            'umgcinimafa', 'umbusi', 'umkhokheli',
+            // Tonga T2
             'mweendelezi', 'simalelo', 'musololi',
         ];
+
+        $highestTier = 0; // 0 = none, 1 = tier2, 2 = tier1
         $officialHits = 0;
-        foreach ($seniorOfficials as $kw) {
+        foreach ($tier1Officials as $kw) {
             if (str_contains($text, $kw)) {
+                $highestTier = max($highestTier, 2);
+                $officialHits++;
+            }
+        }
+        foreach ($tier2Officials as $kw) {
+            if (str_contains($text, $kw)) {
+                if ($highestTier < 2) $highestTier = 1;
                 $officialHits++;
             }
         }
         if ($officialHits > 0) {
-            // First match = 25, subsequent matches = 10 each (capped)
-            $score += 25 + min(($officialHits - 1) * 10, 20);
+            $baseOfficial = ($highestTier === 2) ? 25 : 12;
+            $additionalOfficial = max(0, $officialHits - 1) * 5;
+            $score += min($baseOfficial + $additionalOfficial, 35);
             $factorHits++;
         }
 
-        // ── Factor 3: Scale indicators (English + Shona + Ndebele + Tonga) ──
-        $largeScaleKeywords = [
-            // English
-            'million' => 30, 'billion' => 35, 'trillion' => 40,
-            'widespread' => 20, 'systematic' => 22,
-            'organised' => 20, 'organized' => 20,
-            'syndicate' => 25, 'cartel' => 25,
-            'network' => 15, 'ring' => 15, 'scheme' => 12,
-            'hundreds of thousands' => 18,
-            'large scale' => 18, 'mass' => 10,
+        // ── Factor 3: Financial Magnitude — Amount-Aware (0-35) ──
+        // Parse actual monetary amounts from text rather than flat keyword points.
+        $maxAmount = 0.0;
+
+        // Pattern: $4.2 million, USD $1.8 million, US$12 million, Z$500 billion
+        if (preg_match_all('/(?:\$|usd|us\$|z\$|zig|zwl)\s*[\$]?\s*([\d,]+(?:\.\d+)?)\s*(trillion|billion|million)?/i', $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $num = (float) str_replace(',', '', $m[1]);
+                $suffix = strtolower($m[2] ?? '');
+                if ($suffix === 'trillion') $num *= 1_000_000_000_000;
+                elseif ($suffix === 'billion') $num *= 1_000_000_000;
+                elseif ($suffix === 'million') $num *= 1_000_000;
+                $maxAmount = max($maxAmount, $num);
+            }
+        }
+        // Bare numbers with million/billion: "1.8 million", "12 million"
+        if (preg_match_all('/([\d,]+(?:\.\d+)?)\s*(trillion|billion|million)/i', $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $num = (float) str_replace(',', '', $m[1]);
+                $suffix = strtolower($m[2]);
+                if ($suffix === 'trillion') $num *= 1_000_000_000_000;
+                elseif ($suffix === 'billion') $num *= 1_000_000_000;
+                elseif ($suffix === 'million') $num *= 1_000_000;
+                $maxAmount = max($maxAmount, $num);
+            }
+        }
+        // Plain currency amounts: $320,000 or USD 50,000
+        if (preg_match_all('/(?:\$|usd|us\$)\s*([\d,]+(?:\.\d+)?)/i', $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $num = (float) str_replace(',', '', $m[1]);
+                $maxAmount = max($maxAmount, $num);
+            }
+        }
+        // Shona/Ndebele scale words boost amount detection
+        $localScaleWords = ['miriyoni' => 1_000_000, 'bhiriyoni' => 1_000_000_000, 'isigidi' => 1_000_000, 'izigidigidi' => 1_000_000_000];
+        foreach ($localScaleWords as $word => $multiplier) {
+            if (str_contains($text, $word) && $maxAmount > 0 && $maxAmount < $multiplier) {
+                $maxAmount = max($maxAmount, $multiplier);
+            }
+        }
+
+        if ($maxAmount >= 10_000_000) { $score += 35; $factorHits++; }
+        elseif ($maxAmount >= 1_000_000) { $score += 28; $factorHits++; }
+        elseif ($maxAmount >= 100_000)  { $score += 15; $factorHits++; }
+        elseif ($maxAmount >= 10_000)   { $score += 10; $factorHits++; }
+        elseif ($maxAmount >= 1_000)    { $score += 5;  $factorHits++; }
+        elseif ($maxAmount >= 100)      { $score += 2;  $factorHits++; }
+
+        // ── Factor 4: Scale / Systematic Indicators (cap 10) ──
+        $scaleKeywords = [
+            'systematic' => 5, 'systematically' => 5,
+            'widespread' => 5, 'organised' => 4, 'organized' => 4,
+            'syndicate' => 5, 'cartel' => 5, 'network' => 3,
+            'large scale' => 4, 'mass' => 3, 'ring' => 3,
+            'hundreds of thousands' => 4,
             // Shona
-            'miriyoni' => 30, 'bhiriyoni' => 35, 'kwakawanda' => 20,
-            'kurongedzwa' => 22, 'zhinji' => 20, 'mukuru' => 10,
+            'kwakawanda' => 5, 'kurongedzwa' => 5, 'zhinji' => 4,
             // Ndebele
-            'isigidi' => 30, 'izigidigidi' => 35, 'okubanzi' => 20,
-            'okuhlelelweyo' => 22, 'okukhulu' => 18,
+            'okubanzi' => 5, 'okuhlelelweyo' => 5, 'okukhulu' => 4,
             // Tonga
-            'zyuulu zyuulu' => 30, 'zyiingi' => 20, 'cipimo cipati' => 18,
+            'zyuulu zyuulu' => 5, 'zyiingi' => 4,
         ];
         $scaleBonus = 0;
-        foreach ($largeScaleKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $scaleBonus += $pts;
-            }
+        foreach ($scaleKeywords as $kw => $pts) {
+            if (str_contains($text, $kw)) $scaleBonus += $pts;
         }
         if ($scaleBonus > 0) {
-            $score += min($scaleBonus, 60);
+            $score += min($scaleBonus, 10);
             $factorHits++;
         }
 
-        // ── Factor 4: Numeric amount detection (USD/ZWL/ZiG amounts) ──
-        $amountBonus = 0;
-        // Currency prefixed amounts: $X, US$X, Z$X, ZiG X
-        if (preg_match('/(?:\$|us\$|z\$|zig)\s*[\d,]+(?:\.\d+)?/i', $text)) {
-            $amountBonus += 15;
-        }
-        // Explicit currency mentions: USD X, ZWL X, ZiG X
-        if (preg_match('/(?:usd|zwl|zig|rtgs)\s*[\d,]+/i', $text)) {
-            $amountBonus += 12;
-        }
-        // Large bare numbers (6+ digits suggest significant amounts)
-        if (preg_match('/\b\d{6,}\b/', $text)) {
-            $amountBonus += 12;
-        }
-        // Amounts in words: "two million", "five hundred thousand"
-        if (preg_match('/\b(?:hundred|thousand|million|billion)\s+(?:dollars|usd|zwl|zig)/i', $text)) {
-            $amountBonus += 10;
-        }
-        if ($amountBonus > 0) {
-            $score += min($amountBonus, 30);
-            $factorHits++;
-        }
-
-        // ── Factor 5: Government / public institution involvement (English + Shona + Ndebele + Tonga) ──
-        $govKeywords = [
-            // English
-            'government' => 10, 'public funds' => 12, 'taxpayer' => 12,
-            'contract' => 8, 'tender' => 10,
-            'ministry' => 9, 'department' => 7, 'council' => 8,
-            'authority' => 8, 'state' => 7, 'national' => 7,
-            'parastatal' => 10, 'municipality' => 9, 'rural district' => 8,
-            // Zimbabwe-specific entities
-            'police' => 9, 'army' => 9, 'military' => 9, 'zdf' => 10,
-            'hospital' => 8, 'school' => 7, 'university' => 8,
-            'zesa' => 10, 'zinwa' => 10, 'zimra' => 10, 'nssa' => 10,
-            'psmas' => 9, 'gmb' => 9, 'zbc' => 8, 'zinara' => 10,
-            'caaz' => 9, 'potraz' => 9, 'zetdc' => 9,
-            'nrz' => 9, 'idbz' => 9, 'rbz' => 12,
-            'parliament' => 10, 'judiciary' => 10, 'prosecutor' => 10,
-            'electoral' => 9, 'zec' => 10,
-            // Shona
-            'hurumende' => 10, 'mari yehurumende' => 12, 'mari yevanhu' => 12,
-            'tenda' => 10, 'dare' => 8, 'dunhu' => 8,
-            'mapurisa' => 9, 'masoja' => 9, 'chipatara' => 8, 'chikoro' => 7,
-            'parimende' => 10, 'dare remutemo' => 10,
-            // Ndebele
-            'uhulumende' => 10, 'imali kahulumende' => 12, 'imali yabantu' => 12,
-            'ithenda' => 10, 'umkhandlu' => 8, 'isigaba' => 7,
-            'amapholisa' => 9, 'amabutho' => 9, 'isibhedlela' => 8, 'isikolo' => 7,
-            'iphalamende' => 10, 'inkantolo' => 10,
-            // Tonga
-            'bulelo' => 10, 'mali yabulelo' => 12,
-            'bapolisa' => 9, 'cibbadela' => 8, 'cikolo' => 7,
-        ];
-        $govBonus = 0;
-        foreach ($govKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $govBonus += $pts;
-            }
-        }
-        if ($govBonus > 0) {
-            $score += min($govBonus, 35);
-            $factorHits++;
-        }
-
-        // ── Factor 6: Crime severity keywords (English + Shona + Ndebele + Tonga) ──
+        // ── Factor 5: Crime Severity Keywords (cap 15) ──
         $crimeKeywords = [
             // English
-            'bribe' => 7, 'fraud' => 8, 'theft' => 8, 'steal' => 8,
-            'coercion' => 10, 'embezzle' => 9, 'kickback' => 10,
-            'extort' => 12, 'misuse' => 6, 'stolen' => 8,
-            'siphon' => 10, 'inflate' => 8, 'phantom' => 12,
-            'launder' => 15, 'money laundering' => 18,
-            'forgery' => 10, 'forged' => 10, 'falsified' => 10,
-            'illegal' => 6, 'illicit' => 8,
-            'ghost workers' => 15, 'fictitious' => 12,
-            'collusion' => 12, 'conspiracy' => 10,
-            'intimidat' => 12, 'threaten' => 10,
-            'loot' => 10, 'plunder' => 10, 'divert' => 8,
-            'overpricing' => 10, 'under-invoicing' => 10,
-            'conflict of interest' => 10, 'front company' => 12,
-            'shell company' => 12, 'offshore' => 12,
-            // Shona crime keywords
-            'kuba' => 8, 'kubiridzira' => 7, 'uori' => 8, 'kushandisa mari' => 9,
-            'kutora mari' => 9, 'kunyepera' => 8, 'kushandiswa kwemari' => 9,
-            'kuba mari' => 10, 'kufurira' => 7, 'kushungurudza' => 10,
-            'upenyu hwemari' => 8, 'kupa chiokomuhomwe' => 7, 'mhosva' => 6,
-            'kutengesa zvakavanzika' => 10, 'kushandisa simba' => 10,
-            'kubira' => 8, 'kupamba' => 10, 'kunyima' => 6,
-            'kuvhara maziso' => 8, 'kunzvenga mutemo' => 8,
-            // Shona verb root forms (match conjugated: akaba, vakuba, etc.)
-            'huori' => 10, 'akab' => 8, 'kupamba mari' => 10,
-            'kunyep' => 7, 'kubir' => 7,
-            'makambani asipo' => 12, 'asipo' => 5,         // ghost companies
-            'kushandiswa kwemari' => 9, 'kutora mari' => 9,
-            'kukuvadza' => 8,                               // harming
-            // Ndebele crime keywords
-            'ukweba' => 8, 'ubugebengu' => 8, 'umkhonyovu' => 8,
-            'intshontshela' => 10, 'ukuqilibezela' => 8, 'ukutshontsha' => 8,
-            'ukudla imali' => 10, 'ukufumbathisa' => 7, 'ukukhwabanisa' => 8,
-            'ukusebenzisa amandla' => 10, 'ukuthungela' => 8,
-            'ukuphanga' => 10, 'ukwesabisa' => 12,
-            // Tonga crime keywords
-            'kwiiba' => 8, 'bumpelenge' => 8, 'bubi' => 6,
-            'kusebenzesa mali' => 9, 'kupelengesa' => 8,
-            'rushwa' => 8, 'wizi' => 8, 'ulaghai' => 8,
+            'bribe' => 4, 'fraud' => 4, 'theft' => 4, 'steal' => 4,
+            'coercion' => 5, 'embezzle' => 4, 'kickback' => 5,
+            'extort' => 5, 'misuse' => 2, 'stolen' => 4,
+            'siphon' => 4, 'inflate' => 4, 'phantom' => 5,
+            'launder' => 6, 'money laundering' => 7,
+            'forgery' => 4, 'forged' => 4, 'falsified' => 4,
+            'illegal' => 3, 'illicit' => 4,
+            'ghost workers' => 6, 'fictitious' => 5,
+            'collusion' => 5, 'conspiracy' => 4,
+            'intimidat' => 5, 'threaten' => 4,
+            'loot' => 4, 'plunder' => 4, 'divert' => 4,
+            'overpricing' => 4, 'under-invoicing' => 4,
+            'conflict of interest' => 4, 'front company' => 5,
+            'shell company' => 5, 'offshore' => 5,
+            'bid-rigging' => 5, 'bid rigging' => 5,
+            'irregular' => 3, 'bypass' => 3,
+            // Shona
+            'kuba' => 4, 'huori' => 4, 'akab' => 4,
+            'makambani asipo' => 5, 'kushungurudza' => 4,
+            'kupamba' => 4, 'kukuvadza' => 3,
+            'kushandisa simba' => 4, 'kubiridzira' => 3,
+            'kunyepera' => 3, 'kufurira' => 3,
+            'kuba mari' => 4, 'kutora mari' => 4,
+            'kunzvenga mutemo' => 3,
+            // Ndebele
+            'ukweba' => 4, 'umkhonyovu' => 4, 'intshontshela' => 4,
+            'ukuphanga' => 4, 'ukwesabisa' => 5,
+            'ukudla imali' => 4, 'ukukhwabanisa' => 4,
+            'ukusebenzisa amandla' => 4,
+            'intengo ephezulu' => 4,
+            // Tonga
+            'kwiiba' => 4, 'bumpelenge' => 4, 'rushwa' => 4,
         ];
         $crimeBonus = 0;
         foreach ($crimeKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $crimeBonus += $pts;
-            }
+            if (str_contains($text, $kw)) $crimeBonus += $pts;
         }
         if ($crimeBonus > 0) {
-            $score += min($crimeBonus, 40);
+            $score += min($crimeBonus, 15);
             $factorHits++;
         }
 
-        // ── Factor 7: Evidence quality indicators ──
+        // ── Factor 6: Evidence Quality Indicators (cap 10) ──
         $evidenceKeywords = [
-            'document' => 5, 'receipt' => 6, 'invoice' => 6,
-            'proof' => 4, 'witness' => 6, 'recording' => 8,
-            'photo' => 5, 'video' => 7, 'screenshot' => 5,
-            'bank statement' => 8, 'audit' => 7, 'email' => 5,
-            'letter' => 4, 'contract copy' => 7, 'affidavit' => 8,
-            'payslip' => 6, 'voucher' => 6, 'minutes' => 5,
-            'cctv' => 8, 'forensic' => 9,
-            'mobile money' => 7, 'ecocash' => 7, 'logbook' => 6,
-            'bank transfer' => 7, 'payment record' => 7,
-            'transaction' => 5, 'weighbridge' => 7,
+            'document' => 3, 'receipt' => 3, 'invoice' => 3,
+            'witness' => 3, 'recording' => 5, 'photo' => 3,
+            'video' => 4, 'screenshot' => 3, 'bank statement' => 5,
+            'audit' => 4, 'email' => 3, 'letter' => 3,
+            'contract' => 3, 'affidavit' => 5, 'voucher' => 3,
+            'minutes' => 3, 'cctv' => 4, 'forensic' => 5,
+            'mobile money' => 4, 'ecocash' => 4, 'logbook' => 3,
+            'bank transfer' => 4, 'payment record' => 4,
+            'transaction' => 3, 'weighbridge' => 3,
+            'proof' => 3, 'payslip' => 3, 'contract copy' => 4,
             // Shona
-            'mavhaucha' => 6, 'uchapupu' => 7, 'zvinyorwa' => 5,
-            'vanogona kutaura' => 7, 'amarekhodi' => 6,
+            'mavhaucha' => 3, 'uchapupu' => 4, 'zvinyorwa' => 3,
+            'vanogona kutaura' => 3, 'amarekhodi' => 3,
             // Ndebele
-            'ubufakazi' => 7, 'izincwadi' => 5, 'ofakazi' => 7,
+            'ubufakazi' => 3, 'izincwadi' => 3, 'ofakazi' => 3,
         ];
         $evidenceBonus = 0;
         foreach ($evidenceKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $evidenceBonus += $pts;
-            }
+            if (str_contains($text, $kw)) $evidenceBonus += $pts;
         }
         if ($evidenceBonus > 0) {
-            $score += min($evidenceBonus, 25);
+            $score += min($evidenceBonus, 10);
             $factorHits++;
         }
 
-        // ── Factor 8: Temporal specificity (dates/times mentioned) ──
-        $datePatterns = 0;
-        if (preg_match('/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/', $text)) $datePatterns++;
-        if (preg_match('/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d/i', $text)) $datePatterns++;
-        if (preg_match('/\b20[12]\d\b/', $text)) $datePatterns++;
-        if ($datePatterns > 0) {
-            $score += min($datePatterns * 5, 15);
-            $factorHits++;
-        }
-
-        // ── Factor 9: Description quality / length ──
-        $len = strlen($description);
-        if ($len > 1000)     $score += 20;
-        elseif ($len > 500)  $score += 15;
-        elseif ($len > 250)  $score += 8;
-        elseif ($len > 100)  $score += 3;
-
-        // ── Factor 10: Urgency / ongoing nature (English + Shona + Ndebele + Tonga) ──
-        $urgencyKeywords = [
+        // ── Factor 7: Public / Victim Impact (cap 10) ──
+        $impactKeywords = [
             // English
-            'ongoing', 'happening now', 'today', 'currently',
-            'right now', 'this week', 'this month', 'urgent',
-            'imminent', 'about to', 'deadline', 'tomorrow',
+            'public health' => 6, 'water supply' => 5, 'water project' => 5,
+            'food supply' => 5, 'medicine' => 5, 'medical supplies' => 6,
+            'children' => 4, 'school fees' => 4, 'pension' => 5,
+            'patients' => 5, 'orphan' => 5, 'disabled' => 4,
+            'elderly' => 4, 'vulnerable' => 4, 'displaced' => 5,
+            'deaths' => 6, 'died' => 5, 'injuries' => 5,
+            'hunger' => 5, 'starvation' => 6,
+            'public safety' => 6, 'endanger' => 5, 'motorist' => 4,
+            'road safety' => 5, 'taxpayer' => 4, 'public funds' => 4,
+            'drought' => 5, 'grain' => 4, 'borehole' => 4,
+            'community' => 2, 'residents' => 3, 'road' => 3,
+            'voter' => 5, 'election' => 5, 'voter registration' => 5,
+            'passport' => 3,
+            // Shona
+            'hutano hweveruzhinji' => 6, 'mvura' => 5, 'chikafu' => 5,
+            'mushonga' => 5, 'mishonga' => 5, 'vana' => 4,
+            'varwere' => 5, 'nherera' => 5, 'vakwegura' => 4,
+            'rufu' => 6, 'vakafa' => 5, 'kukuvara' => 5,
+            'nzara' => 5, 'chipatara' => 4, 'kufa' => 6,
+            'vanhu varombo' => 3,
+            // Ndebele
+            'impilakahle' => 6, 'amanzi' => 5, 'ukudla' => 5,
+            'umuthi' => 5, 'abantwana' => 4, 'izigulane' => 5,
+            'ukufa' => 6, 'indlala' => 5, 'umgwaqo' => 3,
+            // Tonga
+            'buumi bwabantu' => 6, 'maanzi' => 5, 'cakulya' => 5,
+            'musamu' => 5, 'bana' => 4, 'lufu' => 6,
+            'nzala' => 5, 'bantu' => 3,
+        ];
+        $impactBonus = 0;
+        foreach ($impactKeywords as $kw => $pts) {
+            if (str_contains($text, $kw)) $impactBonus += $pts;
+        }
+        if ($impactBonus > 0) {
+            $score += min($impactBonus, 10);
+            $factorHits++;
+        }
+
+        // ── Factor 8: Government / Public Institution (cap 6) ──
+        // Down-weighted because nearly every corruption case involves a public body.
+        $govKeywords = [
+            'government' => 4, 'public funds' => 3, 'contract' => 3,
+            'tender' => 3, 'ministry' => 3, 'department' => 2,
+            'council' => 3, 'authority' => 3, 'parastatal' => 4,
+            'university' => 3, 'police' => 3, 'hospital' => 3,
+            'school' => 2, 'parliament' => 3, 'judiciary' => 3,
+            'electoral' => 3, 'prosecutor' => 3,
+            // Zimbabwe-specific entities
+            'gmb' => 3, 'zinara' => 3, 'nssa' => 3, 'zesa' => 3,
+            'zec' => 3, 'zacc' => 3, 'rbz' => 4, 'zimra' => 3,
+            'zinwa' => 3, 'zdf' => 3, 'ddf' => 3,
+            // Shona
+            'hurumende' => 4, 'chipatara' => 3, 'dare' => 3, 'mapurisa' => 3,
+            // Ndebele
+            'uhulumende' => 4, 'umkhandlu' => 3, 'amapholisa' => 3,
+            // Tonga
+            'bulelo' => 4, 'bapolisa' => 3,
+        ];
+        $govBonus = 0;
+        foreach ($govKeywords as $kw => $pts) {
+            if (str_contains($text, $kw)) $govBonus += $pts;
+        }
+        if ($govBonus > 0) {
+            $score += min($govBonus, 6);
+            $factorHits++;
+        }
+
+        // ── Factor 9: Institutional Sensitivity Bonus (+12) ──
+        // Anti-corruption bodies, judiciary, and electoral bodies merit heightened scrutiny.
+        $sensitiveInstitutions = [
+            // Anti-corruption
+            'zacc', 'anti-corruption', 'ombudsman',
+            // Judiciary
+            'high court', 'supreme court', 'constitutional court',
+            'magistrate court',
+            // Electoral
+            'zec', 'electoral commission',
+        ];
+        foreach ($sensitiveInstitutions as $kw) {
+            if (str_contains($text, $kw)) {
+                $score += 12;
+                break;
+            }
+        }
+
+        // ── Factor 10: Description Quality (max 6) ──
+        $len = strlen($description);
+        if ($len > 1000)     $score += 6;
+        elseif ($len > 500)  $score += 4;
+        elseif ($len > 250)  $score += 2;
+        elseif ($len > 100)  $score += 1;
+
+        // ── Factor 11: Urgency / Ongoing Nature (max 5, one hit) ──
+        $urgencyKeywords = [
+            'ongoing', 'happening now', 'currently', 'right now',
+            'urgent', 'imminent', 'about to', 'deadline',
             'evidence may be destroyed', 'fleeing', 'leaving the country',
+            'fear for', 'fear for my safety', 'intimidated',
             // Shona
             'zviri kuitika', 'nhasi', 'pari zvino', 'nekukurumidza',
-            'ikwekwe', 'mangwana', 'svondo rino', 'mwedzi uno',
-            'uchapupu hunogona kuparadzwa', 'kutiza',
+            'kutiza', 'uchapupu hunogona kuparadzwa',
             // Ndebele
             'kuyenzeka', 'lamuhla', 'khathesi', 'ngokuphangisa',
-            'kusasa', 'iviki le', 'inyanga le',
-            'ubufakazi bungalahlwa', 'ukubaleka',
+            'ukubaleka', 'ubufakazi bungalahlwa',
             // Tonga
-            'cicitika', 'sunu', 'lino', 'cakufwambaana',
+            'cicitika', 'sunu', 'cakufwambaana',
         ];
         foreach ($urgencyKeywords as $kw) {
             if (str_contains($text, $kw)) {
-                $score += 8;
+                $score += 5;
                 $factorHits++;
                 break;
             }
         }
 
-        // ── Factor 11: Victim / public impact indicators (English + Shona + Ndebele + Tonga) ──
-        $impactKeywords = [
-            // English
-            'public health' => 12, 'water supply' => 10, 'food supply' => 10,
-            'medicine' => 10, 'medical supplies' => 12, 'children' => 8,
-            'school fees' => 8, 'pension' => 10, 'salary' => 7,
-            'community' => 6, 'village' => 6, 'residents' => 6,
-            'patients' => 10, 'orphan' => 10, 'disabled' => 8,
-            'elderly' => 8, 'vulnerable' => 8, 'displaced' => 10,
-            'deaths' => 15, 'died' => 12, 'injuries' => 10,
-            'hunger' => 10, 'starvation' => 12,
-            'infrastructure' => 8, 'road' => 6, 'bridge' => 6, 'dam' => 8,
-            'public safety' => 14, 'endanger' => 12, 'motorist' => 8,
-            'road safety' => 12, 'accident' => 10, 'taxpayer' => 8,
-            'public funds' => 10, 'drought' => 10, 'grain' => 8,
-            'borehole' => 8, 'water project' => 10,
-            // Shona
-            'hutano hweveruzhinji' => 12, 'mvura' => 10, 'chikafu' => 10,
-            'mushonga' => 10, 'vana' => 8, 'mari yechikoro' => 8,
-            'penisheni' => 10, 'mushahara' => 7, 'nharaunda' => 6,
-            'musha' => 6, 'varwere' => 10, 'nherera' => 10,
-            'vakwegura' => 8, 'rufu' => 15, 'vakafa' => 12,
-            'kukuvara' => 10, 'nzara' => 10, 'mugwagwa' => 6,
-            'mishonga' => 10, 'mushonga' => 10,             // medicines sg/pl
-            'chipatara' => 8, 'kufa' => 12,                 // hospital, to die
-            'vanhu varombo' => 8,                            // poor people
-            // Ndebele
-            'impilakahle' => 12, 'amanzi' => 10, 'ukudla' => 10,
-            'umuthi' => 10, 'abantwana' => 8, 'imali yesikolo' => 8,
-            'umpensheni' => 10, 'umholo' => 7, 'umphakathi' => 6,
-            'igama' => 6, 'izigulane' => 10, 'izintandane' => 10,
-            'abadala' => 8, 'ukufa' => 15, 'bafile' => 12,
-            'ukulimala' => 10, 'indlala' => 10, 'umgwaqo' => 6,
-            // Tonga
-            'buumi bwabantu' => 12, 'maanzi' => 10, 'cakulya' => 10,
-            'musamu' => 10, 'bana' => 8, 'cipensheni' => 10,
-            'mushahala' => 7, 'bantu' => 6, 'lufu' => 15,
-            'nzala' => 10, 'nzila' => 6,
-        ];
-        $impactBonus = 0;
-        foreach ($impactKeywords as $kw => $pts) {
-            if (str_contains($text, $kw)) {
-                $impactBonus += $pts;
-            }
-        }
-        if ($impactBonus > 0) {
-            $score += min($impactBonus, 30);
+        // ── Factor 12: Temporal Specificity (cap 5) ──
+        $datePatterns = 0;
+        if (preg_match('/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/', $text)) $datePatterns++;
+        if (preg_match('/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d/i', $text)) $datePatterns++;
+        if (preg_match('/\b20[12]\d\b/', $text)) $datePatterns++;
+        if ($datePatterns > 0) {
+            $score += min($datePatterns * 3, 5);
             $factorHits++;
         }
 
-        // ── Factor 12: Cross-factor amplification ──
-        // When multiple distinct factor categories fire, the case is more substantive.
-        // 5+ factor groups active = +15, 4 = +10, 3 = +5
-        if ($factorHits >= 5) {
-            $score += 15;
+        // ── Factor 13: Cross-Factor Amplification (max 8) ──
+        if ($factorHits >= 6) {
+            $score += 8;
+        } elseif ($factorHits >= 5) {
+            $score += 6;
         } elseif ($factorHits >= 4) {
-            $score += 10;
+            $score += 4;
         } elseif ($factorHits >= 3) {
-            $score += 5;
+            $score += 2;
         }
+
+        $this->lastExpertRawScore = $score;
 
         Log::info('Expert system scoring', [
             'type' => $type,
             'total_score' => $score,
             'factor_hits' => $factorHits,
             'desc_length' => $len,
+            'max_amount_detected' => $maxAmount,
         ]);
 
         if ($score >= 80) return 'CRITICAL';
-        if ($score >= 45) return 'HIGH';
-        if ($score >= 22) return 'MEDIUM';
+        if ($score >= 51) return 'HIGH';
+        if ($score >= 26) return 'MEDIUM';
         return 'LOW';
     }
 
     /**
-     * Calculate risk score based on expert priority and report content analysis.
-     *
-     * @param array $data
-     * @return int
+     * Calculate risk score (0-100) proportional to expert priority and content.
      */
     protected function calculateRiskScore(array $data): int
     {
-        // Base score from priority
-        $score = [
-            'LOW' => 25,
-            'MEDIUM' => 45,
-            'HIGH' => 70,
-            'CRITICAL' => 90,
-        ][$data['priority']] ?? 50;
+        $priority = $data['priority'] ?? 'MEDIUM';
+
+        $base = [
+            'CRITICAL' => 80,
+            'HIGH'     => 55,
+            'MEDIUM'   => 30,
+            'LOW'      => 10,
+        ][$priority] ?? 30;
 
         $text = strtolower(
             ($data['description'] ?? '') . ' ' .
@@ -673,37 +843,26 @@ PROMPT;
             ($data['location'] ?? '')
         );
 
-        // Crime keyword bonus (+3 each, capped at +15)
-        $crimeBonus = 0;
-        foreach (['bribe', 'fraud', 'embezzle', 'theft', 'coercion', 'extort', 'kickback', 'launder', 'siphon', 'phantom'] as $kw) {
-            if (str_contains($text, $kw)) {
-                $crimeBonus += 3;
-            }
-        }
-        $score += min($crimeBonus, 15);
+        $bonus = 0;
 
-        // Financial scale bonus
-        if (preg_match('/(?:million|billion)/i', $text)) {
-            $score += 5;
+        // Evidence quality bonus (up to +8)
+        foreach (['bank statement', 'affidavit', 'recording', 'video', 'forensic', 'audit', 'cctv', 'mobile money'] as $kw) {
+            if (str_contains($text, $kw)) $bonus += 2;
         }
+        $bonus = min($bonus, 8);
 
-        // Senior official involvement bonus
-        foreach (['minister', 'president', 'director general', 'commissioner', 'permanent secretary'] as $kw) {
+        // Senior official bonus (up to +5)
+        foreach (['minister', 'president', 'director general', 'commissioner', 'permanent secretary', 'director', 'town clerk'] as $kw) {
             if (str_contains($text, $kw)) {
-                $score += 3;
+                $bonus += 5;
                 break;
             }
         }
 
-        // Evidence mentioned bonus
-        foreach (['document', 'video', 'recording', 'bank statement', 'receipt'] as $kw) {
-            if (str_contains($text, $kw)) {
-                $score += 2;
-                break;
-            }
-        }
+        // Financial magnitude bonus (up to +5)
+        if (preg_match('/(?:million|billion)/i', $text)) $bonus += 5;
 
-        return max(0, min(100, $score));
+        return max(0, min(100, $base + $bonus));
     }
 
     /**

@@ -196,6 +196,9 @@ class ReportController extends Controller
                 // Handle file uploads if any
                 if (isset($validated['attachments'])) {
                     $this->handleAttachments($report, $validated['attachments']);
+
+                    // Re-score with file content + attachment bonus
+                    $this->recalculateReportPriority($report);
                 }
 
                 // Submit to blockchain
@@ -617,6 +620,50 @@ class ReportController extends Controller
             'success' => true,
             'message' => 'Dispute submitted successfully',
             'data' => $report->load('user'),
+        ]);
+    }
+
+    /**
+     * Recalculate priority and risk_score for all reports using the latest
+     * expert system scoring.  Admin-only endpoint.
+     */
+    public function recalculatePriorities(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin access required',
+            ], 403);
+        }
+
+        $reports = Report::with('attachments')->get();
+        $total   = $reports->count();
+        $updated = 0;
+        $details = [];
+
+        foreach ($reports as $report) {
+            $oldPriority = $report->priority;
+            $oldRisk     = $report->risk_score;
+            $changed     = $this->recalculateReportPriority($report);
+            if ($changed) {
+                $updated++;
+                $details[] = [
+                    'case_id'      => $report->case_id,
+                    'old_priority' => $oldPriority,
+                    'new_priority' => $report->priority,
+                    'old_risk'     => $oldRisk,
+                    'new_risk'     => $report->risk_score,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success'  => true,
+            'message'  => "{$updated} of {$total} reports updated.",
+            'total'    => $total,
+            'updated'  => $updated,
+            'details'  => $details,
         ]);
     }
 

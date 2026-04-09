@@ -1426,9 +1426,26 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                       <p className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">
                         Case Evidence
                       </p>
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                        {caseAttachments.length} file{caseAttachments.length === 1 ? "" : "s"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {caseAttachments.length > 1 && (
+                          <button
+                            onClick={async () => {
+                              const caseId = dossierData?.case_id || dossierData?.id;
+                              for (const att of caseAttachments) {
+                                const url = att.download_url || `/api/reports/${caseId}/attachments/${att.id}/download`;
+                                await downloadEvidence(url, att.original_name || "evidence");
+                              }
+                              toast.success(`Downloaded ${caseAttachments.length} files`);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-bold uppercase tracking-wider transition-all"
+                          >
+                            Download All
+                          </button>
+                        )}
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          {caseAttachments.length} file{caseAttachments.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
                     </div>
 
                     {caseAttachments.length === 0 ? (
@@ -1437,7 +1454,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                       </p>
                     ) : (
                       <div className="space-y-2">
-                        {caseAttachments.map((attachment: any) => (
+                        {caseAttachments.map((attachment: any) => {
+                          const caseId = dossierData?.case_id || dossierData?.id;
+                          const dlUrl = attachment.download_url || `/api/reports/${caseId}/attachments/${attachment.id}/download`;
+                          return (
                           <div
                             key={attachment.id}
                             className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 px-3 py-2.5"
@@ -1454,18 +1474,15 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                               </div>
                             </div>
 
-                            {attachment.download_url ? (
                               <button
-                                onClick={() => downloadEvidence(attachment.download_url!, attachment.original_name || "evidence")}
+                                onClick={() => downloadEvidence(dlUrl, attachment.original_name || "evidence")}
                                 className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
                               >
                                 Download
                               </button>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">Unavailable</span>
-                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
