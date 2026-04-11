@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 class ChatbotController extends Controller
 {
     private const MAX_HISTORY_MESSAGES = 20;
-    private const MAX_MESSAGE_LENGTH = 1000;
+    private const MAX_MESSAGE_LENGTH = 2000;
 
     /**
      * Process a chatbot message using Gemini AI to guide whistleblowers.

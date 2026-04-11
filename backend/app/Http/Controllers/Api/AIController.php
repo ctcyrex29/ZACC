@@ -686,4 +686,97 @@ PROMPT;
             return null;
         }
     }
+
+    /**
+     * Translate report text using Gemini AI.
+     * Available to investigators and admins.
+     */
+    public function translateText(Request $request): JsonResponse
+    {
+        $request->validate([
+            'text' => ['required', 'string', 'min:5'],
+            'from_language' => ['required', 'string', 'max:10'],
+            'to_language' => ['required', 'string', 'max:10'],
+        ]);
+
+        $text = $request->input('text');
+        $from = $request->input('from_language');
+        $to = $request->input('to_language');
+
+        if ($from === $to) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'translated_text' => $text,
+                    'from_language' => $from,
+                    'to_language' => $to,
+                    'note' => 'Source and target languages are the same.',
+                ],
+            ]);
+        }
+
+        // Use the trait helper for translation
+        $helper = new class {
+            use \App\Http\Controllers\Api\ReportControllerHelpers;
+        };
+
+        $result = $helper->translateWithGemini($text, $from, $to);
+
+        if ($result['success']) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'translated_text' => $result['translated_text'],
+                    'from_language' => $from,
+                    'to_language' => $to,
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Translation failed: ' . ($result['error'] ?? 'Unknown error'),
+        ], 503);
+    }
+
+    /**
+     * Validate text clarity / detect gibberish.
+     * Public endpoint for real-time validation on the report form.
+     */
+    public function validateTextClarity(Request $request): JsonResponse
+    {
+        $request->validate([
+            'text' => ['required', 'string', 'min:10'],
+            'language' => ['sometimes', 'string', 'max:10'],
+        ]);
+
+        $helper = new class {
+            use \App\Http\Controllers\Api\ReportControllerHelpers;
+            public function check(string $text, string $lang): array {
+                return $this->assessTextClarity($text, $lang);
+            }
+            public function detect(string $text): string {
+                return $this->detectTextLanguage($text);
+            }
+        };
+
+        $declaredLang = $request->input('language', 'en');
+        $detectedLang = $helper->detect($request->input('text'));
+        // Use detected language for clarity check so users aren't penalized
+        // for writing in a different language than selected
+        $effectiveLang = $detectedLang ?: $declaredLang;
+        $clarity = $helper->check($request->input('text'), $effectiveLang);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'clarity_score' => $clarity['score'],
+                'is_clear' => $clarity['is_clear'],
+                'issues' => $clarity['issues'] ?? [],
+                'word_count' => $clarity['word_count'] ?? 0,
+                'dict_coverage' => $clarity['dict_coverage'] ?? 0,
+                'detected_language' => $detectedLang,
+            ],
+        ]);
+    }
 }

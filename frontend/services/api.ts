@@ -289,6 +289,18 @@ class ApiClient {
     const endpoint = this.token ? '/ai/pre-submission-suggestions' : '/ai/pre-submission-suggestions-public';
     return this.request(endpoint, 'POST', data);
   }
+
+  async validateTextClarity(text: string, language: string = 'en') {
+    return this.request('/ai/validate-text', 'POST', { text, language });
+  }
+
+  async translateText(text: string, fromLanguage: string, toLanguage: string) {
+    return this.request('/ai/translate', 'POST', {
+      text,
+      from_language: fromLanguage,
+      to_language: toLanguage,
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

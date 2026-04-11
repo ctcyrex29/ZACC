@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus, User } from "../types";
 import { Language, t } from "../i18n";
@@ -102,13 +103,13 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
 
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={onCreateReport}
+              onClick={() => { toast.success("Opening report form..."); onCreateReport(); }}
               className="px-5 py-3 rounded-xl bg-emerald-500 text-black font-bold text-sm"
             >
               {t(language, "reportCase")}
             </button>
             <button
-              onClick={onOpenReports}
+              onClick={() => { toast.success("Loading your reports..."); onOpenReports(); }}
               className="px-5 py-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 font-bold text-sm"
             >
               {t(language, "myReports")}

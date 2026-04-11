@@ -92,7 +92,7 @@ const dictionary: Record<Language, Record<string, string>> = {
     disputeFiled: "Dispute Filed",
     disputeReceived: "Your dispute has been received and is now under review by ZACC management. You will be notified of the outcome.",
     encryption: "End-to-end encrypted · Anonymity guaranteed · Zero-knowledge architecture",
-    priorityExpert: "Case priority is assigned automatically by the expert system after submission.",
+    
     // Report form (authenticated)
     fileAReport: "File a Report",
     reportFormHint: "Provide detailed information about the integrity concern. All submissions are encrypted and protected. You can write in any language — English, Shona, Ndebele, or Tonga.",
@@ -243,7 +243,7 @@ const dictionary: Record<Language, Record<string, string>> = {
     disputeFiled: "Kupesana Kwanyorwa",
     disputeReceived: "Kupesana kwenyu kwagashirwa uye kuri kuongororwa nevatungamiriri veZACC.",
     encryption: "Yakavharwa kubva kumagumo ose · Kuzivikanwa kwakachengetedzwa · Zero-knowledge",
-    priorityExpert: "Kukosha kwenyaya kunoiswa otomatiki nesisitimu yehungwaru mushure mekutumira.",
+  
     fileAReport: "Nyorai Mhan'aro",
     reportFormHint: "Tipai ruzivo rwakadzama pamusoro penyaya yeuori. Zvose zvinoiswa zvakachengetedzwa. Munogona kunyora nemutauro wese — Chirungu, Shona, Ndebele, kana Tonga.",
     detected: "Yagundwa",
@@ -389,7 +389,6 @@ const dictionary: Record<Language, Record<string, string>> = {
     disputeFiled: "Ukuphikisa Kufakiwe",
     disputeReceived: "Ukuphikisa kwakho kutholakele njalo kuhlolwa ngamakhosikazi eZACC.",
     encryption: "Kuvikelwe kusukela kuqale kuze kuphele · Ubuwena buvikelekile · Zero-knowledge",
-    priorityExpert: "Ukukhethekile kwecala kubekwa ngokuzixazulula ngohlelo lwengqondo emva kokuthunyelwa.",
     fileAReport: "Faka Umbiko",
     reportFormHint: "Nikela ulwazi olubanzi mayelana nomkhonyovu. Konke okufakwayo kuvikelekile. Ungabhala ngolimi lwakho — English, Shona, Ndebele, noma Tonga.",
     detected: "Kutholiwe",
@@ -535,7 +534,7 @@ const dictionary: Record<Language, Record<string, string>> = {
     disputeFiled: "Pingamizi Limewasilishwa",
     disputeReceived: "Pingamizi lako limepokelewa na linakaguliwa na uongozi wa ZACC.",
     encryption: "Imefichwa mwisho hadi mwisho · Kutokujulikana kunahakikishwa · Zero-knowledge",
-    priorityExpert: "Kipaumbele cha kesi kinawekwa moja kwa moja na mfumo wa akili baada ya kutuma.",
+    
     fileAReport: "Andika Ripoti",
     reportFormHint: "Toa taarifa za kina kuhusu tatizo la rushwa. Mawasilisho yote yamefichwa na kulindwa. Unaweza kuandika kwa lugha yoyote — Kiingereza, Shona, Ndebele, au Tonga.",
     detected: "Imegunduliwa",

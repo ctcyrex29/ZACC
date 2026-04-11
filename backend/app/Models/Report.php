@@ -48,6 +48,8 @@ class Report extends Model
         'user_agent',
         'is_anonymous',
         'is_encrypted',
+        'report_language',
+        'text_clarity_score',
     ];
 
     /**
@@ -126,6 +128,7 @@ class Report extends Model
         'is_anonymous' => 'boolean',
         'is_encrypted' => 'boolean',
         'risk_score' => 'integer',
+        'text_clarity_score' => 'integer',
         'ai_summary' => 'array',
     ];
 

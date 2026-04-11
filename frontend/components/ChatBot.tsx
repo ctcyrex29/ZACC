@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 
 interface Message {
@@ -740,6 +741,7 @@ export const ChatBot: React.FC = () => {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(submittedRef);
+                  toast.success("Tracking code copied to clipboard!");
                   addBotMessage("✅ Tracking code copied to clipboard!");
                 }}
                 className="px-3 py-1 rounded-lg bg-emerald-500/30 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/40 transition-all"

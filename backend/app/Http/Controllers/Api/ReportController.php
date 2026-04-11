@@ -133,6 +133,7 @@ class ReportController extends Controller
             'institution' => ['required', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:20'],
+            'report_language' => ['sometimes', 'string', 'max:10'],
             'risk_score' => ['sometimes', 'integer', 'min:0', 'max:100'],
             'is_anonymous' => ['sometimes', 'boolean'],
             'attachments' => ['sometimes', 'array', 'max:5'],
@@ -152,9 +153,27 @@ class ReportController extends Controller
         // Priority is assigned by the expert system, not by the reporter.
         $expertPriority = $this->determineExpertPriority($validated);
 
+        // Text clarity check — reject clearly gibberish submissions
+        $clarity = $this->lastClarityResult;
+        if (!empty($clarity) && $clarity['score'] < 20) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your report description appears to be unclear or contains unrecognizable text. Please write a clear description of the corruption incident in English, Shona, Ndebele, or Tonga.',
+                'clarity' => [
+                    'score' => $clarity['score'],
+                    'issues' => $clarity['issues'] ?? [],
+                ],
+            ], 422);
+        }
+
+        // Always auto-detect language from text content, falling back to declared/default
+        $detectedLang = $this->detectTextLanguage($validated['description']);
+        $reportLanguage = $detectedLang ?: ($validated['report_language'] ?? 'en');
+        $clarityScore = $clarity['score'] ?? 50;
+
         try {
             // Start database transaction
-            return DB::transaction(function () use ($validated, $user, $expertPriority) {
+            return DB::transaction(function () use ($validated, $user, $expertPriority, $reportLanguage, $clarityScore) {
                 // Generate unique IDs
                 $caseId = Report::generateCaseId();
                 $referenceCode = 'REF-' . strtoupper(Str::random(8));
@@ -178,6 +197,8 @@ class ReportController extends Controller
                     'user_agent' => request()->userAgent(),
                     'is_anonymous' => $isAnonymous,
                     'is_encrypted' => true,
+                    'report_language' => $reportLanguage,
+                    'text_clarity_score' => $clarityScore,
                 ];
 
                 // Create the report
@@ -228,7 +249,9 @@ class ReportController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Report submitted successfully',
+                    'message' => $clarityScore < 60
+                        ? 'Report submitted, but the description may be unclear. A clearer description helps investigators prioritize your case.'
+                        : 'Report submitted successfully',
                     'data' => [
                         'case_id' => $report->case_id,
                         'reference_code' => $report->reference_code,
@@ -238,6 +261,8 @@ class ReportController extends Controller
                         'type' => $report->type,
                         'created_at' => $report->created_at,
                         'is_anonymous' => $report->is_anonymous,
+                        'report_language' => $report->report_language,
+                        'text_clarity_score' => $report->text_clarity_score,
                     ],
                 ], 201);
             });
@@ -375,7 +400,7 @@ class ReportController extends Controller
             return redirect()->away(asset('storage/' . ltrim((string) $attachment->file_name, '/')));
         }
 
-        $disk = Storage::disk('private');
+        $disk = Storage::disk('local');
         $path = $attachment->file_name;
 
         if (!$disk->exists($path)) {

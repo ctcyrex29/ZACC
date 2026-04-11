@@ -11,6 +11,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 
 const COLORS = [
@@ -68,6 +69,129 @@ interface HotspotData {
 
 type DetailView = "provinces" | "institutions" | "types" | null;
 
+function generateHotspotPDF(data: HotspotData) {
+  const win = window.open("", "_blank", "width=900,height=750");
+  if (!win) return;
+
+  const provinceRows = data.by_province
+    .map(
+      (p, i) =>
+        `<tr><td>${i + 1}</td><td>${p.name}</td><td style="font-weight:900;">${p.total}</td><td>${Object.entries(p.by_priority).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}</td></tr>`
+    )
+    .join("");
+
+  const institutionRows = data.by_institution
+    .slice(0, 15)
+    .map(
+      (inst, i) =>
+        `<tr><td>${i + 1}</td><td>${inst.name}</td><td style="font-weight:900;">${inst.total}</td><td>${inst.details.avg_risk_score}%</td><td>${Object.entries(inst.details.by_status).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}</td></tr>`
+    )
+    .join("");
+
+  const typeRows = data.by_type
+    .map(
+      (t) => `<tr><td>${t.name}</td><td style="font-weight:900;">${t.total}</td><td>${data.total_reports > 0 ? ((t.total / data.total_reports) * 100).toFixed(1) : 0}%</td></tr>`
+    )
+    .join("");
+
+  const criticalRows = data.critical_hotspots
+    .map(
+      (h) => `<tr><td>${h.institution}</td><td style="font-weight:900;color:#e11d48;">${h.total}</td></tr>`
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>ZACC Corruption Hotspots Report</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,sans-serif;color:#111;padding:52px;background:#fff;}
+    .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:80px;color:rgba(0,0,0,0.035);pointer-events:none;font-weight:900;letter-spacing:4px;white-space:nowrap;}
+    .header{border-bottom:3px solid #059669;padding-bottom:20px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:flex-end;}
+    .header-left h1{font-size:20px;font-weight:900;color:#059669;letter-spacing:2px;text-transform:uppercase;}
+    .header-left h2{font-size:13px;color:#555;margin-top:4px;}
+    .confid{font-size:10px;font-weight:900;color:#e11d48;letter-spacing:3px;text-transform:uppercase;margin-top:6px;}
+    .header-right{text-align:right;font-size:11px;color:#888;}
+    .section{margin-bottom:28px;}
+    .section-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#059669;margin-bottom:10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;}
+    .stats{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:28px;}
+    .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;text-align:center;}
+    .stat .value{font-size:22px;font-weight:900;color:#111;}
+    .stat .label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#777;margin-top:4px;}
+    table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;}
+    th{background:#f1f5f9;text-align:left;padding:8px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#555;border-bottom:2px solid #e2e8f0;}
+    td{padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#333;}
+    tr:hover td{background:#f8fafc;}
+    .footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:10px;color:#aaa;display:flex;justify-content:space-between;}
+    @media print{body{padding:36px;}}
+  </style>
+</head>
+<body>
+<div class="watermark">CONFIDENTIAL</div>
+<div class="header">
+  <div class="header-left">
+    <h1>Zimbabwe Anti-Corruption Commission</h1>
+    <h2>Corruption Hotspots Intelligence Report</h2>
+    <div class="confid">Confidential — For Official Use Only</div>
+  </div>
+  <div class="header-right">
+    Report Generated:<br/><strong>${new Date().toLocaleString()}</strong>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="value">${data.total_reports}</div><div class="label">Total Reports</div></div>
+  <div class="stat"><div class="value" style="color:#e11d48;">${data.critical_hotspots.length}</div><div class="label">Critical Hotspots</div></div>
+  <div class="stat"><div class="value" style="color:${data.trend.change_percent > 0 ? '#e11d48' : '#059669'};">${data.trend.change_percent > 0 ? '+' : ''}${data.trend.change_percent}%</div><div class="label">30-Day Trend</div></div>
+  <div class="stat"><div class="value" style="color:#6366f1;">${data.by_institution.length}</div><div class="label">Institutions Flagged</div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Province Analysis</div>
+  <table>
+    <thead><tr><th>#</th><th>Province</th><th>Cases</th><th>Priority Breakdown</th></tr></thead>
+    <tbody>${provinceRows}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">Top Institutions (up to 15)</div>
+  <table>
+    <thead><tr><th>#</th><th>Institution</th><th>Cases</th><th>Avg Risk</th><th>Status Breakdown</th></tr></thead>
+    <tbody>${institutionRows}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">Corruption Type Distribution</div>
+  <table>
+    <thead><tr><th>Type</th><th>Cases</th><th>% of Total</th></tr></thead>
+    <tbody>${typeRows}</tbody>
+  </table>
+</div>
+
+${data.critical_hotspots.length > 0 ? `
+<div class="section">
+  <div class="section-title" style="color:#e11d48;">Critical Hotspots Alert</div>
+  <table>
+    <thead><tr><th>Institution</th><th>HIGH/CRITICAL Cases</th></tr></thead>
+    <tbody>${criticalRows}</tbody>
+  </table>
+</div>` : ''}
+
+<div class="footer">
+  <span>Zimbabwe Anti-Corruption Commission · Integrity Management System</span>
+  <span>Hotspots Report · ${new Date().toLocaleDateString()}</span>
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),500);</script>
+</body>
+</html>`;
+  win.document.write(html);
+  win.document.close();
+}
+
 export const CorruptionHotspots: React.FC = () => {
   const [data, setData] = useState<HotspotData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +242,15 @@ export const CorruptionHotspots: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex-1" />
+        <button
+          onClick={() => { generateHotspotPDF(data); toast.success("Generating hotspot report..."); }}
+          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2"
+        >
+          📄 Generate Report
+        </button>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="glass-card p-5 rounded-2xl">
           <p className="text-xl">📍</p>

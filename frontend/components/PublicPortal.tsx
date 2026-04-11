@@ -624,9 +624,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                     </select>
                   </div>
                 </div>
-                <div className="rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  {t(language, "priorityExpert")}
-                </div>
+                
                 <div>
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "affectedInstitution")}</label>
                   <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })}
@@ -957,6 +955,42 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Evidence Files */}
+                  {trackedCase.attachments && trackedCase.attachments.length > 0 && (
+                    <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">
+                        Evidence Files ({trackedCase.attachments.length})
+                      </p>
+                      <div className="space-y-2">
+                        {trackedCase.attachments.map((att: any) => (
+                          <div
+                            key={att.id}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 px-3 py-2.5"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span>{att.mime_type?.startsWith("image/") ? "🖼️" : att.mime_type?.startsWith("video/") ? "🎥" : att.mime_type?.startsWith("audio/") ? "🎵" : att.mime_type?.includes("pdf") ? "📄" : "📎"}</span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                                  {att.original_name || "Evidence file"}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {att.mime_type || "Unknown"} {att.size ? `· ${(att.size / 1024 / 1024).toFixed(2)} MB` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <a
+                              href={`${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '')}${att.download_url}`}
+                              download
+                              className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
+                            >
+                              Download
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Evidence Upload */}
                   {!["CLOSED", "DISPUTED"].includes(trackedCase.status) && (

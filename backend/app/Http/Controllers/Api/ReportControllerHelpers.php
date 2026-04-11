@@ -290,6 +290,11 @@ PROMPT;
     protected int $lastExpertRawScore = 0;
 
     /**
+     * Text clarity assessment from the last determineExpertPriority() call.
+     */
+    protected array $lastClarityResult = [];
+
+    /**
      * Extract readable text from a report's uploaded attachments.
      * Reads .txt, .csv, .json, .md, .log and similar text files.
      * For binary files (images, PDFs) returns filenames & metadata only.
@@ -412,6 +417,12 @@ PROMPT;
 
         $report->priority   = $newPriority;
         $report->risk_score = $newRisk;
+
+        // Update text_clarity_score from the last clarity assessment
+        if (!empty($this->lastClarityResult)) {
+            $report->text_clarity_score = $this->lastClarityResult['score'] ?? 0;
+        }
+
         $report->save();
 
         if ($changed) {
@@ -428,6 +439,510 @@ PROMPT;
         }
 
         return $changed;
+    }
+
+    /**
+     * Assess text clarity and coherence score (0-100).
+     * Detects gibberish, random characters, and incoherent text.
+     * Returns an associative array with 'score', 'is_clear', and 'issues'.
+     *
+     * Uses structural heuristics (no AI needed):
+     *  - Word structure: real words have vowels, reasonable length, etc.
+     *  - Dictionary coverage: checks against common English, Shona, Ndebele, Tonga words
+     *  - Character entropy: random typing has high unique-char ratios
+     *  - Sentence structure: real text has spaces, punctuation, mixed case
+     */
+    protected function assessTextClarity(string $text, string $declaredLanguage = 'en'): array
+    {
+        $issues = [];
+        $score = 100; // Start at 100, deduct for issues
+        $text = trim($text);
+
+        if (strlen($text) < 20) {
+            return ['score' => 0, 'is_clear' => false, 'issues' => ['Text is too short to assess.']];
+        }
+
+        $lower = mb_strtolower($text);
+
+        // Languages we have dictionary coverage for
+        $dictLanguages = ['en', 'sn', 'nd', 'to'];
+        $hasDictSupport = in_array($declaredLanguage, $dictLanguages);
+
+        // Detect if text uses non-Latin script (CJK, Arabic, Cyrillic, Devanagari, etc.)
+        $hasNonLatinScript = (bool) preg_match('/[\x{0400}-\x{04FF}\x{0600}-\x{06FF}\x{0900}-\x{097F}\x{3000}-\x{9FFF}\x{AC00}-\x{D7AF}\x{0E00}-\x{0E7F}\x{1000}-\x{109F}\x{10A0}-\x{10FF}\x{1100}-\x{11FF}]/u', $text);
+
+        // ── Check 1: Character entropy — random mashing has few spaces, lots of unique chars ──
+        $charCount = mb_strlen($lower);
+        $uniqueChars = count(array_unique(mb_str_split($lower)));
+        $spaceRatio = substr_count($lower, ' ') / max($charCount, 1);
+        $uniqueRatio = $uniqueChars / max($charCount, 1);
+
+        // CJK/Thai/etc. scripts don't use spaces between words — skip space-based checks
+        if (!$hasNonLatinScript) {
+            // Real text has ~15-25% spaces. Gibberish has <5%
+            if ($spaceRatio < 0.05 && $charCount > 30) {
+                $score -= 40;
+                $issues[] = 'Text appears to be a continuous string without proper word separation.';
+            } elseif ($spaceRatio < 0.10 && $charCount > 50) {
+                $score -= 15;
+                $issues[] = 'Text has very few word breaks.';
+            }
+
+            // Very high unique-char ratio for short text = likely random
+            if ($uniqueRatio > 0.85 && $charCount < 80) {
+                $score -= 25;
+                $issues[] = 'Character pattern suggests random input.';
+            }
+        }
+
+        // ── Check 2: Repeated character patterns ──
+        if (preg_match('/(.)\1{4,}/', $lower)) {
+            $score -= 20;
+            $issues[] = 'Text contains excessive character repetition.';
+        }
+
+        // ── Check 3: Word-level analysis ──
+        $words = preg_split('/\s+/', $lower, -1, PREG_SPLIT_NO_EMPTY);
+        $wordCount = count($words);
+
+        // For non-Latin scripts (CJK, etc.), use character count as proxy for word count
+        // Chinese averages ~1.5 chars per word, so 20 chars ≈ 13 words
+        $effectiveWordCount = $hasNonLatinScript ? (int) ($charCount / 1.5) : $wordCount;
+
+        if ($effectiveWordCount < 4) {
+            $score -= 30;
+            $issues[] = 'Text contains too few words to form a coherent report.';
+        }
+
+        // Check average word length — real words average 3-8 chars
+        // Skip for non-Latin scripts where space-based word splitting is unreliable
+        if ($wordCount > 0 && !$hasNonLatinScript) {
+            $avgWordLen = array_sum(array_map('mb_strlen', $words)) / $wordCount;
+            if ($avgWordLen > 12) {
+                $score -= 20;
+                $issues[] = 'Unusually long average word length suggests non-standard text.';
+            }
+            if ($avgWordLen < 2 && $wordCount > 5) {
+                $score -= 15;
+                $issues[] = 'Very short average word length.';
+            }
+        }
+
+        // ── Check 4: Vowel presence — real Latin-script words contain vowels ──
+        // Skip for non-Latin scripts where this check is irrelevant
+        if (!$hasNonLatinScript) {
+        $vowels = 'aeiou';
+        $wordsWithoutVowels = 0;
+        $longWordsWithoutVowels = 0;
+        foreach ($words as $w) {
+            $hasVowel = false;
+            for ($i = 0; $i < mb_strlen($w); $i++) {
+                if (str_contains($vowels, mb_substr($w, $i, 1))) { $hasVowel = true; break; }
+            }
+            if (!$hasVowel) {
+                $wordsWithoutVowels++;
+                if (mb_strlen($w) > 3) $longWordsWithoutVowels++;
+            }
+        }
+        if ($wordCount > 0) {
+            $noVowelRatio = $wordsWithoutVowels / $wordCount;
+            if ($noVowelRatio > 0.5) {
+                $score -= 25;
+                $issues[] = 'Most words lack vowels, suggesting non-language content.';
+            }
+            if ($longWordsWithoutVowels > 2) {
+                $score -= 10;
+                $issues[] = 'Multiple long words without vowels detected.';
+            }
+        }
+        } // end non-Latin vowel check
+
+        // ── Check 5: Dictionary coverage — check against common words in all target languages ──
+        $commonWords = $this->getCommonWordDictionary();
+        $dictHits = 0;
+        $checkWords = array_slice($words, 0, 50); // Check first 50 words
+        foreach ($checkWords as $w) {
+            $cleanWord = preg_replace('/[^a-z\']/', '', $w);
+            if (mb_strlen($cleanWord) < 2) continue;
+            // Direct match
+            if (isset($commonWords[$cleanWord])) { $dictHits++; continue; }
+            // Substring/stem match: check if any dictionary word (4+ chars) is contained in this word
+            // This handles agglutinative African languages where prefixes/suffixes wrap stems
+            $found = false;
+            foreach ($commonWords as $dw => $_) {
+                if (mb_strlen($dw) >= 4 && mb_strlen($cleanWord) >= 5 && str_contains($cleanWord, $dw)) {
+                    $found = true; break;
+                }
+            }
+            if ($found) { $dictHits++; continue; }
+            // Also check if this word is a prefix of a dictionary word (partial typing)
+            foreach ($commonWords as $dw => $_) {
+                if (mb_strlen($dw) >= 5 && mb_strlen($cleanWord) >= 4 && str_starts_with($dw, $cleanWord)) {
+                    $found = true; break;
+                }
+            }
+            if ($found) $dictHits++;
+        }
+        $significantWords = count(array_filter($checkWords, fn($w) => mb_strlen($w) >= 2));
+        $dictCoverage = $significantWords > 0 ? $dictHits / $significantWords : 0;
+
+        if ($dictCoverage < 0.10 && $significantWords >= 3) {
+            // For languages without dictionary, reduce penalty significantly
+            $penalty = $hasDictSupport ? 40 : 10;
+            $score -= $penalty;
+            if ($hasDictSupport) {
+                $issues[] = 'No recognizable words in any supported language (English, Shona, Ndebele, Tonga).';
+            }
+        } elseif ($dictCoverage < 0.15 && $significantWords > 5) {
+            $penalty = $hasDictSupport ? 35 : 8;
+            $score -= $penalty;
+            if ($hasDictSupport) {
+                $issues[] = 'Very few recognizable words in any supported language (English, Shona, Ndebele, Tonga).';
+            }
+        } elseif ($dictCoverage < 0.30 && $significantWords > 5 && $hasDictSupport) {
+            $score -= 15;
+            $issues[] = 'Low dictionary word coverage — text may be unclear.';
+        }
+
+        // If very few words AND none in dictionary, it's almost certainly gibberish
+        // But only apply full penalty for dictionary-supported languages
+        if ($wordCount < 5 && $dictCoverage < 0.1 && $significantWords >= 2) {
+            $score -= $hasDictSupport ? 20 : 5;
+            if ($hasDictSupport) {
+                $issues[] = 'Very short text with no recognizable words.';
+            }
+        }
+
+        // ── Check 6: Consecutive consonant clusters — gibberish has long consonant runs ──
+        // Skip for non-Latin scripts where this check is meaningless
+        // Use stricter threshold (5+) for non-dictionary languages since many languages have 4-consonant clusters
+        $clusterLen = $hasDictSupport ? 4 : 5;
+        if (!$hasNonLatinScript && preg_match_all('/[bcdfghjklmnpqrstvwxyz]{' . $clusterLen . ',}/i', $lower, $matches)) {
+            $badClusters = count($matches[0]);
+            if ($badClusters >= 3) {
+                $score -= 25;
+                $issues[] = 'Text contains unnatural consonant clusters.';
+            } elseif ($badClusters >= 1) {
+                $score -= 10;
+                $issues[] = 'Text contains unnatural consonant clusters.';
+            }
+        }
+
+        // ── Check 6b: Keyboard pattern detection ──
+        // Skip for non-Latin scripts
+        if (!$hasNonLatinScript) {
+        $keyboardPatterns = ['qwert', 'asdfg', 'zxcvb', 'poiuy', 'lkjhg', 'mnbvc', 'yuiop', 'ghjkl', 'werty', 'sdfgh', 'xcvbn'];
+        $kbHits = 0;
+        foreach ($keyboardPatterns as $pat) {
+            if (str_contains($lower, $pat)) $kbHits++;
+        }
+        if ($kbHits >= 2) {
+            $score -= 35;
+            $issues[] = 'Text contains keyboard mashing patterns.';
+        } elseif ($kbHits >= 1) {
+            $score -= 15;
+            $issues[] = 'Text contains keyboard-like character sequences.';
+        }
+        } // end non-Latin keyboard check
+
+        // ── Check 7: Punctuation and sentence structure ──
+        $hasPunctuation = preg_match('/[.!?,;:]/', $text);
+        $hasCapitalLetters = preg_match('/[A-Z]/', $text);
+        if (!$hasPunctuation && $charCount > 100) {
+            $score -= 5;
+            $issues[] = 'No punctuation found in long text.';
+        }
+        if (!$hasCapitalLetters && $charCount > 100 && $declaredLanguage === 'en') {
+            $score -= 5;
+        }
+
+        $score = max(0, min(100, $score));
+        $isClear = $score >= 40;
+
+        return [
+            'score' => $score,
+            'is_clear' => $isClear,
+            'issues' => $issues,
+            'word_count' => $wordCount,
+            'dict_coverage' => round($dictCoverage * 100),
+        ];
+    }
+
+    /**
+     * Combined dictionary of common words across English, Shona, Ndebele, and Tonga.
+     * Returns a hash-map for O(1) lookup.
+     * @return array<string, true>
+     */
+    protected function getCommonWordDictionary(): array
+    {
+        static $dict = null;
+        if ($dict !== null) return $dict;
+
+        $words = [
+            // ── English (200+ common words) ──
+            'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with',
+            'he','as','you','do','at','this','but','his','by','from','they','we','say','her',
+            'she','or','an','will','my','one','all','would','there','their','what','so','up',
+            'out','if','about','who','get','which','go','me','when','make','can','like','time',
+            'no','just','him','know','take','people','into','year','your','good','some','could',
+            'them','see','other','than','then','now','look','only','come','its','over','think',
+            'also','back','after','use','two','how','our','work','first','well','way','even',
+            'new','want','because','any','these','give','day','most','us','is','was','are',
+            'been','has','had','did','got','may','said','each','tell','does','set','three',
+            'own','hand','high','keep','last','long','made','many','much','number','very',
+            'man','woman','old','great','before','same','right','too','mean','call','end',
+            'find','here','thing','show','part','still','place','being','where','off','home',
+            // Core corruption/report vocabulary
+            'money','corruption','bribe','bribery','fraud','steal','stolen','embezzle','theft',
+            'government','official','public','funds','tender','contract','procurement','abuse',
+            'office','report','evidence','witness','investigation','police','court','law',
+            'minister','director','manager','council','authority','department','institution',
+            'payment','bank','account','invoice','receipt','document','proof','allegation',
+            'suspect','victim','complaint','case','crime','illegal','amount','million','dollar',
+            'usd','billion','paid','received','gave','took','diverted','misused','inflated',
+            'overpriced','forged','falsified','audit','inspector','commission','committee',
+
+            // ── Shona (150+ common words) ──
+            'ndi','nda','zva','kuti','kana','asi','ari','vanhu','munhu','mari','basa',
+            'mhuri','imba','mvura','chikafu','mukuru','murume','mukadzi','mwana','vana',
+            'nguva','zuva','usiku','mangwanani','masikati','manheru','gore','mwedzi',
+            'svondo','nyika','musha','guta','nzvimbo','nzira','motokari','chitima',
+            'chipatara','chikoro','chechi','musika','dhoro','sadza','nyama','hove',
+            'mukaka','doro','tea','kofi','chingwa','muriwo','michero','muti','mushonga',
+            'hurumende','mutemo','dare','mapurisa','musungwa','mhosva','mutongo',
+            'uchapupu','chapupu','bonde','rufu','urwere','hutano','kubata','kuba',
+            'kutora','kutaura','kuenda','kuuya','kuona','kunzwa','kudya','kunwa',
+            'kurara','kumuka','kushanda','kudzidza','kuimba','kutamba','kufamba',
+            'kugara','kunyora','kuverenga','kukura','kukuvadza','kushandisa','kuchera',
+            'huori','rushwa','kubiridzira','kupamba','kushungurudza','kunyengera',
+            'kunyepera','kufurira','kunzvenga','kurongedzwa','zvakawanda',
+            'ndakabira','ndakaona','zvekuita','nyaya','zvakaitika','hukama',
+            'chiremba','gavhuna','meya','nhengo','mumiririri','gweta',
+            'mutungamiriri','mutongi','mavhaucha','zvinyorwa',
+            'kupfupisa','kukanganisa','kutadza','kukumbira','kubvuma',
+            'kuramba','kudzoka','kupedza','kutanga','kuenderera',
+            'akaba','akasaina','yaifanira','haina','kusvika','dzinoratidza',
+            'yakaenda','vanogona','kutaura','zvavakaona','kukuvadza',
+            'varombo','kufa','nekuda','kwehuori','makambani','asipo',
+            'weku','kubva','chemadhora','makumi','mashanu','maviri','matatu',
+            'mana','mashanu','matanhatu','manomwe','masere','mapfumbamwe','gumi',
+            'chete','chiokomuhomwe','chikoro','chimwe','chinhambwe','dhora',
+            'pamusoro','pasi','pano','ipapo','rinhi','sei','ani','chipi',
+            'mukati','kunze','pedyo','kure','pamberi','shure','apa','apo',
+            'kwete','hongu','zvino','nhasi','nezuro','mangwana','kakawanda',
+            'wekuvaka','wekutengesa','wekutenga','wekushandisa','wekupa',
+            'akabvuma','akatora','akashandisa','akaba','akanyepa','akabirwa',
+
+            // ── Ndebele (120+ common words) ──
+            'ngi','nga','uku','aba','ama','isi','umu','imi','aba','abantu','umuntu',
+            'imali','umsebenzi','umndeni','indlu','amanzi','ukudla','inkosi','indoda',
+            'umfazi','umntwana','abantwana','isikhathi','ilanga','ubusuku','ekuseni',
+            'ntambama','kusihlwa','umnyaka','inyanga','iviki','ilizwe','ikhaya',
+            'idolobho','indawo','indlela','imota','isitimela','isibhedlela','isikolo',
+            'isonto','imakethe','isinkwa','inyama','inhlanzi','ubisi','utshwala',
+            'itiye','ikhofi','imifino','izihlahla','umuthi','uhulumende','umthetho',
+            'inkantolo','amapholisa','isibotshwa','icala','isigwebo','ubufakazi',
+            'ukweba','umkhonyovu','intshontshela','ukuphanga','ukwesabisa',
+            'ukusebenzisa','amandla','intengo','ephezulu','ukukhwabanisa',
+            'ukudla','okubanzi','okuhlelelweyo','okukhulu',
+            'ngabona','ukuthi','isikolo','indaba','umkhokheli',
+            'umphathiswa','imeya','ilungu','lephalamende','umgcinimafa',
+            'umbusi','amarekhodi','izincwadi','ofakazi',
+            'isivumelwano','enkampanini','emphakathini','njengomthetho',
+            'ukwedlula','isebenzisiwe','awakafikanga','njengobufakazi',
+
+            // ── Tonga (50+ common words) ──
+            'ndi','aba','amu','bantu','mali','mulimo','mukwasyi','ing\'anda',
+            'maanzi','cakulya','mwami','mulumi','mukaintu','mwana','bana',
+            'ciindi','buzuba','masiku','mabbili','mwaka','amwezi','mviki',
+            'nyika','mudundu','munzi','nzila','motokala','cibbadela',
+            'cikolo','cikombelo','musika','cinkwa','nyama','inswi','mukupa',
+            'bukoko','bulelo','mulao','inkuta','bapolisa','mwaninyinza',
+            'mulandu','bumboni','kwiiba','bumpelenge','rushwa',
+            'buumi','bwabantu','musamu','lufu','nzala',
+            'zyuulu','zyiingi','mweendelezi','simalelo','musololi',
+        ];
+
+        $dict = [];
+        foreach ($words as $w) {
+            $dict[$w] = true;
+        }
+        return $dict;
+    }
+
+    /**
+     * Detect the language of a text snippet.
+     * Returns language code: 'en', 'sn' (Shona), 'nd' (Ndebele), 'to' (Tonga).
+     */
+    protected function detectTextLanguage(string $text): string
+    {
+        $lower = mb_strtolower($text);
+        $words = preg_split('/\s+/', $lower, -1, PREG_SPLIT_NO_EMPTY);
+
+        $shonaMarkers = [
+            'kuti','kana','asi','vanhu','munhu','musha','nyika','zvakaitika',
+            'ndakabira','ndakaona','zvekuita','nyaya','hukama','kushandisa',
+            'hurumende','mukuru','basa','chiremba','nguva','zvakawanda',
+            'akaba','yaifanira','haina','dzinoratidza','vanogona',
+            'chipatara','mishonga','varwere','mavhaucha','makambani',
+            'husiku','zuva','mangwanani','masikati','manheru',
+        ];
+        $ndebeleMarkers = [
+            'ukuthi','umuntu','abantu','ukweba','umkhonyovu','uhulumende',
+            'ngabona','inkosi','isikolo','indaba','isibhedlela',
+            'amapholisa','inkantolo','umthetho','ukukhwabanisa',
+            'umkhokheli','emphakathini','njengomthetho','njengobufakazi',
+            'isivumelwano','enkampanini','awakafikanga','abalamthombo',
+        ];
+        $tongaMarkers = [
+            'bantu','mulimo','mukwasyi','maanzi','cakulya','mwami',
+            'cibbadela','cikolo','bulelo','mulao','bapolisa',
+            'kwiiba','bumpelenge','zyuulu','zyiingi','buumi',
+        ];
+
+        $shonaHits = 0;
+        $ndebeleHits = 0;
+        $tongaHits = 0;
+
+        foreach ($words as $w) {
+            foreach ($shonaMarkers as $m) {
+                if ($w === $m || str_contains($w, $m)) { $shonaHits++; break; }
+            }
+            foreach ($ndebeleMarkers as $m) {
+                if ($w === $m || str_contains($w, $m)) { $ndebeleHits++; break; }
+            }
+            foreach ($tongaMarkers as $m) {
+                if ($w === $m || str_contains($w, $m)) { $tongaHits++; break; }
+            }
+        }
+
+        $max = max($shonaHits, $ndebeleHits, $tongaHits);
+        if ($max >= 2) {
+            if ($shonaHits === $max) return 'sn';
+            if ($ndebeleHits === $max) return 'nd';
+            if ($tongaHits === $max) return 'to';
+        }
+
+        return 'en';
+    }
+
+    /**
+     * Translate text using Gemini AI.
+     * @param string $text The text to translate
+     * @param string $fromLang Source language code
+     * @param string $toLang Target language code
+     * @return array{success: bool, translated_text: string, error?: string}
+     */
+    protected function translateWithGemini(string $text, string $fromLang, string $toLang): array
+    {
+        // Comprehensive ISO 639-1 language name mapping
+        $langNames = [
+            'aa' => 'Afar', 'ab' => 'Abkhaz', 'af' => 'Afrikaans', 'ak' => 'Akan',
+            'am' => 'Amharic', 'an' => 'Aragonese', 'ar' => 'Arabic', 'as' => 'Assamese',
+            'av' => 'Avaric', 'ay' => 'Aymara', 'az' => 'Azerbaijani', 'ba' => 'Bashkir',
+            'be' => 'Belarusian', 'bg' => 'Bulgarian', 'bh' => 'Bihari', 'bi' => 'Bislama',
+            'bm' => 'Bambara', 'bn' => 'Bengali', 'bo' => 'Tibetan', 'br' => 'Breton',
+            'bs' => 'Bosnian', 'ca' => 'Catalan', 'ce' => 'Chechen', 'ch' => 'Chamorro',
+            'co' => 'Corsican', 'cr' => 'Cree', 'cs' => 'Czech', 'cu' => 'Church Slavonic',
+            'cv' => 'Chuvash', 'cy' => 'Welsh', 'da' => 'Danish', 'de' => 'German',
+            'dv' => 'Divehi', 'dz' => 'Dzongkha', 'ee' => 'Ewe', 'el' => 'Greek',
+            'en' => 'English', 'eo' => 'Esperanto', 'es' => 'Spanish', 'et' => 'Estonian',
+            'eu' => 'Basque', 'fa' => 'Persian', 'ff' => 'Fula', 'fi' => 'Finnish',
+            'fj' => 'Fijian', 'fo' => 'Faroese', 'fr' => 'French', 'fy' => 'Western Frisian',
+            'ga' => 'Irish', 'gd' => 'Scottish Gaelic', 'gl' => 'Galician', 'gn' => 'Guarani',
+            'gu' => 'Gujarati', 'gv' => 'Manx', 'ha' => 'Hausa', 'he' => 'Hebrew',
+            'hi' => 'Hindi', 'ho' => 'Hiri Motu', 'hr' => 'Croatian', 'ht' => 'Haitian Creole',
+            'hu' => 'Hungarian', 'hy' => 'Armenian', 'hz' => 'Herero', 'ia' => 'Interlingua',
+            'id' => 'Indonesian', 'ie' => 'Interlingue', 'ig' => 'Igbo', 'ii' => 'Nuosu',
+            'ik' => 'Inupiaq', 'io' => 'Ido', 'is' => 'Icelandic', 'it' => 'Italian',
+            'iu' => 'Inuktitut', 'ja' => 'Japanese', 'jv' => 'Javanese', 'ka' => 'Georgian',
+            'kg' => 'Kongo', 'ki' => 'Kikuyu', 'kj' => 'Kuanyama', 'kk' => 'Kazakh',
+            'kl' => 'Kalaallisut', 'km' => 'Khmer', 'kn' => 'Kannada', 'ko' => 'Korean',
+            'kr' => 'Kanuri', 'ks' => 'Kashmiri', 'ku' => 'Kurdish', 'kv' => 'Komi',
+            'kw' => 'Cornish', 'ky' => 'Kyrgyz', 'la' => 'Latin', 'lb' => 'Luxembourgish',
+            'lg' => 'Ganda', 'li' => 'Limburgish', 'ln' => 'Lingala', 'lo' => 'Lao',
+            'lt' => 'Lithuanian', 'lu' => 'Luba-Katanga', 'lv' => 'Latvian', 'mg' => 'Malagasy',
+            'mh' => 'Marshallese', 'mi' => 'Maori', 'mk' => 'Macedonian', 'ml' => 'Malayalam',
+            'mn' => 'Mongolian', 'mr' => 'Marathi', 'ms' => 'Malay', 'mt' => 'Maltese',
+            'my' => 'Burmese', 'na' => 'Nauru', 'nb' => 'Norwegian Bokmål', 'nd' => 'Ndebele',
+            'ne' => 'Nepali', 'ng' => 'Ndonga', 'nl' => 'Dutch', 'nn' => 'Norwegian Nynorsk',
+            'no' => 'Norwegian', 'nr' => 'Southern Ndebele', 'nv' => 'Navajo', 'ny' => 'Chewa/Nyanja',
+            'oc' => 'Occitan', 'oj' => 'Ojibwe', 'om' => 'Oromo', 'or' => 'Odia',
+            'os' => 'Ossetian', 'pa' => 'Punjabi', 'pi' => 'Pali', 'pl' => 'Polish',
+            'ps' => 'Pashto', 'pt' => 'Portuguese', 'qu' => 'Quechua', 'rm' => 'Romansh',
+            'rn' => 'Kirundi', 'ro' => 'Romanian', 'ru' => 'Russian', 'rw' => 'Kinyarwanda',
+            'sa' => 'Sanskrit', 'sc' => 'Sardinian', 'sd' => 'Sindhi', 'se' => 'Northern Sami',
+            'sg' => 'Sango', 'si' => 'Sinhala', 'sk' => 'Slovak', 'sl' => 'Slovenian',
+            'sm' => 'Samoan', 'sn' => 'Shona', 'so' => 'Somali', 'sq' => 'Albanian',
+            'sr' => 'Serbian', 'ss' => 'Swati', 'st' => 'Sotho', 'su' => 'Sundanese',
+            'sv' => 'Swedish', 'sw' => 'Swahili', 'ta' => 'Tamil', 'te' => 'Telugu',
+            'tg' => 'Tajik', 'th' => 'Thai', 'ti' => 'Tigrinya', 'tk' => 'Turkmen',
+            'tl' => 'Tagalog', 'tn' => 'Tswana', 'to' => 'Tonga', 'tr' => 'Turkish',
+            'ts' => 'Tsonga', 'tt' => 'Tatar', 'tw' => 'Twi', 'ty' => 'Tahitian',
+            'ug' => 'Uyghur', 'uk' => 'Ukrainian', 'ur' => 'Urdu', 'uz' => 'Uzbek',
+            've' => 'Venda', 'vi' => 'Vietnamese', 'vo' => 'Volapük', 'wa' => 'Walloon',
+            'wo' => 'Wolof', 'xh' => 'Xhosa', 'yi' => 'Yiddish', 'yo' => 'Yoruba',
+            'za' => 'Zhuang', 'zh' => 'Chinese', 'zu' => 'Zulu',
+        ];
+
+        $fromName = $langNames[$fromLang] ?? $fromLang;
+        $toName = $langNames[$toLang] ?? $toLang;
+
+        $apiKey = (string) config('services.gemini.api_key');
+        $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
+
+        if (!$apiKey) {
+            return ['success' => false, 'translated_text' => '', 'error' => 'Gemini API key not configured'];
+        }
+
+        $url = sprintf(
+            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+            urlencode($model),
+            urlencode($apiKey)
+        );
+
+        $prompt = <<<PROMPT
+You are a professional translator with expertise in world languages, including African languages (Shona, Ndebele, Tonga, Swahili, Zulu, Xhosa, etc.) and all major international languages.
+
+Translate the following text from {$fromName} to {$toName}. 
+
+RULES:
+- Translate accurately, preserving meaning and tone
+- Keep proper nouns, names, monetary amounts (USD, ZWL), dates, and numbers unchanged
+- Keep institution names in their original form
+- If the text contains corruption-related terminology, use the appropriate legal/official terms in the target language
+- Do NOT add any commentary, explanation, or notes — return ONLY the translated text
+- If the text is already in {$toName}, return it unchanged
+
+TEXT TO TRANSLATE:
+{$text}
+PROMPT;
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(20)
+                ->retry(2, 500)
+                ->acceptJson()
+                ->post($url, [
+                    'contents' => [['parts' => [['text' => $prompt]]]],
+                    'generationConfig' => [
+                        'temperature' => 0.1,
+                    ],
+                ]);
+
+            if (!$response->successful()) {
+                return ['success' => false, 'translated_text' => '', 'error' => 'Translation API returned ' . $response->status()];
+            }
+
+            $translated = $response->json('candidates.0.content.parts.0.text');
+            if (!is_string($translated) || trim($translated) === '') {
+                return ['success' => false, 'translated_text' => '', 'error' => 'Empty translation response'];
+            }
+
+            return ['success' => true, 'translated_text' => trim($translated)];
+        } catch (\Exception $e) {
+            Log::warning('Translation failed', ['error' => $e->getMessage()]);
+            return ['success' => false, 'translated_text' => '', 'error' => $e->getMessage()];
+        }
     }
 
     /**
@@ -805,6 +1320,23 @@ PROMPT;
             $score += 4;
         } elseif ($factorHits >= 3) {
             $score += 2;
+        }
+
+        // ── Factor 14: Text Clarity Penalty ──
+        // Gibberish/incoherent submissions are penalized heavily.
+        // Auto-detect language so non-English reports aren't unfairly penalized
+        $detectedLang = $this->detectTextLanguage($description);
+        $clarity = $this->assessTextClarity($description, $detectedLang);
+        $this->lastClarityResult = $clarity;
+        if ($clarity['score'] < 20) {
+            // Near-gibberish: cap score at LOW range regardless of keyword matches
+            $score = min($score, 10);
+        } elseif ($clarity['score'] < 40) {
+            // Very unclear: halve the score
+            $score = (int) ($score * 0.5);
+        } elseif ($clarity['score'] < 60) {
+            // Somewhat unclear: reduce by 30%
+            $score = (int) ($score * 0.7);
         }
 
         $this->lastExpertRawScore = $score;

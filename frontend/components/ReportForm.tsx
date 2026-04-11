@@ -1,9 +1,10 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { analyzeCase } from "../services/gemini";
 import { apiClient } from "../services/api";
 import { CorruptionType, User } from "../types";
 import { Language, t } from "../i18n";
 import { toast } from "react-hot-toast";
+import { ALL_LANGUAGES, PRIORITY_LANGUAGES, getLanguageName } from "../lib/languages";
 
 interface ReportFormProps {
   user: User;
@@ -138,8 +139,33 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
   const [filteredLocations, setFilteredLocations] = useState<string[]>([]);
   const [selectedProvince, setSelectedProvince] = useState("");
 
-  // Language hint
+  // Language selection & detection
+  const [reportLanguage, setReportLanguage] = useState<string>(language === "sn" ? "sn" : language === "nd" ? "nd" : language === "to" ? "to" : "en");
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [langSearchQuery, setLangSearchQuery] = useState("");
+  const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const langDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close language dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target as Node)) {
+        setShowLangDropdown(false);
+      }
+    };
+    if (showLangDropdown) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showLangDropdown]);
+
+  // Text clarity
+  const [clarityResult, setClarityResult] = useState<{
+    clarity_score: number;
+    is_clear: boolean;
+    issues: string[];
+    detected_language: string;
+  } | null>(null);
+  const [clarityChecking, setClarityChecking] = useState(false);
+  const clarityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pre-submission suggestions
   const [preSuggestions, setPreSuggestions] = useState<any>(null);
@@ -220,53 +246,54 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
     setFileErrors([]);
   };
 
-  // ── Language detection (simple heuristic for Shona/Ndebele) ──
-  const detectLanguage = (text: string) => {
-    const lower = text.toLowerCase();
-    const shonaMarkers = [
-      "ndakabira",
-      "ndakaona",
-      "kuti",
-      "kana",
-      "zvekuita",
-      "nyaya",
-      "munhu",
-      "zvakaitika",
-      "mari",
-      "hukama",
-      "kushandisa",
-      "hurumende",
-      "mukuru",
-      "basa",
-      "chiremba",
-      "nguva",
-    ];
-    const ndebeleMarkers = [
-      "ngabona",
-      "ukuthi",
-      "umuntu",
-      "imali",
-      "umsebenzi",
-      "uhulumende",
-      "inkosi",
-      "isikolo",
-      "indaba",
-    ];
+  // ── Language detection & text clarity checking ──
+  const filteredLanguages = useMemo(() => {
+    if (!langSearchQuery.trim()) return PRIORITY_LANGUAGES;
+    const q = langSearchQuery.toLowerCase();
+    return ALL_LANGUAGES.filter(
+      (l) =>
+        l.name.toLowerCase().includes(q) ||
+        l.nativeName.toLowerCase().includes(q) ||
+        l.code.toLowerCase() === q
+    ).slice(0, 15);
+  }, [langSearchQuery]);
 
-    const shonaHits = shonaMarkers.filter((m) => lower.includes(m)).length;
-    const ndebeleHits = ndebeleMarkers.filter((m) => lower.includes(m)).length;
-
-    if (shonaHits >= 2) return "Shona";
-    if (ndebeleHits >= 2) return "Ndebele";
-    return null;
-  };
+  const checkTextClarity = useCallback(async (text: string) => {
+    if (text.trim().length < 20) {
+      setClarityResult(null);
+      return;
+    }
+    setClarityChecking(true);
+    try {
+      const resp = await apiClient.validateTextClarity(text, reportLanguage);
+      if (resp.success && resp.data) {
+        setClarityResult(resp.data);
+        // Auto-update the language selector to match what the user is actually writing
+        if (resp.data.detected_language && resp.data.detected_language !== reportLanguage) {
+          setReportLanguage(resp.data.detected_language);
+        }
+        if (resp.data.detected_language && resp.data.detected_language !== 'en') {
+          setDetectedLanguage(getLanguageName(resp.data.detected_language));
+        } else {
+          setDetectedLanguage(null);
+        }
+      }
+    } catch {
+      // Silently fail — clarity check is optional
+    } finally {
+      setClarityChecking(false);
+    }
+  }, [reportLanguage]);
 
   const handleDescriptionChange = (text: string) => {
     setFormData((prev) => ({ ...prev, description: text }));
-    if (text.length > 30) {
-      const lang = detectLanguage(text);
-      setDetectedLanguage(lang);
+
+    // Debounced clarity check (800ms after user stops typing)
+    if (clarityTimerRef.current) clearTimeout(clarityTimerRef.current);
+    if (text.trim().length >= 20) {
+      clarityTimerRef.current = setTimeout(() => checkTextClarity(text), 800);
     } else {
+      setClarityResult(null);
       setDetectedLanguage(null);
     }
   };
@@ -297,6 +324,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
       return;
     }
 
+    // Block submission if text is clearly gibberish
+    if (clarityResult && !clarityResult.is_clear) {
+      setError(
+        "Your report description appears unclear or unrecognizable. Please write a clear description of the corruption incident in any language."
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -309,6 +344,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
         location: formData.location,
         description: formData.description,
         risk_score: analysis.riskScore || 50,
+        report_language: reportLanguage,
       });
 
       if (response.success) {
@@ -466,6 +502,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
                 setLocationQuery("");
                 setDetectedLanguage(null);
                 setSelectedProvince("");
+                setClarityResult(null);
                 setFormData({
                   type: CorruptionType.BRIBERY,
                   institution: "",
@@ -557,15 +594,65 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block ml-1">
                 {t(language, "detailedDescription")}
               </label>
-              {detectedLanguage && (
-                <span className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                  {t(language, "detected")}: {detectedLanguage}
-                </span>
+              <div className="flex items-center gap-2">
+                {detectedLanguage && (
+                  <span className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    {t(language, "detected")}: {detectedLanguage}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Language Selector */}
+            <div className="flex items-center gap-2 relative" ref={langDropdownRef}>
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Writing in:
+              </span>
+              <button
+                type="button"
+                onClick={() => { setShowLangDropdown(!showLangDropdown); setLangSearchQuery(""); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-white border border-emerald-500 shadow-sm hover:bg-emerald-600 transition-all"
+              >
+                {getLanguageName(reportLanguage)}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showLangDropdown && (
+                <div className="absolute top-full left-0 mt-1 z-50 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl overflow-hidden">
+                  <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                    <input
+                      type="text"
+                      placeholder="Search languages..."
+                      value={langSearchQuery}
+                      onChange={(e) => setLangSearchQuery(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-400"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto">
+                    {filteredLanguages.map((lang) => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => { setReportLanguage(lang.code); setShowLangDropdown(false); setLangSearchQuery(""); }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors ${
+                          reportLanguage === lang.code ? "bg-emerald-50 dark:bg-emerald-500/10 font-bold text-emerald-700 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
+                        <span>{lang.name} <span className="text-slate-400 dark:text-slate-500">({lang.nativeName})</span></span>
+                        {lang.region && <span className="text-[10px] text-slate-400 dark:text-slate-500">{lang.region}</span>}
+                        {reportLanguage === lang.code && <span className="text-emerald-500">✓</span>}
+                      </button>
+                    ))}
+                    {filteredLanguages.length === 0 && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-3">No languages found</p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
             <textarea
               rows={6}
-              placeholder="Describe what happened in detail. Include dates, names of positions/titles (not your own), amounts, and any witnesses or evidence. You can write in English, Shona, Ndebele, or any language you are comfortable with..."
+              placeholder="Describe what happened in detail. Include dates, names of positions/titles (not your own), amounts, and any witnesses or evidence. You can write in any language you are comfortable with..."
               className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 font-medium leading-relaxed focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 transition-all resize-none"
               value={formData.description}
               onChange={(e) => handleDescriptionChange(e.target.value)}
@@ -584,6 +671,63 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
                   </p>
                 )}
             </div>
+
+            {/* Text Clarity Indicator */}
+            {clarityChecking && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                <div className="w-3 h-3 border-2 border-slate-400/30 border-t-slate-500 rounded-full animate-spin" />
+                <span className="text-xs text-slate-500">Checking text clarity...</span>
+              </div>
+            )}
+            {clarityResult && !clarityChecking && (
+              <div className={`px-4 py-3 rounded-xl border ${
+                clarityResult.clarity_score >= 70
+                  ? "bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/20"
+                  : clarityResult.clarity_score >= 40
+                  ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200 dark:border-amber-500/20"
+                  : "bg-rose-50 dark:bg-rose-500/5 border-rose-200 dark:border-rose-500/20"
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">
+                      {clarityResult.clarity_score >= 70 ? "✅" : clarityResult.clarity_score >= 40 ? "⚠️" : "❌"}
+                    </span>
+                    <span className={`text-xs font-black uppercase tracking-wider ${
+                      clarityResult.clarity_score >= 70
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : clarityResult.clarity_score >= 40
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-rose-700 dark:text-rose-400"
+                    }`}>
+                      {clarityResult.clarity_score >= 70
+                        ? "Clear & readable"
+                        : clarityResult.clarity_score >= 40
+                        ? "Somewhat unclear — consider improving"
+                        : "Text not recognized — please rewrite"}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    clarityResult.clarity_score >= 70
+                      ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
+                      : clarityResult.clarity_score >= 40
+                      ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                      : "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20"
+                  }`}>
+                    {clarityResult.clarity_score}/100
+                  </span>
+                </div>
+                {clarityResult.issues.length > 0 && clarityResult.clarity_score < 70 && (
+                  <ul className="mt-2 space-y-0.5">
+                    {clarityResult.issues.slice(0, 3).map((issue, i) => (
+                      <li key={i} className="text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-1.5">
+                        <span className="text-slate-400 mt-0.5">•</span>
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Province & Location with type-ahead */}
@@ -803,9 +947,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading || formData.description.trim().length < 20}
+            disabled={loading || formData.description.trim().length < 20 || (clarityResult !== null && !clarityResult.is_clear)}
             className={`w-full rounded-2xl font-bold py-4 text-sm uppercase tracking-widest transition-all ${
-              loading || formData.description.trim().length < 20
+              loading || formData.description.trim().length < 20 || (clarityResult !== null && !clarityResult.is_clear)
                 ? "bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-400 cursor-not-allowed"
                 : "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
             }`}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { User, CaseReport, CaseStatus } from "../types";
 import BlockchainVerification from "./BlockchainVerification";
@@ -62,7 +63,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
 
   const handleDispute = async (caseId: string) => {
     if (!reason.trim() || reason.length < 10) {
-      alert(
+      toast.error(
         "Please provide a more detailed reason (minimum 10 characters) for the dispute.",
       );
       return;
@@ -80,6 +81,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
       const response = await apiClient.disputeReport(caseId, reason);
 
       if (response.success) {
+        toast.success("Dispute submitted successfully. Your case is being reviewed.");
         setDisputingId(null);
         setReason("");
         await loadCases(); // Reload cases to get updated data
@@ -88,7 +90,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
       }
     } catch (err: any) {
       console.error("Error submitting dispute:", err);
-      alert(err.message || "Failed to submit dispute. Please try again.");
+      toast.error(err.message || "Failed to submit dispute. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -291,6 +293,72 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
 
               {/* Blockchain Verification Section */}
               <BlockchainVerification reportId={c.id} />
+
+              {/* Success Outcome Display (Shown when SUCCESSFUL) */}
+              {c.status === CaseStatus.SUCCESSFUL && (
+                <div className="mt-8 p-8 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-[32px] border border-emerald-500/20 shadow-xl shadow-emerald-500/5 animate-fade-in relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-6xl">
+                    🏆
+                  </div>
+
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                      🏆
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white uppercase tracking-[0.1em] leading-none">
+                        Case Successfully Resolved
+                      </h4>
+                      <p className="text-[10px] text-emerald-400 font-black uppercase tracking-wider mt-1.5 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Action taken against corrupt parties
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-5 bg-nexus-950/80 rounded-2xl border border-emerald-500/10 backdrop-blur-xl">
+                      <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-[0.2em] mb-3">
+                        Investigation Outcome
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="text-center">
+                          <p className="text-xl">📥</p>
+                          <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1">Submitted</p>
+                          <p className="text-[9px] text-slate-500">✓ Complete</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xl">🔎</p>
+                          <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1">Reviewed</p>
+                          <p className="text-[9px] text-slate-500">✓ Complete</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xl">🔍</p>
+                          <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1">Investigated</p>
+                          <p className="text-[9px] text-slate-500">✓ Complete</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xl">🏆</p>
+                          <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider mt-1">Successful</p>
+                          <p className="text-[9px] text-slate-500">✓ Resolved</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                        Your report made a difference. Thank you for your courage.
+                      </p>
+                    </div>
+                    {c.lastUpdated && (
+                      <p className="text-[10px] text-slate-600 font-bold uppercase tracking-tighter px-2">
+                        Resolved: {new Date(c.lastUpdated).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Dispute Input Section (Shown when CLOSED) */}
               {c.status === CaseStatus.CLOSED && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus, User, UserRole } from "../types";
+import { ALL_LANGUAGES, getLanguageName } from "../lib/languages";
 
 interface InvestigatorViewProps {
   user: User;
@@ -171,11 +172,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const [actionProcessing, setActionProcessing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Expert review & evidence scan state
+  // Expert review state
   const [expertReview, setExpertReview] = useState<any | null>(null);
   const [expertReviewLoading, setExpertReviewLoading] = useState(false);
-  const [evidenceScan, setEvidenceScan] = useState<any | null>(null);
-  const [evidenceScanLoading, setEvidenceScanLoading] = useState(false);
 
   // Pre-review findings report state
   const [preReviewReport, setPreReviewReport] = useState<any | null>(null);
@@ -184,6 +183,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   // Investigation log entries (detective platform)
   const [investigationLogs, setInvestigationLogs] = useState<Array<{date: string; account: string; finding: string; progress: string}>>([]);
   const [logEntry, setLogEntry] = useState({account: "", finding: "", progress: "In Progress"});
+
+  // Translation state
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [translateLoading, setTranslateLoading] = useState(false);
+  const [translateLang, setTranslateLang] = useState<string>("en");
 
   // ── Fetch cases ──
   const fetchCases = useCallback(async () => {
@@ -271,6 +275,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       a.download = fileName;
       a.click();
       URL.revokeObjectURL(objUrl);
+      toast.success(`Downloaded: ${fileName}`);
     } catch (err) {
       console.error("Evidence download error:", err);
       toast.error("Failed to download evidence file. Please try again.");
@@ -298,6 +303,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     setActionNotes("");
     setActionError(null);
     setPreReviewReport(null);
+    setTranslatedText(null);
+    setTranslateLoading(false);
 
     const resolvedId = (c as any).case_id || c.id;
 
@@ -358,6 +365,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
           actionNotes.trim() || "Stage advanced by investigator.",
       });
       if (resp?.success) {
+        toast.success(`Case advanced to ${targetStage.replace("_", " ")} stage`);
         const updatedStatus = targetStage as CaseStatus;
         setDossierData((prev: any) => ({ ...prev, status: updatedStatus }));
         setCases((prev) =>
@@ -370,9 +378,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
         setActionNotes("");
         await loadStages(id);
       } else {
+        toast.error(resp?.message || "Action failed.");
         setActionError(resp?.message || "Action failed.");
       }
     } catch (err: any) {
+      toast.error(err.message || "Action failed.");
       setActionError(err.message || "Action failed.");
     } finally {
       setActionProcessing(false);
@@ -386,7 +396,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
     setActionNotes("");
     setActionError(null);
     setExpertReview(null);
-    setEvidenceScan(null);
     setPreReviewReport(null);
     setInvestigationLogs([]);
     setLogEntry({account: "", finding: "", progress: "In Progress"});
@@ -404,21 +413,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       setExpertReview({ error: err.message || "Review failed" });
     } finally {
       setExpertReviewLoading(false);
-    }
-  };
-
-  const runEvidenceScan = async () => {
-    if (!dossierData) return;
-    setEvidenceScanLoading(true);
-    try {
-      const id = dossierData.case_id || dossierData.id;
-      const resp = await apiClient.scanEvidence(id);
-      if (resp.success) setEvidenceScan(resp.data);
-      else setEvidenceScan({ error: resp.message || "Scan failed" });
-    } catch (err: any) {
-      setEvidenceScan({ error: err.message || "Scan failed" });
-    } finally {
-      setEvidenceScanLoading(false);
     }
   };
 
@@ -449,11 +443,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
       (c.id || "").toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   }).sort((a, b) => {
-    // Sort by priority (CRITICAL first), then by risk score (highest first)
-    const pa = priorityRank[a.priority] || 0;
-    const pb = priorityRank[b.priority] || 0;
-    if (pb !== pa) return pb - pa;
-    return (b.riskScore || 0) - (a.riskScore || 0);
+    // Sort by newest first (most recent timestamp on top)
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
   });
 
   const currentStatus: string = dossierData?.status ?? "";
@@ -793,7 +784,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                 <div className="space-y-6">
                   {/* Case Info */}
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5 bg-slate-50 dark:bg-white/5 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
                         {
                           label: "Priority",
@@ -801,12 +792,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                           className:
                             priorityColor(dossierData.priority) +
                             " font-black uppercase",
-                        },
-                        {
-                          label: "Risk Score",
-                          value: `${dossierData.risk_score}%`,
-                          className:
-                            "font-black text-slate-900 dark:text-white",
                         },
                         {
                           label: "Type",
@@ -842,14 +827,78 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Description
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Description
+                          </p>
+                          {dossierData.report_language && dossierData.report_language !== 'en' && (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-500/20 uppercase">
+                              {getLanguageName(dossierData.report_language)}
+                            </span>
+                          )}
+                        </div>
+                        {(decrypted.description || dossierData.description) && (
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={translateLang}
+                              onChange={(e) => setTranslateLang(e.target.value)}
+                              className="text-[10px] font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-slate-600 dark:text-slate-300"
+                            >
+                              {ALL_LANGUAGES.map((lang) => (
+                                <option key={lang.code} value={lang.code}>{lang.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={async () => {
+                                const text = decrypted.description || dossierData.description;
+                                if (!text) return;
+                                setTranslateLoading(true);
+                                setTranslatedText(null);
+                                try {
+                                  const res = await apiClient.translateText(
+                                    text,
+                                    dossierData.report_language || 'en',
+                                    translateLang
+                                  );
+                                  setTranslatedText(res.data?.translated_text || res.translated_text || "Translation failed.");
+                                } catch (err: any) {
+                                  setTranslatedText("Translation failed: " + (err?.response?.data?.message || err.message));
+                                } finally {
+                                  setTranslateLoading(false);
+                                }
+                              }}
+                              disabled={translateLoading}
+                              className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-500/20 transition-colors disabled:opacity-50"
+                            >
+                              {translateLoading ? "Translating..." : "Translate"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                         {decrypted.description ||
                           dossierData.description ||
                           "No description available."}
                       </p>
+                      {translatedText && (
+                        <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                              Translated ({getLanguageName(translateLang)})
+                            </p>
+                            <button
+                              onClick={() => setTranslatedText(null)}
+                              className="text-[10px] text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <p className="text-sm text-blue-900 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                            {translatedText}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -887,24 +936,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                             {dossierData.ai_summary.sub_category && (
                               <p className="text-[10px] text-slate-500 mt-0.5">{dossierData.ai_summary.sub_category}</p>
                             )}
-                          </div>
-                        )}
-                        {dossierData.ai_summary.risk_score != null && (
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Risk Score</p>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-[60px]">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    dossierData.ai_summary.risk_score > 75 ? 'bg-rose-500' :
-                                    dossierData.ai_summary.risk_score > 50 ? 'bg-orange-500' :
-                                    dossierData.ai_summary.risk_score > 25 ? 'bg-amber-500' : 'bg-emerald-500'
-                                  }`}
-                                  style={{ width: `${dossierData.ai_summary.risk_score}%` }}
-                                />
-                              </div>
-                              <span className="text-xs font-black text-slate-900 dark:text-white">{dossierData.ai_summary.risk_score}/100</span>
-                            </div>
                           </div>
                         )}
                         {dossierData.ai_summary.investigation_complexity && (
@@ -1922,87 +1953,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         )}
                     </div>
                   )}
-
-                  {/* ── Evidence Scan (Available at ALL stages) ── */}
-                  <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/20 bg-cyan-50 dark:bg-cyan-500/5 p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-black text-cyan-700 dark:text-cyan-400 uppercase tracking-widest">
-                        AI Evidence Analysis
-                      </p>
-                      {!evidenceScan && (
-                        <button onClick={runEvidenceScan} disabled={evidenceScanLoading}
-                          className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
-                          {evidenceScanLoading ? "Scanning..." : "Scan Evidence"}
-                        </button>
-                      )}
-                    </div>
-                    {evidenceScanLoading && (
-                      <div className="flex items-center gap-2 text-sm text-cyan-600 dark:text-cyan-400">
-                        <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                        Analyzing evidence files...
-                          </div>
-                        )}
-                        {evidenceScan && !evidenceScan.error && (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                                evidenceScan.evidence_quality === "STRONG" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20" :
-                                evidenceScan.evidence_quality === "MODERATE" ? "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20" :
-                                "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20"
-                              }`}>
-                                Evidence: {evidenceScan.evidence_quality}
-                              </span>
-                              <span className="text-xs font-bold text-slate-500">Quality Score: {evidenceScan.quality_score}/100</span>
-                            </div>
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{evidenceScan.analysis}</p>
-                            {evidenceScan.file_assessments?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider mb-1">File Assessments</p>
-                                <div className="space-y-1">
-                                  {evidenceScan.file_assessments.map((f: any, i: number) => (
-                                    <div key={i} className="flex items-center gap-2 text-xs">
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                        f.relevance === "HIGH" ? "bg-emerald-500/10 text-emerald-600" :
-                                        f.relevance === "MEDIUM" ? "bg-amber-500/10 text-amber-600" :
-                                        "bg-slate-500/10 text-slate-500"
-                                      }`}>{f.relevance}</span>
-                                      <span className="text-slate-700 dark:text-slate-300 font-medium">{f.file}</span>
-                                      <span className="text-slate-500">— {f.note}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {evidenceScan.missing_evidence?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Missing Evidence</p>
-                                <ul className="space-y-1">
-                                  {evidenceScan.missing_evidence.map((m: string, i: number) => (
-                                    <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                      <span className="text-amber-500 mt-0.5">⚠</span> {m}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {evidenceScan.suggestions?.length > 0 && (
-                              <div>
-                                <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Investigative Suggestions</p>
-                                <ul className="space-y-1">
-                                  {evidenceScan.suggestions.map((s: string, i: number) => (
-                                    <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                      <span className="text-blue-500 mt-0.5">→</span> {s}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {evidenceScan?.error && (
-                          <p className="text-xs text-rose-500">{evidenceScan.error}</p>
-                        )}
-                      </div>
 
                   {/* ── Post-Case Expert Review (CLOSED/DISPUTED/SUCCESSFUL) ── */}
                   {(currentStatus === "CLOSED" || currentStatus === "DISPUTED" || currentStatus === "SUCCESSFUL") && (

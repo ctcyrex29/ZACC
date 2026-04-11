@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { ReportForm } from "./components/ReportForm";
@@ -13,6 +13,7 @@ import { ChatBot } from "./components/ChatBot";
 import { ReportGeneration } from "./components/ReportGeneration";
 import { CorruptionHotspots } from "./components/CorruptionHotspots";
 import { Toaster } from "react-hot-toast";
+import { apiClient } from "./services/api";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -33,6 +34,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [language, setLanguage] = useState<Language>("en");
+  const [newCaseCount, setNewCaseCount] = useState(0);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("nexus_user");
@@ -76,6 +78,55 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("zacc_language", language);
   }, [language]);
+
+  // Fetch notification count for staff users
+  const fetchNotificationCount = useCallback(async () => {
+    if (!user || user.role === UserRole.WHISTLEBLOWER) return;
+    try {
+      const response = await apiClient.getNotifications();
+      if (response?.success && Array.isArray(response.data)) {
+        const viewedIds: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
+        const newCases = response.data.filter(
+          (n: any) =>
+            ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
+            !viewedIds.includes(String(n.id))
+        );
+        setNewCaseCount(newCases.length);
+      }
+    } catch {
+      // silent
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotificationCount();
+    const interval = window.setInterval(fetchNotificationCount, 30000);
+    return () => window.clearInterval(interval);
+  }, [fetchNotificationCount]);
+
+  // When investigator view is opened, mark notifications as viewed
+  useEffect(() => {
+    if (currentView === "investigator" && newCaseCount > 0) {
+      // Give a short delay so the user sees the badge update
+      const timeout = setTimeout(async () => {
+        try {
+          const response = await apiClient.getNotifications();
+          if (response?.success && Array.isArray(response.data)) {
+            const ids = response.data
+              .filter((n: any) => ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type))
+              .map((n: any) => String(n.id));
+            const existing: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
+            const merged = [...new Set([...existing, ...ids])];
+            localStorage.setItem("zacc_viewed_notifications", JSON.stringify(merged));
+            setNewCaseCount(0);
+          }
+        } catch {
+          // silent
+        }
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [currentView, newCaseCount]);
 
   const handleLogin = (u: User) => {
     if (u.role === UserRole.WHISTLEBLOWER) return; // blocked at PublicPortal level
@@ -181,6 +232,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
         language={language}
         onLanguageChange={setLanguage}
+        notificationCount={newCaseCount}
       />
       {user.role === UserRole.WHISTLEBLOWER && <ChatBot />}
 

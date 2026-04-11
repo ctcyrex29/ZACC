@@ -30,6 +30,7 @@ class PublicReportController extends Controller
             'institution' => ['required', 'string', 'max:255'],
             'location'    => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:20'],
+            'report_language' => ['sometimes', 'string', 'max:10'],
             // priority is no longer accepted from the user — it is assigned by the expert system
         ]);
 
@@ -46,8 +47,26 @@ class PublicReportController extends Controller
         // Expert system determines priority
         $expertPriority = $this->determineExpertPriority($validated);
 
+        // Text clarity check — reject clearly gibberish submissions
+        $clarity = $this->lastClarityResult;
+        if (!empty($clarity) && $clarity['score'] < 20) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your report description appears to be unclear or contains unrecognizable text. Please write a clear description of the corruption incident in English, Shona, Ndebele, or Tonga.',
+                'clarity' => [
+                    'score' => $clarity['score'],
+                    'issues' => $clarity['issues'] ?? [],
+                ],
+            ], 422);
+        }
+
+        // Always auto-detect language from text content, falling back to declared/default
+        $detectedLang = $this->detectTextLanguage($validated['description']);
+        $reportLanguage = $detectedLang ?: ($validated['report_language'] ?? 'en');
+        $clarityScore = $clarity['score'] ?? 50;
+
         try {
-            $report = DB::transaction(function () use ($validated, $expertPriority, $request) {
+            $report = DB::transaction(function () use ($validated, $expertPriority, $request, $reportLanguage, $clarityScore) {
                 $report = new Report([
                     'case_id'      => Report::generateCaseId(),
                     'reference_code' => Report::generateReferenceCode(),
@@ -63,6 +82,8 @@ class PublicReportController extends Controller
                     'user_agent'   => $request->userAgent(),
                     'is_anonymous' => true,
                     'is_encrypted' => true,
+                    'report_language' => $reportLanguage,
+                    'text_clarity_score' => $clarityScore,
                 ]);
 
                 // Encrypt sensitive data (AES-256 via Laravel Crypt)
@@ -147,6 +168,16 @@ class PublicReportController extends Controller
             ->oldest('created_at')
             ->get(['id', 'stage', 'investigator_notes', 'expert_score', 'manual_score', 'final_score', 'created_at']);
 
+        $attachments = $report->attachments()->get(['id', 'original_name', 'mime_type', 'size'])->map(function ($att) use ($report) {
+            return [
+                'id' => $att->id,
+                'original_name' => $att->original_name,
+                'mime_type' => $att->mime_type,
+                'size' => $att->size,
+                'download_url' => "/api/reports/track/{$report->reference_code}/evidence/{$att->id}",
+            ];
+        });
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -160,7 +191,8 @@ class PublicReportController extends Controller
                 'created_at' => $report->created_at,
                 'last_updated' => $report->last_updated,
                 'dispute_reason' => $report->dispute_reason,
-                'attachments_count' => $report->attachments()->count(),
+                'attachments_count' => $attachments->count(),
+                'attachments' => $attachments,
                 'stage_evaluations' => $stageEvaluations,
             ],
         ]);
@@ -313,6 +345,43 @@ class PublicReportController extends Controller
             Log::error('Failed to upload evidence', ['error' => $e->getMessage()]);
             return response()->json(['success' => false, 'message' => 'Failed to upload evidence. Please try again.'], 500);
         }
+    }
+
+    /**
+     * Download an evidence file using a tracking code (public, no auth).
+     */
+    public function downloadEvidence(string $trackingCode, string $attachmentId)
+    {
+        $report = Report::query()
+            ->where('reference_code', $trackingCode)
+            ->orWhere('case_id', $trackingCode)
+            ->first();
+
+        if (!$report) {
+            return response()->json(['success' => false, 'message' => 'No case found for this tracking code.'], 404);
+        }
+
+        $attachment = $report->attachments()->find($attachmentId);
+
+        if (!$attachment) {
+            return response()->json(['success' => false, 'message' => 'Attachment not found.'], 404);
+        }
+
+        if ($attachment->disk === 'public') {
+            return redirect()->away(asset('storage/' . ltrim((string) $attachment->file_name, '/')));
+        }
+
+        $disk = Storage::disk('local');
+        $path = $attachment->file_name;
+
+        if (!$disk->exists($path)) {
+            return response()->json(['success' => false, 'message' => 'File not found on disk.'], 404);
+        }
+
+        return response()->download(
+            storage_path('app/' . ltrim((string) $path, '/')),
+            (string) $attachment->original_name
+        );
     }
 
     public function publicStats(): JsonResponse

@@ -34,12 +34,16 @@ Route::middleware('throttle:public-reports')->group(function () {
     Route::get('/reports/track/{trackingCode}', [PublicReportController::class, 'track'])->where('trackingCode', '[A-Za-z0-9-]+');
     Route::post('/reports/dispute/{trackingCode}', [PublicReportController::class, 'publicDispute'])->where('trackingCode', '[A-Za-z0-9-]+');
     Route::post('/reports/evidence/{trackingCode}', [PublicReportController::class, 'uploadEvidence'])->where('trackingCode', '[A-Za-z0-9-]+');
+    Route::get('/reports/track/{trackingCode}/evidence/{attachmentId}', [PublicReportController::class, 'downloadEvidence'])
+        ->where('trackingCode', '[A-Za-z0-9-]+')
+        ->whereNumber('attachmentId');
     Route::get('/stats/public', [PublicReportController::class, 'publicStats']);
     Route::get('/hotspots/public', [HotspotController::class, 'publicHotspots']);
 });
 
 Route::post('/chatbot', [ChatbotController::class, 'chat'])->middleware('throttle:chatbot');
 Route::post('/ai/pre-submission-suggestions-public', [AIController::class, 'preSubmissionSuggestions'])->middleware('throttle:public-reports');
+Route::post('/ai/validate-text', [AIController::class, 'validateTextClarity'])->middleware('throttle:public-reports');
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -79,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/ai/scan-evidence/{id}', [AIController::class, 'scanEvidence'])->where('id', '[A-Za-z0-9-]+');
     Route::get('/ai/pre-review-analysis/{id}', [AIController::class, 'preReviewAnalysis'])->where('id', '[A-Za-z0-9-]+');
     Route::post('/ai/pre-submission-suggestions', [AIController::class, 'preSubmissionSuggestions']);
+    Route::post('/ai/translate', [AIController::class, 'translateText']);
 
     // Admin: recalculate all report priorities using latest expert system
     Route::post('/reports/recalculate-priorities', [ReportController::class, 'recalculatePriorities']);
