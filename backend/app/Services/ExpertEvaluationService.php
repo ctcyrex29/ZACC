@@ -64,16 +64,17 @@ class ExpertEvaluationService
         $score = $analysis['composite_score'];
         $urgency = self::scoreToUrgency($score);
 
-        // Extract key claims from description
-        $keyClaims = $this->extractKeyClaims($description);
+        // Extract key claims from description and evidence files
+        $evidenceText = $this->extractTextFromEvidenceFiles($report);
+        $keyClaims = $this->extractKeyClaims($description . ' ' . $evidenceText);
 
-        // Determine corruption indicators
+        // Determine corruption indicators (include evidence file content)
         $corruptionIndicators = $this->identifyCorruptionIndicators(
-            strtolower($description . ' ' . $institution . ' ' . $location)
+            strtolower($description . ' ' . $institution . ' ' . $location . ' ' . $evidenceText)
         );
 
-        // Build timeline indicators
-        $timelineIndicators = $this->extractTimelineIndicators($description);
+        // Build timeline indicators (include evidence file content)
+        $timelineIndicators = $this->extractTimelineIndicators($description . ' ' . $evidenceText);
 
         // Compute case complexity
         $complexityLevel = 'LOW';
@@ -127,12 +128,18 @@ class ExpertEvaluationService
      */
     private function analyzeCase(Report $report, string $additionalNotes = ''): array
     {
+        $report->loadMissing('attachments');
+
         $decrypted = $report->decrypted_data;
         $type        = strtolower($report->type ?? '');
         $description = strtolower($decrypted['description'] ?? $report->description ?? '');
         $institution = strtolower($decrypted['institution'] ?? $report->institution ?? '');
         $location    = strtolower($decrypted['location'] ?? $report->location ?? '');
-        $text        = $description . ' ' . $institution . ' ' . $location . ' ' . strtolower($additionalNotes);
+
+        // Extract text content from evidence files so keyword analysis covers attachments
+        $evidenceText = $this->extractTextFromEvidenceFiles($report);
+
+        $text        = $description . ' ' . $institution . ' ' . $location . ' ' . strtolower($additionalNotes) . ' ' . $evidenceText;
 
         $dimensions = [];
         $flags = [];
@@ -676,6 +683,55 @@ class ExpertEvaluationService
         }
 
         return ['score' => min(100, $score), 'factors' => $factors, 'label' => $this->tierLabel(min(100, $score))];
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  EVIDENCE FILE READING
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Extract readable text content from a report's evidence files.
+     * Reads text-based attachments (txt, csv, json, html, xml, md, log)
+     * up to 200KB each. Binary files (images, PDFs, video) contribute
+     * only their filename for metadata analysis.
+     */
+    private function extractTextFromEvidenceFiles(Report $report): string
+    {
+        $report->loadMissing('attachments');
+        $text = '';
+
+        $readableTypes = [
+            'text/plain', 'text/csv', 'application/json', 'text/html',
+            'application/xml', 'text/xml', 'text/markdown',
+        ];
+        $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
+
+        foreach ($report->attachments as $attachment) {
+            $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+            $isReadable = in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts);
+
+            if ($isReadable && $attachment->size < 200000) {
+                try {
+                    $disk = $attachment->disk ?? 'private';
+                    // Handle both 'local' and 'private' disk names
+                    if ($disk === 'local') {
+                        $content = Storage::disk('local')->get($attachment->file_name);
+                    } else {
+                        $content = Storage::disk($disk)->get($attachment->file_name);
+                    }
+                    if ($content) {
+                        $text .= ' ' . strtolower(mb_substr($content, 0, 10000));
+                    }
+                } catch (\Exception $e) {
+                    // Skip unreadable files silently
+                }
+            }
+
+            // Always include filename for metadata keyword detection
+            $text .= ' file:' . strtolower($attachment->original_name ?? '');
+        }
+
+        return $text;
     }
 
     // ══════════════════════════════════════════════════════════════════════
