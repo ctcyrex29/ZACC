@@ -367,11 +367,15 @@ class PublicReportController extends Controller
             return response()->json(['success' => false, 'message' => 'Attachment not found.'], 404);
         }
 
+        // Determine which storage disk and base path to use
         if ($attachment->disk === 'public') {
-            return redirect()->away(asset('storage/' . ltrim((string) $attachment->file_name, '/')));
+            $disk = Storage::disk('public');
+            $basePath = 'app/public';
+        } else {
+            $disk = Storage::disk('local');
+            $basePath = 'app/private';
         }
 
-        $disk = Storage::disk('local');
         $path = $attachment->file_name;
 
         if (!$disk->exists($path)) {
@@ -379,7 +383,7 @@ class PublicReportController extends Controller
         }
 
         return response()->download(
-            storage_path('app/' . ltrim((string) $path, '/')),
+            storage_path($basePath . '/' . ltrim((string) $path, '/')),
             (string) $attachment->original_name
         );
     }

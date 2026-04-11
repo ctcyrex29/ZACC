@@ -37,14 +37,10 @@ class ReportAttachment extends Model
 
     public function getDownloadUrlAttribute(): ?string
     {
-        if ($this->disk === 'public') {
-            return asset('storage/' . ltrim((string) $this->file_name, '/'));
-        }
-
         if (!$this->report_id) {
             return null;
         }
 
-        return url("/api/reports/{$this->report_id}/attachments/{$this->id}/download");
+        return "/api/reports/{$this->report_id}/attachments/{$this->id}/download";
     }
 }

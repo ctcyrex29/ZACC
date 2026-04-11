@@ -269,14 +269,14 @@ PROMPT;
     {
         foreach ($attachments as $file) {
             if ($file->isValid()) {
-                $path = $file->store("reports/{$report->id}/attachments", 'private');
+                $path = $file->store("reports/{$report->id}/attachments", 'local');
 
                 $report->attachments()->create([
                     'original_name' => $file->getClientOriginalName(),
                     'file_name' => $path,
                     'mime_type' => $file->getClientMimeType(),
                     'size' => $file->getSize(),
-                    'disk' => 'private',
+                    'disk' => 'local',
                     'created_by' => Auth::id(),
                 ]);
             }

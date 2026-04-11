@@ -396,14 +396,19 @@ class ReportController extends Controller
             ], 404);
         }
 
+        // Determine which storage disk and base path to use
         if ($attachment->disk === 'public') {
-            return redirect()->away(asset('storage/' . ltrim((string) $attachment->file_name, '/')));
+            $disk = Storage::disk('public');
+            $basePath = 'app/public';
+        } else {
+            $disk = Storage::disk('local');
+            $basePath = 'app/private';
         }
 
-        $disk = Storage::disk('local');
         $path = $attachment->file_name;
 
         if (!$disk->exists($path)) {
+            // Try legacy path format
             $legacyPath = "reports/{$report->id}/attachments/{$attachment->file_name}";
             if ($disk->exists($legacyPath)) {
                 $path = $legacyPath;
@@ -418,7 +423,7 @@ class ReportController extends Controller
         }
 
         return response()->download(
-            storage_path('app/private/' . ltrim((string) $path, '/')),
+            storage_path($basePath . '/' . ltrim((string) $path, '/')),
             (string) $attachment->original_name
         );
     }
