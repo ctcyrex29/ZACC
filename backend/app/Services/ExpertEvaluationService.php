@@ -396,19 +396,31 @@ class ExpertEvaluationService
             $factors[] = 'No files attached';
         }
 
-        // Check attachment types for quality
+        // Check attachment types for quality — score each media type independently
         if ($report->relationLoaded('attachments')) {
+            $seenTypes = [];
             foreach ($report->attachments as $att) {
-                $mime = $att->mime_type ?? '';
-                if (str_contains($mime, 'pdf')) {
+                $mime = strtolower($att->mime_type ?? '');
+
+                if (str_contains($mime, 'pdf') && empty($seenTypes['pdf'])) {
                     $score += 3;
                     $factors[] = 'PDF document attached (likely formal)';
-                    break;
+                    $seenTypes['pdf'] = true;
                 }
-                if (str_contains($mime, 'video')) {
+                if (str_contains($mime, 'video') && empty($seenTypes['video'])) {
                     $score += 5;
                     $factors[] = 'Video evidence attached';
-                    break;
+                    $seenTypes['video'] = true;
+                }
+                if (str_contains($mime, 'audio') && empty($seenTypes['audio'])) {
+                    $score += 5;
+                    $factors[] = 'Audio recording attached';
+                    $seenTypes['audio'] = true;
+                }
+                if (str_contains($mime, 'image') && empty($seenTypes['image'])) {
+                    $score += 3;
+                    $factors[] = 'Photographic/image evidence attached';
+                    $seenTypes['image'] = true;
                 }
             }
         }
@@ -691,9 +703,13 @@ class ExpertEvaluationService
 
     /**
      * Extract readable text content from a report's evidence files.
-     * Reads text-based attachments (txt, csv, json, html, xml, md, log)
-     * up to 200KB each. Binary files (images, PDFs, video) contribute
-     * only their filename for metadata analysis.
+     *
+     * - Text-based files (txt, csv, json, html, xml, md, log): reads up to
+     *   10 000 chars of actual content for keyword analysis.
+     * - Binary files (images, video, audio, PDFs, spreadsheets): injects
+     *   descriptive evidence-type phrases so the keyword-based dimension
+     *   scorers (evidence strength, credibility, complexity) can recognise
+     *   the type of proof that was submitted.
      */
     private function extractTextFromEvidenceFiles(Report $report): string
     {
@@ -707,24 +723,45 @@ class ExpertEvaluationService
         $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
 
         foreach ($report->attachments as $attachment) {
-            $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
-            $isReadable = in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts);
+            $mime = strtolower($attachment->mime_type ?? '');
+            $ext  = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+            $isReadable = in_array($mime, $readableTypes) || in_array($ext, $readableExts);
 
+            // ── Text files: extract actual content ──
             if ($isReadable && $attachment->size < 200000) {
                 try {
                     $disk = $attachment->disk ?? 'private';
-                    // Handle both 'local' and 'private' disk names
-                    if ($disk === 'local') {
-                        $content = Storage::disk('local')->get($attachment->file_name);
-                    } else {
-                        $content = Storage::disk($disk)->get($attachment->file_name);
-                    }
+                    $content = Storage::disk($disk === 'local' ? 'local' : $disk)
+                        ->get($attachment->file_name);
                     if ($content) {
                         $text .= ' ' . strtolower(mb_substr($content, 0, 10000));
                     }
                 } catch (\Exception $e) {
                     // Skip unreadable files silently
                 }
+            }
+
+            // ── Binary files: inject descriptive evidence phrases ──
+            // These phrases match existing keywords in the dimension scorers
+            // (e.g. scoreEvidenceStrength checks for "recording", "video",
+            //  "photo", "document", "screenshot", etc.)
+            if (str_contains($mime, 'image')) {
+                $text .= ' photo image evidence screenshot visual proof';
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff'])) {
+                    $text .= ' photographic evidence attached';
+                }
+            } elseif (str_contains($mime, 'video')) {
+                $text .= ' video evidence recording visual proof cctv footage';
+            } elseif (str_contains($mime, 'audio')) {
+                $text .= ' audio evidence recording voice conversation witness statement';
+            } elseif (str_contains($mime, 'pdf')) {
+                $text .= ' pdf document formal official evidence';
+            } elseif (str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel')
+                      || in_array($ext, ['xls', 'xlsx'])) {
+                $text .= ' spreadsheet financial data records evidence';
+            } elseif (str_contains($mime, 'msword') || str_contains($mime, 'wordprocessingml')
+                      || in_array($ext, ['doc', 'docx'])) {
+                $text .= ' document formal written evidence report';
             }
 
             // Always include filename for metadata keyword detection
