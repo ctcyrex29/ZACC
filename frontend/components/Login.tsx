@@ -54,9 +54,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       <div className="w-full max-w-md relative z-10">
         <div className="flex justify-center mb-10">
-          <div className="w-20 h-20 bg-gradient-to-br from-nexus-emerald to-emerald-800 rounded-3xl flex items-center justify-center font-black text-nexus-950 text-4xl shadow-2xl shadow-nexus-emerald/20 animate-fade-in">
-            Z
-          </div>
+          <img src="/zacc-logo.png" alt="ZACC" className="w-20 h-20 rounded-3xl object-cover shadow-2xl shadow-nexus-emerald/20 animate-fade-in" />
         </div>
 
         <div

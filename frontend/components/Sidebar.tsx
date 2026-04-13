@@ -79,9 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       <div className="p-4 md:p-6 mb-2">
         <div className="flex items-center justify-between gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-nexus-emerald to-emerald-800 rounded-xl flex items-center justify-center font-black text-nexus-950 text-xl shadow-lg shadow-nexus-emerald/10">
-            Z
-          </div>
+          <img src="/zacc-logo.png" alt="ZACC" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-nexus-emerald/10" />
           <button
             className="md:hidden text-slate-700 dark:text-slate-300"
             onClick={() => setExpanded((prev) => !prev)}

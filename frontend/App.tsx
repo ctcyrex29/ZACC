@@ -9,7 +9,7 @@ import { User, UserRole } from "./types";
 import { PublicPortal } from "./components/PublicPortal";
 import { Language, t } from "./i18n";
 import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
-import { ChatBot } from "./components/ChatBot";
+import { HelpGuide } from "./components/HelpGuide";
 import { ReportGeneration } from "./components/ReportGeneration";
 import { CorruptionHotspots } from "./components/CorruptionHotspots";
 import { Toaster } from "react-hot-toast";
@@ -151,7 +151,7 @@ const App: React.FC = () => {
           themeMode={themeMode}
           onThemeModeChange={setThemeMode}
         />
-        <ChatBot />
+        <HelpGuide />
       </>
     );
   }
@@ -232,7 +232,7 @@ const App: React.FC = () => {
         onLanguageChange={setLanguage}
         notificationCount={newCaseCount}
       />
-      {user.role === UserRole.WHISTLEBLOWER && <ChatBot />}
+      {user.role === UserRole.WHISTLEBLOWER && <HelpGuide />}
 
       <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8 scroll-smooth">
         <div className="max-w-7xl mx-auto">
