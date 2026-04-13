@@ -869,7 +869,7 @@ PROMPT;
      * @param string $toLang Target language code
      * @return array{success: bool, translated_text: string, error?: string}
      */
-    protected function translateWithGemini(string $text, string $fromLang, string $toLang): array
+    public function translateWithGemini(string $text, string $fromLang, string $toLang): array
     {
         // Comprehensive ISO 639-1 language name mapping
         $langNames = [

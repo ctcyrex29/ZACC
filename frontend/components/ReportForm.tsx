@@ -118,6 +118,7 @@ const fileIcon = (type: string) => {
 export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState({
     type: CorruptionType.BRIBERY,
     institution: "",
@@ -441,12 +442,28 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
               </code>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(submittedReport.reference_code);
-                  toast.success(t(language, "copy") + " successful!");
+                  try {
+                    const el = document.createElement("textarea");
+                    el.value = submittedReport.reference_code;
+                    el.style.position = "fixed";
+                    el.style.opacity = "0";
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(el);
+                  } catch (_) {}
+                  navigator.clipboard?.writeText(submittedReport.reference_code).catch(() => {});
+                  setCopied(true);
+                  toast.success("Copied to clipboard!");
+                  setTimeout(() => setCopied(false), 2000);
                 }}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg transition-all"
+                className={`px-4 py-2 font-bold text-xs rounded-lg transition-all ${
+                  copied
+                    ? "bg-emerald-700 text-white"
+                    : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                }`}
               >
-                {t(language, "copy")}
+                {copied ? "✓ Copied!" : t(language, "copy")}
               </button>
             </div>
           </div>

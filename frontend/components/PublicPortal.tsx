@@ -184,6 +184,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Sign in state
   const [email, setEmail] = useState("");
@@ -784,12 +785,26 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                         <p className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-2xl tracking-widest flex-1">{submitted.reference_code}</p>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(submitted.reference_code);
+                            try {
+                              const el = document.createElement("textarea");
+                              el.value = submitted.reference_code;
+                              el.style.position = "fixed";
+                              el.style.opacity = "0";
+                              document.body.appendChild(el);
+                              el.select();
+                              document.execCommand("copy");
+                              document.body.removeChild(el);
+                            } catch (_) {}
+                            navigator.clipboard?.writeText(submitted.reference_code).catch(() => {});
+                            setCopied(true);
                             toast.success("Copied to clipboard!");
+                            setTimeout(() => setCopied(false), 2000);
                           }}
-                          className="flex-shrink-0 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-wider transition-all"
+                          className={`flex-shrink-0 px-4 py-2 rounded-xl text-white text-xs font-black uppercase tracking-wider transition-all ${
+                            copied ? "bg-emerald-700" : "bg-emerald-500 hover:bg-emerald-600"
+                          }`}
                         >
-                          Copy
+                          {copied ? "✓ Copied!" : "Copy"}
                         </button>
                       </div>
                     </div>
