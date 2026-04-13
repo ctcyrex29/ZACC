@@ -25,7 +25,11 @@ interface PublicPortalProps {
 
 type PortalTab = "signin" | "report" | "tracking";
 
-const STATUS_ORDER = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "REFERRED", "CLOSED"];
+const STATUS_ORDER_DEFAULT = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "REFERRED", "CLOSED"];
+const STATUS_ORDER_SUCCESSFUL = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "SUCCESSFUL"];
+
+const getStatusOrder = (status: string) =>
+  status === "SUCCESSFUL" ? STATUS_ORDER_SUCCESSFUL : STATUS_ORDER_DEFAULT;
 
 const statusLabel = (s: string) =>
   s === "UNDER_REVIEW" ? "Under Review" : s === "INVESTIGATING" ? "Investigating" : s === "REFERRED" ? "Referred" : s === "SUCCESSFUL" ? "✓ Successful" : s.charAt(0) + s.slice(1).toLowerCase();
@@ -121,7 +125,8 @@ function generateWhistleblowerPDF(trackedCase: any, stage: any, idx: number) {
     *{margin:0;padding:0;box-sizing:border-box;}
     body{font-family:Arial,sans-serif;color:#111;padding:48px;background:#fff;position:relative;}
     .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:72px;color:rgba(0,0,0,0.04);pointer-events:none;white-space:nowrap;font-weight:900;letter-spacing:4px;}
-    .header{border-bottom:3px solid #059669;padding-bottom:20px;margin-bottom:32px;}
+    .header{border-bottom:3px solid #059669;padding-bottom:20px;margin-bottom:32px;display:flex;align-items:center;gap:16px;}
+    .header-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;flex-shrink:0;}
     .header h1{font-size:22px;font-weight:900;color:#059669;letter-spacing:2px;text-transform:uppercase;}
     .header h2{font-size:15px;color:#444;margin-top:4px;}
     .confid{font-size:11px;font-weight:700;color:#e11d48;letter-spacing:3px;text-transform:uppercase;margin-top:6px;}
@@ -137,9 +142,12 @@ function generateWhistleblowerPDF(trackedCase: any, stage: any, idx: number) {
 <body>
 <div class="watermark">CONFIDENTIAL</div>
 <div class="header">
+  <img class="header-logo" src="${window.location.origin}/zacc-logo.png" alt="ZACC"/>
+  <div>
   <h1>Zimbabwe Anti-Corruption Commission</h1>
   <h2>Case Stage Report</h2>
   <div class="confid">Confidential – For Official Use Only</div>
+  </div>
 </div>
 <div class="row">
   <div><div class="label">Case Reference</div><div class="value" style="font-weight:700;color:#059669;">${trackedCase.reference_code}</div></div>
@@ -513,7 +521,8 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
     }
   };
 
-  const activeStatusIdx = STATUS_ORDER.indexOf(trackedCase?.status ?? "SUBMITTED");
+  const currentStatusOrder = getStatusOrder(trackedCase?.status ?? "SUBMITTED");
+  const activeStatusIdx = currentStatusOrder.indexOf(trackedCase?.status ?? "SUBMITTED");
   const maxEvidenceReach = 10 - (trackedCase?.attachments_count ?? 0);
   const useWideTabLayout =
     (tab === "report" && !submitted) ||
@@ -891,7 +900,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">{t(language, "caseProgress")}</p>
                     <div className="flex items-center gap-0">
-                      {STATUS_ORDER.map((s, i) => {
+                      {currentStatusOrder.map((s, i) => {
                         const done = i <= activeStatusIdx && trackedCase.status !== "DISPUTED";
                         const isCurrent = trackedCase.status === "DISPUTED" ? s === "CLOSED" : trackedCase.status === s;
                         return (
@@ -904,7 +913,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                                 {statusLabel(s)}
                               </p>
                             </div>
-                            {i < STATUS_ORDER.length - 1 && (
+                            {i < currentStatusOrder.length - 1 && (
                               <div className={`h-0.5 flex-1 mb-5 ${i < activeStatusIdx ? "bg-emerald-500" : "bg-slate-200 dark:bg-white/10"}`} />
                             )}
                           </React.Fragment>

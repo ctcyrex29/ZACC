@@ -11,18 +11,27 @@ interface WhistleblowerDashboardProps {
   onCreateReport: () => void;
 }
 
-const stages = [
+const stagesDefault = [
   { key: CaseStatus.SUBMITTED, label: "Submitted", icon: "📥" },
   { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
   { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
   { key: CaseStatus.REFERRED, label: "Courts/ZRP", icon: "⚖️" },
-  { key: CaseStatus.SUCCESSFUL, label: "✓ Successful", icon: "🏆" },
   { key: CaseStatus.CLOSED, label: "Closed", icon: "✅" },
 ];
 
-const getStatusIndex = (status: CaseStatus) => {
+const stagesSuccessful = [
+  { key: CaseStatus.SUBMITTED, label: "Submitted", icon: "📥" },
+  { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
+  { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
+  { key: CaseStatus.SUCCESSFUL, label: "✓ Successful", icon: "🏆" },
+];
+
+const getStagesForStatus = (status: CaseStatus) =>
+  status === CaseStatus.SUCCESSFUL ? stagesSuccessful : stagesDefault;
+
+const getStatusIndex = (status: CaseStatus, stageList: typeof stagesDefault) => {
   if (status === CaseStatus.DISPUTED) return 2;
-  return stages.findIndex((s) => s.key === status);
+  return stageList.findIndex((s) => s.key === status);
 };
 
 export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
@@ -187,7 +196,8 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         ) : (
           <div className="space-y-5">
             {recentCases.map((item) => {
-              const statusIdx = getStatusIndex(item.status as CaseStatus);
+              const caseStages = getStagesForStatus(item.status as CaseStatus);
+              const statusIdx = getStatusIndex(item.status as CaseStatus, caseStages);
               const isDisputed = item.status === CaseStatus.DISPUTED;
               return (
                 <div
@@ -239,11 +249,11 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
                           : "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                       }`}
                       style={{
-                        width: `calc(${(statusIdx / (stages.length - 1)) * 100}% - 12px)`,
+                        width: `calc(${(statusIdx / (caseStages.length - 1)) * 100}% - 12px)`,
                       }}
                     />
 
-                    {stages.map((s, idx) => {
+                    {caseStages.map((s, idx) => {
                       const isActive = idx <= statusIdx;
                       const isCurrent =
                         s.key === item.status ||

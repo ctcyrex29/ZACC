@@ -89,7 +89,9 @@ function generateStagePDF(caseData: any, stage: any) {
     body{font-family:Arial,sans-serif;color:#111;padding:52px;background:#fff;}
     .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:80px;color:rgba(0,0,0,0.035);pointer-events:none;font-weight:900;letter-spacing:4px;white-space:nowrap;}
     .header{border-bottom:3px solid #059669;padding-bottom:20px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:flex-end;}
-    .header-left h1{font-size:20px;font-weight:900;color:#059669;letter-spacing:2px;text-transform:uppercase;}
+    .header-logo{width:52px;height:52px;border-radius:50%;object-fit:cover;margin-right:12px;}
+    .header-left{display:flex;align-items:center;}
+    .header-left-text h1{font-size:20px;font-weight:900;color:#059669;letter-spacing:2px;text-transform:uppercase;}
     .header-left h2{font-size:13px;color:#555;margin-top:4px;}
     .confid{font-size:10px;font-weight:900;color:#e11d48;letter-spacing:3px;text-transform:uppercase;margin-top:6px;}
     .header-right{text-align:right;font-size:11px;color:#888;}
@@ -108,9 +110,12 @@ function generateStagePDF(caseData: any, stage: any) {
 <div class="watermark">CONFIDENTIAL</div>
 <div class="header">
   <div class="header-left">
-    <h1>Zimbabwe Anti-Corruption Commission</h1>
-    <h2>Official Case Stage Report</h2>
-    <div class="confid">Confidential — For Official Use Only</div>
+    <img class="header-logo" src="${window.location.origin}/zacc-logo.png" alt="ZACC"/>
+    <div class="header-left-text">
+      <h1>Zimbabwe Anti-Corruption Commission</h1>
+      <h2>Official Case Stage Report</h2>
+      <div class="confid">Confidential — For Official Use Only</div>
+    </div>
   </div>
   <div class="header-right">
     Report Generated:<br/><strong>${new Date().toLocaleString()}</strong>

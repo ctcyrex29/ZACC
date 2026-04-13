@@ -79,7 +79,7 @@ export const HelpGuide: React.FC = () => {
         className="fixed bottom-6 left-4 sm:left-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 hover:scale-110 transition-transform"
         title="Filing Help Guide"
       >
-        <span className="text-2xl">{open ? "✕" : "❓"}</span>
+        <span className="text-2xl">{open ? "✕" : "📃"}</span>
       </button>
 
       {/* Help panel */}

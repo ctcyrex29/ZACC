@@ -186,8 +186,8 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
     body{font-family:'Times New Roman',Georgia,'Segoe UI',serif;color:#1a1a1a;background:#fff;font-size:11pt;line-height:1.6;}
     .page{max-width:760px;margin:0 auto;padding:30px 40px;}
     .official-header{text-align:center;padding-bottom:18px;border-bottom:3px double #1a472a;margin-bottom:20px;}
-    .coat-of-arms{width:72px;height:72px;margin:0 auto 10px;background:linear-gradient(135deg,#1a472a,#2d6a4f);border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #b5985a;}
-    .coat-text{font-size:28px;font-weight:bold;color:#b5985a;font-family:serif;}
+    .coat-of-arms{width:72px;height:72px;margin:0 auto 10px;border-radius:50%;overflow:hidden;border:3px solid #b5985a;}
+    .coat-of-arms img{width:100%;height:100%;object-fit:cover;}
     .state-name{font-size:9pt;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#666;margin-bottom:2px;}
     .commission-name{font-size:15pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#1a472a;margin-bottom:2px;}
     .commission-sub{font-size:9pt;color:#555;font-style:italic;margin-bottom:8px;}
@@ -263,7 +263,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 <body>
 <div class="page">
   <div class="official-header">
-    <div class="coat-of-arms"><span class="coat-text">Z</span></div>
+    <div class="coat-of-arms"><img src="${window.location.origin}/zacc-logo.png" alt="ZACC"/></div>
     <div class="state-name">Republic of Zimbabwe</div>
     <div class="commission-name">Zimbabwe Anti-Corruption Commission</div>
     <div class="commission-sub">Established under Section 254 of the Constitution of Zimbabwe</div>
