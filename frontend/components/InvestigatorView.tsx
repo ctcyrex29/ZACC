@@ -903,43 +903,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                             </span>
                           )}
                         </div>
-                        {(decrypted.description || dossierData.description) && (
-                          <div className="flex items-center gap-1">
-                            <select
-                              value={translateLang}
-                              onChange={(e) => setTranslateLang(e.target.value)}
-                              className="text-[10px] font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-1.5 py-0.5 text-slate-600 dark:text-slate-300"
-                            >
-                              {ALL_LANGUAGES.map((lang) => (
-                                <option key={lang.code} value={lang.code}>{lang.name}</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={async () => {
-                                const text = decrypted.description || dossierData.description;
-                                if (!text) return;
-                                setTranslateLoading(true);
-                                setTranslatedText(null);
-                                try {
-                                  const res = await apiClient.translateText(
-                                    text,
-                                    dossierData.report_language || 'en',
-                                    translateLang
-                                  );
-                                  setTranslatedText(res.data?.translated_text || res.translated_text || "Translation failed.");
-                                } catch (err: any) {
-                                  setTranslatedText("Translation failed: " + (err?.response?.data?.message || err.message));
-                                } finally {
-                                  setTranslateLoading(false);
-                                }
-                              }}
-                              disabled={translateLoading}
-                              className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-500/20 transition-colors disabled:opacity-50"
-                            >
-                              {translateLoading ? "Translating..." : "Translate"}
-                            </button>
-                          </div>
-                        )}
+                        
                       </div>
                       <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                         {decrypted.description ||
@@ -1114,11 +1078,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                           Generate Report
                         </button>
                       )}
-                      {preReviewReport && !preReviewReport.error && (
+                      {/* {preReviewReport && !preReviewReport.error && (
                         <button onClick={() => { setPreReviewReport(null); runPreReviewAnalysis(); }} className="px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-500/30 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/10 transition-all">
                           Refresh
                         </button>
-                      )}
+                      )} */}
                     </div>
 
                     {preReviewLoading && (
