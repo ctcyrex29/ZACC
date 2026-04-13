@@ -104,29 +104,28 @@ const App: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [fetchNotificationCount]);
 
-  // When investigator view is opened, mark notifications as viewed
-  useEffect(() => {
-    if (currentView === "investigator" && newCaseCount > 0) {
-      // Give a short delay so the user sees the badge update
-      const timeout = setTimeout(async () => {
-        try {
-          const response = await apiClient.getNotifications();
-          if (response?.success && Array.isArray(response.data)) {
-            const ids = response.data
-              .filter((n: any) => ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type))
-              .map((n: any) => String(n.id));
-            const existing: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
-            const merged = [...new Set([...existing, ...ids])];
-            localStorage.setItem("zacc_viewed_notifications", JSON.stringify(merged));
-            setNewCaseCount(0);
-          }
-        } catch {
-          // silent
+  // Mark a single case notification as viewed (called when investigator opens a dossier)
+  const markCaseNotificationViewed = useCallback(async (caseId: string | number) => {
+    try {
+      const response = await apiClient.getNotifications();
+      if (response?.success && Array.isArray(response.data)) {
+        const matchingIds = response.data
+          .filter((n: any) =>
+            ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
+            (String(n.report_id) === String(caseId) || String(n.data?.report_id) === String(caseId) || String(n.data?.case_id) === String(caseId))
+          )
+          .map((n: any) => String(n.id));
+        if (matchingIds.length > 0) {
+          const existing: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
+          const merged = [...new Set([...existing, ...matchingIds])];
+          localStorage.setItem("zacc_viewed_notifications", JSON.stringify(merged));
+          setNewCaseCount((prev) => Math.max(0, prev - matchingIds.length));
         }
-      }, 2000);
-      return () => clearTimeout(timeout);
+      }
+    } catch {
+      // silent
     }
-  }, [currentView, newCaseCount]);
+  }, []);
 
   const handleLogin = (u: User) => {
     if (u.role === UserRole.WHISTLEBLOWER) return; // blocked at PublicPortal level
@@ -180,7 +179,7 @@ const App: React.FC = () => {
           />
         );
       case "investigator":
-        return <InvestigatorView user={user} />;
+        return <InvestigatorView user={user} onCaseViewed={markCaseNotificationViewed} />;
       case "tracking":
         return (
           <CaseTracking

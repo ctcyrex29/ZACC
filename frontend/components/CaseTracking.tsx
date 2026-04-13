@@ -107,7 +107,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
     { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
     { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
     { key: CaseStatus.REFERRED, label: "Courts/ZRP", icon: "⚖️" },
-    { key: CaseStatus.SUCCESSFUL, label: "Successful", icon: "🏆" },
+    { key: CaseStatus.SUCCESSFUL, label: "✓ Successful", icon: "🏆" },
     { key: CaseStatus.CLOSED, label: "Closed", icon: "✅" },
   ];
 

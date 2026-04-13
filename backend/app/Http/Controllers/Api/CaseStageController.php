@@ -16,7 +16,7 @@ class CaseStageController extends Controller
     private const STAGE_TRANSITIONS = [
         'SUBMITTED' => ['UNDER_REVIEW'],
         'UNDER_REVIEW' => ['INVESTIGATING', 'CLOSED'],
-        'INVESTIGATING' => ['REFERRED', 'CLOSED'],
+        'INVESTIGATING' => ['REFERRED', 'SUCCESSFUL', 'CLOSED'],
         'REFERRED' => ['SUCCESSFUL', 'CLOSED'],
         'SUCCESSFUL' => ['CLOSED'],
         'DISPUTED' => ['UNDER_REVIEW', 'INVESTIGATING', 'REFERRED', 'CLOSED'],

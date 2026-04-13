@@ -28,13 +28,14 @@ type PortalTab = "signin" | "report" | "tracking";
 const STATUS_ORDER = ["SUBMITTED", "UNDER_REVIEW", "INVESTIGATING", "REFERRED", "CLOSED"];
 
 const statusLabel = (s: string) =>
-  s === "UNDER_REVIEW" ? "Under Review" : s === "INVESTIGATING" ? "Investigating" : s === "REFERRED" ? "Referred" : s.charAt(0) + s.slice(1).toLowerCase();
+  s === "UNDER_REVIEW" ? "Under Review" : s === "INVESTIGATING" ? "Investigating" : s === "REFERRED" ? "Referred" : s === "SUCCESSFUL" ? "✓ Successful" : s.charAt(0) + s.slice(1).toLowerCase();
 
 const statusColor = (s: string) => {
   if (s === "SUBMITTED") return "text-blue-600 dark:text-blue-400";
   if (s === "UNDER_REVIEW") return "text-indigo-600 dark:text-indigo-400";
   if (s === "INVESTIGATING") return "text-amber-600 dark:text-amber-400";
   if (s === "REFERRED") return "text-purple-600 dark:text-purple-400";
+  if (s === "SUCCESSFUL") return "text-teal-600 dark:text-teal-400";
   if (s === "CLOSED") return "text-emerald-600 dark:text-emerald-400";
   if (s === "DISPUTED") return "text-rose-600 dark:text-rose-400";
   return "text-slate-600 dark:text-slate-400";

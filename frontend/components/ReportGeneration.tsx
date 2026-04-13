@@ -163,7 +163,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
     const pdfStatusLabel = (s: string) => {
       const map: Record<string, string> = {
         SUBMITTED: 'Submitted', UNDER_REVIEW: 'Under Review', INVESTIGATING: 'Under Investigation',
-        REFERRED: 'Referred to Courts/ZRP', SUCCESSFUL: 'Successfully Resolved', CLOSED: 'Closed', DISPUTED: 'Under Dispute'
+        REFERRED: 'Referred to Courts/ZRP', SUCCESSFUL: '✓ Successfully Resolved', CLOSED: 'Closed', DISPUTED: 'Under Dispute'
       };
       return map[s] || s;
     };

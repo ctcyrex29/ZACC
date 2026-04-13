@@ -695,11 +695,11 @@ export const ChatBot: React.FC = () => {
           {/* Quick topics (only when idle / done) */}
           {!isFilingActive && (
             <div className="px-4 py-2 border-t border-white/10 flex-shrink-0">
-              {usingFallback && (
+              {/* {usingFallback && (
                 <p className="mb-2 text-[10px] text-amber-300">
                   AI service is temporarily unavailable. Using built-in responses.
                 </p>
-              )}
+              )} */}
               <div
                 className="flex gap-1.5 overflow-x-auto pb-1"
                 style={{ scrollbarWidth: "none" }}

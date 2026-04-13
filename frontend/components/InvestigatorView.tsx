@@ -6,6 +6,7 @@ import { ALL_LANGUAGES, getLanguageName } from "../lib/languages";
 
 interface InvestigatorViewProps {
   user: User;
+  onCaseViewed?: (caseId: string | number) => void;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ const statusLabel = (s: string) => {
     UNDER_REVIEW: "Under Review",
     INVESTIGATING: "Investigating",
     REFERRED: "Referred to Courts/ZRP",
-    SUCCESSFUL: "Successful",
+    SUCCESSFUL: "✓ Successful",
     CLOSED: "Closed",
     DISPUTED: "Disputed",
   };
@@ -153,7 +154,7 @@ function generateStagePDF(caseData: any, stage: any) {
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
-export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
+export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCaseViewed }) => {
   const isAdmin = user.role === UserRole.ADMIN;
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -382,6 +383,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
               : x,
           ),
         );
+        // Mark this case's notification as viewed so the sidebar badge decrements
+        onCaseViewed?.(resolvedId);
       } catch {
         // continue even if status update fails
       }
@@ -1775,7 +1778,23 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                               {investigationLogs.length > 0 && ` · ${investigationLogs.length} investigation entries will be included in the report`}
                             </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-3 gap-3">
+                            <button
+                              onClick={() => {
+                                const fullNotes = investigationLogs.length > 0
+                                  ? `${actionNotes}\n\n--- Investigation Log (${investigationLogs.length} entries) ---\n${investigationLogs.map((l, i) => `${i+1}. [${l.progress}] ${l.account}: ${l.finding} (${l.date})`).join('\n')}`
+                                  : actionNotes;
+                                const original = actionNotes;
+                                setActionNotes(fullNotes);
+                                doAction("SUCCESSFUL").then(() => setActionNotes(original));
+                              }}
+                              disabled={actionProcessing}
+                              className="py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                            >
+                              {actionProcessing
+                                ? "Processing..."
+                                : "✓ Solved by ZACC"}
+                            </button>
                             <button
                               onClick={() => {
                                 const fullNotes = investigationLogs.length > 0
@@ -2024,12 +2043,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">
                           Post-Case Expert Review
                         </p>
-                        {!expertReview && (
-                          <button onClick={runExpertReview} disabled={expertReviewLoading}
-                            className="px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50">
-                            {expertReviewLoading ? "Analyzing..." : "Run Expert Review"}
-                          </button>
-                        )}
+                        
                       </div>
                       {expertReviewLoading && (
                         <div className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400">

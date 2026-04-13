@@ -137,7 +137,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         </div>
         <div className="rounded-2xl border border-emerald-400/20 bg-white dark:bg-[#080c18] p-5">
           <p className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold tracking-wider">
-            Successful
+            ✓ Successful
           </p>
           <p className="text-3xl font-black mt-2 text-emerald-500">
             {loading ? "..." : stats.successful}
@@ -198,8 +198,8 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
                     <p className="font-bold text-slate-900 dark:text-white">
                       {item.id}
                     </p>
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase">
-                      {item.status.replace("_", " ")}
+                    <span className={`text-xs font-bold uppercase ${item.status === "SUCCESSFUL" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-600 dark:text-slate-300"}`}>
+                      {item.status === "SUCCESSFUL" ? "✓ Successful" : item.status.replace("_", " ")}
                     </span>
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 line-clamp-2">
