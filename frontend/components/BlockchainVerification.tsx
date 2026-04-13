@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { apiClient } from '../services/api';
 
 interface BlockchainVerificationProps {
@@ -22,6 +23,7 @@ const BlockchainVerification: React.FC<BlockchainVerificationProps> = ({ reportI
       setTxHash(response.tx_hash);
     } catch (err: any) {
       console.error('Verification failed:', err);
+      toast.error(err.message || 'Verification failed');
       setError(err.message || 'Verification failed');
       setVerified(false);
     } finally {

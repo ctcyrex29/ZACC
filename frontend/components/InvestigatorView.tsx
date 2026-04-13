@@ -189,6 +189,64 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const [translateLoading, setTranslateLoading] = useState(false);
   const [translateLang, setTranslateLang] = useState<string>("en");
 
+  // Evidence preview state
+  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // ── Toggle inline evidence preview for text and image files ──
+  const togglePreview = async (attachment: any) => {
+    const attId = String(attachment.id);
+    if (previewAttachmentId === attId) {
+      setPreviewAttachmentId(null);
+      setPreviewContent(null);
+      setPreviewUrl(null);
+      return;
+    }
+    setPreviewAttachmentId(attId);
+    setPreviewContent(null);
+    setPreviewUrl(null);
+    setPreviewLoading(true);
+
+    const mime = (attachment.mime_type || "").toLowerCase();
+    const caseId = dossierData?.case_id || dossierData?.id;
+    const dlUrl = attachment.download_url || `/api/reports/${caseId}/attachments/${attachment.id}/download`;
+
+    try {
+      const token = localStorage.getItem("nexus_token");
+      const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+      let fetchUrl = dlUrl;
+      try {
+        const parsed = new URL(dlUrl);
+        if (parsed.pathname.startsWith("/api/")) fetchUrl = apiBase + parsed.pathname;
+      } catch { fetchUrl = apiBase + (dlUrl.startsWith("/") ? dlUrl : "/" + dlUrl); }
+
+      const resp = await fetch(fetchUrl, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "*/*" },
+      });
+      if (!resp.ok) throw new Error("Failed to fetch");
+
+      if (mime.startsWith("image/")) {
+        const blob = await resp.blob();
+        setPreviewUrl(URL.createObjectURL(blob));
+      } else if (mime.startsWith("text/") || mime.includes("json") || mime.includes("csv") || mime.includes("xml") || mime.includes("markdown")) {
+        const text = await resp.text();
+        setPreviewContent(text.slice(0, 5000));
+      } else if (mime.startsWith("video/")) {
+        const blob = await resp.blob();
+        setPreviewUrl(URL.createObjectURL(blob));
+      } else if (mime.startsWith("audio/")) {
+        const blob = await resp.blob();
+        setPreviewUrl(URL.createObjectURL(blob));
+      }
+    } catch {
+      setPreviewContent("Unable to load preview.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   // ── Fetch cases ──
   const fetchCases = useCallback(async () => {
     try {
@@ -350,9 +408,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
   const doAction = async (targetStage: string, requireNotes = true) => {
     if (isAdmin) return;
     if (requireNotes && actionNotes.trim().length < 10) {
-      setActionError(
-        "Please provide a report statement (minimum 10 characters) before proceeding.",
-      );
+      toast.error("Please provide a report statement (minimum 10 characters) before proceeding.");
       return;
     }
     setActionProcessing(true);
@@ -379,11 +435,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
         await loadStages(id);
       } else {
         toast.error(resp?.message || "Action failed.");
-        setActionError(resp?.message || "Action failed.");
       }
     } catch (err: any) {
       toast.error(err.message || "Action failed.");
-      setActionError(err.message || "Action failed.");
     } finally {
       setActionProcessing(false);
     }
@@ -460,10 +514,71 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Role indicator */}
-      <div
-        className={`rounded-2xl border p-4 ${isAdmin ? "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5" : "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/5"}`}
-      >
+      {/* ── DOSSIER FULL PAGE ────────────────────────────────── */}
+      {dossierOpen ? (
+        <div className="animate-fade-in">
+          {/* Back button */}
+          <button
+            onClick={closeDossier}
+            className="mb-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm font-bold text-slate-700 dark:text-slate-300 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+          >
+            ← Back to Cases
+          </button>
+
+          {/* Dossier header */}
+          <div className="sticky top-0 z-10 bg-slate-100 dark:bg-[#04060b] pb-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] px-8 py-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  {isAdmin ? "Case Details" : "Case Dossier"}
+                </h3>
+                {dossierData && !dossierData.error && (
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs">
+                      {dossierData.reference_code || dossierData.case_id}
+                    </code>
+                    {!isAdmin && dossierData.reference_code && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(dossierData.reference_code);
+                          toast.success("Copied block hash to clipboard!");
+                        }}
+                        title="Copy reference code"
+                        className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 transition-all"
+                      >
+                        Copy
+                      </button>
+                    )}
+                    <span className="text-slate-400 text-xs">·</span>
+                    <span
+                      className={`font-bold text-xs ${statusBadge(currentStatus).split(" ")[1]}`}
+                    >
+                      {statusLabel(currentStatus)}
+                    </span>
+                    {isAdmin && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase">
+                        Read Only
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={closeDossier}
+                className="w-10 h-10 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center text-lg font-black transition-all"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+        </div>
+      ) : (
+        <>
+        {/* Role indicator */}
+        <div
+          className={`rounded-2xl border p-4 ${isAdmin ? "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5" : "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/5"}`}
+        >
         <div className="flex items-center gap-3">
           <span className="text-xl">{isAdmin ? "🛡️" : "🔍"}</span>
           <div>
@@ -711,76 +826,26 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
           </div>
         )}
       </div>
+      </>
+      )}
 
-      {/* ── Dossier Modal ── */}
+      {/* ── Dossier Full Page Content ── */}
       {dossierOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeDossier();
-          }}
-        >
-          <div className="w-full max-w-3xl max-h-[92vh] rounded-3xl bg-white dark:bg-[#080c18] border border-slate-200 dark:border-white/10 overflow-y-auto shadow-2xl">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white dark:bg-[#080c18] border-b border-slate-200 dark:border-white/10 px-8 py-5 flex items-center justify-between z-10">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                  {isAdmin ? "Case Details" : "Case Dossier"}
-                </h3>
-                {dossierData && !dossierData.error && (
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs">
-                      {dossierData.reference_code || dossierData.case_id}
-                    </code>
-                    {!isAdmin && dossierData.reference_code && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(dossierData.reference_code);
-                          toast.success("Copied block hash to clipboard!");
-                        }}
-                        title="Copy reference code"
-                        className="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 transition-all"
-                      >
-                        Copy
-                      </button>
-                    )}
-                    <span className="text-slate-400 text-xs">·</span>
-                    <span
-                      className={`font-bold text-xs ${statusBadge(currentStatus).split(" ")[1]}`}
-                    >
-                      {statusLabel(currentStatus)}
-                    </span>
-                    {isAdmin && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-black uppercase">
-                        Read Only
-                      </span>
-                    )}
-                  </div>
-                )}
+        <div>
+            {dossierLoading ? (
+              <div className="py-20 flex flex-col items-center gap-4 text-center">
+                <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+                <p className="text-sm font-bold text-slate-500">
+                  Loading dossier...
+                </p>
               </div>
-              <button
-                onClick={closeDossier}
-                className="w-10 h-10 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center text-lg font-black transition-all"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="p-8">
-              {dossierLoading ? (
-                <div className="py-20 flex flex-col items-center gap-4 text-center">
-                  <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
-                  <p className="text-sm font-bold text-slate-500">
-                    Loading dossier...
-                  </p>
-                </div>
-              ) : dossierData?.error ? (
-                <div className="p-6 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-200 dark:border-rose-500/20">
-                  <p className="text-rose-700 dark:text-rose-300 font-medium">
-                    {dossierData.error}
-                  </p>
-                </div>
-              ) : dossierData ? (
+            ) : dossierData?.error ? (
+              <div className="p-6 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-200 dark:border-rose-500/20">
+                <p className="text-rose-700 dark:text-rose-300 font-medium">
+                  {dossierData.error}
+                </p>
+              </div>
+            ) : dossierData ? (
                 <div className="space-y-6">
                   {/* Case Info */}
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5 bg-slate-50 dark:bg-white/5 space-y-4">
@@ -1488,29 +1553,68 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                         {caseAttachments.map((attachment: any) => {
                           const caseId = dossierData?.case_id || dossierData?.id;
                           const dlUrl = attachment.download_url || `/api/reports/${caseId}/attachments/${attachment.id}/download`;
+                          const mime = (attachment.mime_type || "").toLowerCase();
+                          const canPreview = mime.startsWith("image/") || mime.startsWith("text/") || mime.includes("json") || mime.includes("csv") || mime.includes("xml") || mime.includes("markdown") || mime.startsWith("video/") || mime.startsWith("audio/");
+                          const isActive = previewAttachmentId === String(attachment.id);
                           return (
-                          <div
-                            key={attachment.id}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 px-3 py-2.5"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span>{attachmentIcon(attachment.mime_type || "")}</span>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                                  {attachment.original_name || "Evidence file"}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  {attachment.mime_type || "Unknown type"} · {attachment.size ? `${(attachment.size / 1024 / 1024).toFixed(2)} MB` : "Size unknown"}
-                                </p>
+                          <div key={attachment.id} className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 overflow-hidden">
+                            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span>{attachmentIcon(attachment.mime_type || "")}</span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                                    {attachment.original_name || "Evidence file"}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {attachment.mime_type || "Unknown type"} · {attachment.size ? `${(attachment.size / 1024 / 1024).toFixed(2)} MB` : "Size unknown"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {canPreview && (
+                                  <button
+                                    onClick={() => togglePreview(attachment)}
+                                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${
+                                      isActive
+                                        ? "bg-blue-500/20 border border-blue-500/40 text-blue-700 dark:text-blue-300"
+                                        : "bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20"
+                                    }`}
+                                  >
+                                    {isActive ? "Hide" : "Preview"}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => downloadEvidence(dlUrl, attachment.original_name || "evidence")}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
+                                >
+                                  Download
+                                </button>
                               </div>
                             </div>
 
-                              <button
-                                onClick={() => downloadEvidence(dlUrl, attachment.original_name || "evidence")}
-                                className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-all"
-                              >
-                                Download
-                              </button>
+                            {/* Inline preview panel */}
+                            {isActive && (
+                              <div className="border-t border-slate-200 dark:border-white/10 p-3 bg-white dark:bg-black/30">
+                                {previewLoading ? (
+                                  <div className="flex items-center justify-center py-6">
+                                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                    <span className="ml-2 text-xs text-slate-500">Loading preview…</span>
+                                  </div>
+                                ) : previewUrl && mime.startsWith("image/") ? (
+                                  <img src={previewUrl} alt={attachment.original_name} className="max-w-full max-h-80 rounded-lg object-contain mx-auto" />
+                                ) : previewUrl && mime.startsWith("video/") ? (
+                                  <video src={previewUrl} controls className="max-w-full max-h-80 rounded-lg mx-auto" />
+                                ) : previewUrl && mime.startsWith("audio/") ? (
+                                  <audio src={previewUrl} controls className="w-full" />
+                                ) : previewContent ? (
+                                  <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words max-h-64 overflow-y-auto bg-slate-50 dark:bg-black/20 rounded-lg p-3 font-mono leading-relaxed">
+                                    {previewContent}
+                                  </pre>
+                                ) : (
+                                  <p className="text-xs text-slate-500 italic py-2">Preview not available for this file type.</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                           );
                         })}
@@ -1521,11 +1625,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                   {/* ── Workflow Panel (INVESTIGATORS ONLY) ── */}
                   {!isAdmin && (
                     <>
-                      {actionError && (
-                        <div className="rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-5 py-3 text-sm text-rose-700 dark:text-rose-300 font-semibold">
-                          {actionError}
-                        </div>
-                      )}
 
                       {/* UNDER_REVIEW: validity assessment */}
                       {currentStatus === "UNDER_REVIEW" && (
@@ -2095,8 +2194,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user }) => {
                   </div>
                 </div>
               ) : null}
-            </div>
-          </div>
         </div>
       )}
     </div>

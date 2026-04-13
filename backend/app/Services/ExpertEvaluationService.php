@@ -705,7 +705,7 @@ class ExpertEvaluationService
      * Extract readable text content from a report's evidence files.
      *
      * - Text-based files (txt, csv, json, html, xml, md, log): reads up to
-     *   10 000 chars of actual content for keyword analysis.
+     *   50 000 chars of actual content for keyword analysis (files up to 1 MB).
      * - Binary files (images, video, audio, PDFs, spreadsheets): injects
      *   descriptive evidence-type phrases so the keyword-based dimension
      *   scorers (evidence strength, credibility, complexity) can recognise
@@ -727,14 +727,15 @@ class ExpertEvaluationService
             $ext  = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
             $isReadable = in_array($mime, $readableTypes) || in_array($ext, $readableExts);
 
-            // ── Text files: extract actual content ──
-            if ($isReadable && $attachment->size < 200000) {
+            // ── Text files: extract actual content (up to 1 MB, 50K chars) ──
+            if ($isReadable && $attachment->size < 1048576) {
                 try {
                     $disk = $attachment->disk ?? 'private';
                     $content = Storage::disk($disk === 'local' ? 'local' : $disk)
                         ->get($attachment->file_name);
                     if ($content) {
-                        $text .= ' ' . strtolower(mb_substr($content, 0, 10000));
+                        $text .= ' [FILE: ' . strtolower($attachment->original_name ?? 'unknown') . '] '
+                              . strtolower(mb_substr($content, 0, 50000));
                     }
                 } catch (\Exception $e) {
                     // Skip unreadable files silently

@@ -16,6 +16,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [disputingId, setDisputingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [disputeFiles, setDisputeFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
           referenceCode: report.reference_code,
           disputeReason: report.dispute_reason,
           lastUpdated: report.last_updated,
+          attachments_count: report.attachments_count ?? report.attachments?.length ?? 0,
           blockchain_tx_hash: report.blockchain_tx_hash,
           blockchain_block_number: report.blockchain_block_number,
         }));
@@ -51,6 +53,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
       }
     } catch (err: any) {
       console.error("Error loading cases:", err);
+      toast.error(err.message || "Failed to load your reports. Please try again.");
       setError(err.message || "Failed to load your reports. Please try again.");
     } finally {
       setLoading(false);
@@ -72,18 +75,21 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Find the report ID from the case_id
+      // Find the report from the case_id
       const report = cases.find((c) => c.id === caseId);
       if (!report) {
         throw new Error("Report not found");
       }
 
-      const response = await apiClient.disputeReport(caseId, reason);
+      // Use publicDispute which supports evidence file uploads
+      const trackingCode = report.referenceCode || caseId;
+      const response = await apiClient.publicDispute(trackingCode, reason, disputeFiles);
 
       if (response.success) {
         toast.success("Dispute submitted successfully. Your case is being reviewed.");
         setDisputingId(null);
         setReason("");
+        setDisputeFiles([]);
         await loadCases(); // Reload cases to get updated data
       } else {
         throw new Error(response.message || "Failed to submit dispute");
@@ -211,6 +217,11 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
                   {c.status === CaseStatus.DISPUTED && (
                     <span className="text-[10px] font-bold text-rose-400 animate-pulse uppercase tracking-widest">
                       ⚠️ Unsolved / Re-triggered
+                    </span>
+                  )}
+                  {c.attachments_count && c.attachments_count > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      📎 {c.attachments_count} file{c.attachments_count !== 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -383,6 +394,49 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
                         rows={4}
                         disabled={isSubmitting}
                       />
+
+                      {/* Evidence file upload for dispute */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-rose-400/70 uppercase tracking-widest">
+                          Supporting Evidence (optional)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <label className="cursor-pointer px-4 py-2.5 bg-nexus-950 border border-rose-500/20 rounded-xl text-[11px] font-bold text-rose-300 hover:border-rose-500/40 transition-all flex items-center gap-2">
+                            <span>📎</span> Attach Files
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                              className="hidden"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                setDisputeFiles((prev) => [...prev, ...files].slice(0, 10));
+                                e.target.value = "";
+                              }}
+                              disabled={isSubmitting}
+                            />
+                          </label>
+                          <span className="text-[10px] text-slate-600">
+                            Images, videos, audio, PDFs, documents — max 10 files, 10MB each
+                          </span>
+                        </div>
+                        {disputeFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {disputeFiles.map((f, i) => (
+                              <div key={i} className="flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/20 rounded-lg px-2.5 py-1.5 text-[10px] text-rose-300 font-medium">
+                                <span>{f.type.startsWith("image/") ? "🖼️" : f.type.startsWith("video/") ? "🎬" : f.type.startsWith("audio/") ? "🎵" : "📄"}</span>
+                                <span className="max-w-[120px] truncate">{f.name}</span>
+                                <span className="text-rose-500/50">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                                <button
+                                  onClick={() => setDisputeFiles((prev) => prev.filter((_, j) => j !== i))}
+                                  className="ml-1 text-rose-400 hover:text-rose-300 font-bold"
+                                >×</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex gap-3">
                         <button
                           onClick={() => handleDispute(c.id)}
@@ -402,6 +456,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
                           onClick={() => {
                             setDisputingId(null);
                             setReason("");
+                            setDisputeFiles([]);
                           }}
                           disabled={isSubmitting}
                           className="px-8 py-4 bg-white/5 text-slate-400 rounded-xl text-xs font-bold hover:bg-white/10 transition-all"

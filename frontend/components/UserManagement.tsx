@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 
 interface StaffUser {
@@ -48,10 +49,10 @@ export const UserManagement: React.FC = () => {
       if (response.success && Array.isArray(response.data)) {
         setUsers(response.data);
       } else {
-        setError("Failed to fetch users");
+        toast.error("Failed to fetch users");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to fetch users");
+      toast.error(err.message || "Failed to fetch users");
     } finally {
       setLoading(false);
     }
@@ -77,14 +78,14 @@ export const UserManagement: React.FC = () => {
         setShowForm(false);
         resetForm();
       } else {
-        setSubmitError(
+        toast.error(
           response.errors
             ? Object.values(response.errors).flat().join(", ")
-            : response.message,
+            : response.message || "Failed to save user",
         );
       }
     } catch (err: any) {
-      setSubmitError(err.message || "Failed to save user");
+      toast.error(err.message || "Failed to save user");
     } finally {
       setSubmitLoading(false);
     }
@@ -95,9 +96,9 @@ export const UserManagement: React.FC = () => {
     try {
       const response = await apiClient.deleteUser(id);
       if (response.success) await fetchUsers();
-      else setError(response.message || "Failed to delete user");
+      else toast.error(response.message || "Failed to delete user");
     } catch (err: any) {
-      setError(err.message || "Failed to delete user");
+      toast.error(err.message || "Failed to delete user");
     }
   };
 
@@ -106,9 +107,9 @@ export const UserManagement: React.FC = () => {
     try {
       const response = await apiClient.toggleUserActive(id);
       if (response.success) await fetchUsers();
-      else setError(response.message || "Failed to toggle status");
+      else toast.error(response.message || "Failed to toggle status");
     } catch (err: any) {
-      setError(err.message || "Failed to toggle status");
+      toast.error(err.message || "Failed to toggle status");
     } finally {
       setTogglingId(null);
     }
@@ -121,10 +122,10 @@ export const UserManagement: React.FC = () => {
       if (response.success) {
         setResetResult({ userId: id, tempPassword: response.data.temporary_password });
       } else {
-        setError(response.message || "Failed to reset password");
+        toast.error(response.message || "Failed to reset password");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to reset password");
+      toast.error(err.message || "Failed to reset password");
     }
   };
 
@@ -147,11 +148,6 @@ export const UserManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {error && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
-          <p className="text-rose-400 text-sm font-bold">{error}</p>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -171,11 +167,6 @@ export const UserManagement: React.FC = () => {
           <h3 className="text-lg font-black text-slate-900 dark:text-white mb-5">
             {editingId ? "Edit User" : "Create New User"}
           </h3>
-          {submitError && (
-            <div className="mb-5 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl">
-              <p className="text-rose-400 text-sm font-bold">{submitError}</p>
-            </div>
-          )}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>

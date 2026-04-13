@@ -148,12 +148,7 @@ export const Dashboard: React.FC = () => {
             key={i}
             className={`glass-card p-6 rounded-3xl transition-all duration-300 border-l-4 ${stat.label === "Integrity Alerts" && stat.value > 0 ? "border-l-rose-500" : "border-l-transparent"}`}
           >
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-2xl">{stat.icon}</span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Audit Metric
-              </span>
-            </div>
+            
             <p className={`text-3xl font-bold mb-1 ${stat.color}`}>
               {loading ? "—" : stat.value}
             </p>

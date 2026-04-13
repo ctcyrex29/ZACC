@@ -166,6 +166,23 @@ class ReportGenerationController extends Controller
             ])
             ->toArray();
 
+        // Gather evidence summary
+        $attachments = $report->attachments()->get();
+        $evidenceCount = $attachments->count();
+        $evidenceTypes = [];
+        foreach ($attachments as $att) {
+            $mime = strtolower($att->mime_type ?? '');
+            if (str_contains($mime, 'image'))      $evidenceTypes['Images'] = ($evidenceTypes['Images'] ?? 0) + 1;
+            elseif (str_contains($mime, 'video'))   $evidenceTypes['Videos'] = ($evidenceTypes['Videos'] ?? 0) + 1;
+            elseif (str_contains($mime, 'audio'))   $evidenceTypes['Audio'] = ($evidenceTypes['Audio'] ?? 0) + 1;
+            elseif (str_contains($mime, 'pdf'))     $evidenceTypes['PDFs'] = ($evidenceTypes['PDFs'] ?? 0) + 1;
+            elseif (str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel'))
+                                                    $evidenceTypes['Spreadsheets'] = ($evidenceTypes['Spreadsheets'] ?? 0) + 1;
+            elseif (str_contains($mime, 'text') || str_contains($mime, 'json'))
+                                                    $evidenceTypes['Text files'] = ($evidenceTypes['Text files'] ?? 0) + 1;
+            else                                    $evidenceTypes['Documents'] = ($evidenceTypes['Documents'] ?? 0) + 1;
+        }
+
         return [
             'case_id'        => $report->case_id,
             'reference_code' => $report->reference_code,
@@ -180,6 +197,8 @@ class ReportGenerationController extends Controller
             'last_updated'   => $report->last_updated,
             'dispute_reason' => $report->dispute_reason,
             'stage_history'  => $stageEvals,
+            'evidence_count' => $evidenceCount,
+            'evidence_types' => $evidenceTypes,
         ];
     }
 }

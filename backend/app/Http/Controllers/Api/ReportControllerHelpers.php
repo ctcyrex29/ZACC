@@ -42,28 +42,44 @@ trait ReportControllerHelpers
                 ];
                 $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
                 $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+                $mime = strtolower($attachment->mime_type ?? '');
 
-                if ((in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts))
-                    && $attachment->size < 100000) {
+                if ((in_array($mime, $readableTypes) || in_array($ext, $readableExts))
+                    && $attachment->size < 512000) {
                     try {
                         $content = \Illuminate\Support\Facades\Storage::disk($attachment->disk ?? 'private')
                             ->get($attachment->file_name);
                         if ($content) {
                             $fileContents[] = [
                                 'name' => $attachment->original_name,
-                                'content' => mb_substr($content, 0, 5000),
+                                'content' => mb_substr($content, 0, 10000),
                             ];
                         }
                     } catch (\Exception $e) {
                         // Skip unreadable files
                     }
                 } else {
-                    // Include metadata for non-readable files (images, PDFs, etc.)
+                    // Include metadata and evidence type for binary files
+                    $evidenceType = 'Binary file';
+                    if (str_contains($mime, 'image')) {
+                        $evidenceType = 'Photographic/image evidence';
+                    } elseif (str_contains($mime, 'video')) {
+                        $evidenceType = 'Video evidence/recording';
+                    } elseif (str_contains($mime, 'audio')) {
+                        $evidenceType = 'Audio evidence/recording';
+                    } elseif (str_contains($mime, 'pdf')) {
+                        $evidenceType = 'PDF document';
+                    } elseif (str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel')) {
+                        $evidenceType = 'Spreadsheet/financial data';
+                    } elseif (str_contains($mime, 'msword') || str_contains($mime, 'wordprocessingml')) {
+                        $evidenceType = 'Word document';
+                    }
                     $fileContents[] = [
                         'name' => $attachment->original_name,
                         'type' => $attachment->mime_type,
                         'size_bytes' => $attachment->size,
-                        'note' => 'Binary file — content not readable, but its existence is evidence.',
+                        'evidence_type' => $evidenceType,
+                        'note' => 'Content not directly readable but its type and existence are evidential.',
                     ];
                 }
             }
@@ -311,20 +327,40 @@ PROMPT;
         $readableExts = ['txt', 'csv', 'json', 'html', 'xml', 'md', 'log'];
 
         foreach ($report->attachments as $attachment) {
+            $mime = strtolower($attachment->mime_type ?? '');
             $ext = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
-            $readable = in_array($attachment->mime_type, $readableTypes) || in_array($ext, $readableExts);
+            $readable = in_array($mime, $readableTypes) || in_array($ext, $readableExts);
 
-            if ($readable && $attachment->size < 200000) {
+            if ($readable && $attachment->size < 1048576) {
                 try {
                     $content = \Illuminate\Support\Facades\Storage::disk($attachment->disk ?? 'private')
                         ->get($attachment->file_name);
                     if ($content) {
-                        $fileText .= ' ' . mb_substr($content, 0, 10000);
+                        $fileText .= ' [FILE: ' . strtolower($attachment->original_name ?? 'unknown') . '] '
+                                  . mb_substr($content, 0, 50000);
                     }
                 } catch (\Exception $e) {
                     // Skip unreadable files
                 }
             }
+
+            // Inject evidence-type phrases for binary files
+            if (str_contains($mime, 'image')) {
+                $fileText .= ' photo image evidence screenshot visual proof';
+            } elseif (str_contains($mime, 'video')) {
+                $fileText .= ' video evidence recording visual proof cctv footage';
+            } elseif (str_contains($mime, 'audio')) {
+                $fileText .= ' audio evidence recording voice conversation witness statement';
+            } elseif (str_contains($mime, 'pdf')) {
+                $fileText .= ' pdf document formal official evidence';
+            } elseif (str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel')
+                      || in_array($ext, ['xls', 'xlsx'])) {
+                $fileText .= ' spreadsheet financial data records evidence';
+            } elseif (str_contains($mime, 'msword') || str_contains($mime, 'wordprocessingml')
+                      || in_array($ext, ['doc', 'docx'])) {
+                $fileText .= ' document formal written evidence report';
+            }
+
             // Always contribute file metadata so file count/type is considered
             $fileText .= ' file:' . strtolower($attachment->original_name ?? '');
         }

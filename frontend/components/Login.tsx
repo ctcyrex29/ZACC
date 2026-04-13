@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { User } from "../types";
 
@@ -39,7 +40,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         onLogin(user);
       }
     } catch (err: any) {
-      setError(err.message || "Authentication failed");
+      toast.error(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -70,12 +71,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               {isRegistering ? "Create your account" : "Access your account"}
             </p>
           </div>
-
-          {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold text-center">
-              {error}
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {isRegistering && (

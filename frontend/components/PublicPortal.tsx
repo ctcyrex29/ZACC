@@ -709,17 +709,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                 {/* Pre-Submission AI Suggestions */}
                 {formData.description.trim().length >= 20 && (
                   <div className="space-y-3">
-                    {!portalPreSuggestions && (
-                      <button type="button" onClick={getPortalPreSuggestions} disabled={portalPreSuggestionsLoading}
-                        className="w-full py-3 rounded-2xl border-2 border-dashed border-violet-300 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 font-bold text-xs uppercase tracking-widest hover:bg-violet-50 dark:hover:bg-violet-500/5 transition-all disabled:opacity-50">
-                        {portalPreSuggestionsLoading ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <div className="w-4 h-4 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-                            Analyzing...
-                          </span>
-                        ) : `🤖 ${t(language, "getAISuggestions") || "Get AI Suggestions Before Submitting"}`}
-                      </button>
-                    )}
+                    
                     {portalPreSuggestions && (
                       <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5 space-y-3">
                         <div className="flex items-center justify-between">
