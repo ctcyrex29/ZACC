@@ -569,31 +569,31 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               {
                 label: t(language, "totalCases"),
                 value: data.overview.total,
-                icon: "ðŸ“Š",
+                
                 color: "text-slate-900 dark:text-white",
               },
               {
                 label: t(language, "successful"),
                 value: data.overview.successful,
-                icon: "âœ…",
+                
                 color: "text-emerald-500",
               },
               {
                 label: t(language, "inProgress"),
                 value: data.overview.in_progress,
-                icon: "â³",
+                // icon: "â³",
                 color: "text-amber-500",
               },
               {
                 label: t(language, "disputed"),
                 value: data.overview.disputed,
-                icon: "ðŸš¨",
+                
                 color: "text-rose-500",
               },
             ].map((s, i) => (
               <div key={i} className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xl">{s.icon}</span>
+                  {/* <span className="text-xl">{s.icon}</span> */}
                 </div>
                 <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
@@ -850,7 +850,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               onClick={() => generatePDF(activeTab, getCasesForTab(activeTab))}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors"
             >
-              ðŸ“„ {t(language, "exportPdf")}
+            {t(language, "exportPdf")}
             </button>
           </div>
 
