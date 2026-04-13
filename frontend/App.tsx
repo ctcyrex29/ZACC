@@ -112,7 +112,11 @@ const App: React.FC = () => {
         const matchingIds = response.data
           .filter((n: any) =>
             ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
-            (String(n.report_id) === String(caseId) || String(n.data?.report_id) === String(caseId) || String(n.data?.case_id) === String(caseId))
+            (
+              String(n.report_id) === String(caseId) ||
+              String(n.payload?.case_id) === String(caseId) ||
+              String(n.payload?.reference_code) === String(caseId)
+            )
           )
           .map((n: any) => String(n.id));
         if (matchingIds.length > 0) {
@@ -201,8 +205,7 @@ const App: React.FC = () => {
     switch (view) {
       case "dashboard":
         return user.role === UserRole.WHISTLEBLOWER
-          ? t(language, "myDashboard")
-          : t(language, "systemOverview");
+           t(language, "myDashboard");
       case "report":
         return t(language, "reportCase");
       case "investigator":

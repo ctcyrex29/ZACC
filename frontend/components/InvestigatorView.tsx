@@ -388,12 +388,17 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
               : x,
           ),
         );
-        // Mark this case's notification as viewed so the sidebar badge decrements
-        onCaseViewed?.(resolvedId);
       } catch {
         // continue even if status update fails
       }
     }
+
+    // Mark this case's notification as viewed so the sidebar badge decrements
+    // Use await to ensure localStorage is updated before re-filtering
+    await onCaseViewed?.(resolvedId);
+
+    // Force local notification list to re-filter
+    setNotifications((prev) => [...prev]);
 
     try {
       const resp = await apiClient.get(`/reports/${resolvedId}`);
@@ -516,9 +521,13 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const caseAttachments: any[] = Array.isArray(dossierData?.attachments)
     ? dossierData.attachments
     : [];
-  const newCaseNotifications = notifications.filter((n) =>
-    ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type),
-  );
+  const newCaseNotifications = notifications.filter((n) => {
+    const viewedIds: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
+    return (
+      ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
+      !viewedIds.includes(String(n.id))
+    );
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">

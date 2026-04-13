@@ -57,7 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
     { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
     { id: "users", label: t(language, "userManagement"), icon: "👤" },
-    { id: "dashboard", label: t(language, "systemOverview"), icon: "📜" },
   ];
 
   const getMenuItems = () => {
@@ -79,7 +78,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       <div className="p-4 md:p-6 mb-2">
         <div className="flex items-center justify-between gap-3">
-          <img src="/zacc-logo.png" alt="ZACC" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-nexus-emerald/10" />
+          <div className="w-10 h-10 bg-gradient-to-br from-nexus-emerald to-emerald-800 rounded-xl flex items-center justify-center font-black text-nexus-950 text-xl shadow-lg shadow-nexus-emerald/10">
+            Z
+          </div>
           <button
             className="md:hidden text-slate-700 dark:text-slate-300"
             onClick={() => setExpanded((prev) => !prev)}
@@ -107,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`text-2xl transition-transform group-hover:scale-110 ${isActive ? "scale-110" : ""} relative`}
               >
                 {item.icon}
-                {item.id === "investigator" && notificationCount > 0 && (
+                {item.id === "dashboard" && notificationCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-lg">
                     {notificationCount > 9 ? "9+" : notificationCount}
                   </span>
