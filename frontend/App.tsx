@@ -165,7 +165,6 @@ const App: React.FC = () => {
               user={user}
               language={language}
               onCreateReport={() => setCurrentView("report")}
-              onOpenReports={() => setCurrentView("tracking")}
             />
           );
         }

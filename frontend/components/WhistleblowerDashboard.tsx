@@ -3,19 +3,32 @@ import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus, User } from "../types";
 import { Language, t } from "../i18n";
+import BlockchainVerification from "./BlockchainVerification";
 
 interface WhistleblowerDashboardProps {
   user: User;
   language: Language;
   onCreateReport: () => void;
-  onOpenReports: () => void;
 }
+
+const stages = [
+  { key: CaseStatus.SUBMITTED, label: "Submitted", icon: "📥" },
+  { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
+  { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
+  { key: CaseStatus.REFERRED, label: "Courts/ZRP", icon: "⚖️" },
+  { key: CaseStatus.SUCCESSFUL, label: "✓ Successful", icon: "🏆" },
+  { key: CaseStatus.CLOSED, label: "Closed", icon: "✅" },
+];
+
+const getStatusIndex = (status: CaseStatus) => {
+  if (status === CaseStatus.DISPUTED) return 2;
+  return stages.findIndex((s) => s.key === status);
+};
 
 export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
   user,
   language,
   onCreateReport,
-  onOpenReports,
 }) => {
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,8 +92,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         .sort(
           (a, b) =>
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-        )
-        .slice(0, 5),
+        ),
     [cases],
   );
 
@@ -108,12 +120,6 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
             >
               {t(language, "reportCase")}
             </button>
-            <button
-              onClick={() => { toast.success("Loading your reports..."); onOpenReports(); }}
-              className="px-5 py-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 font-bold text-sm"
-            >
-              {t(language, "myReports")}
-            </button>
           </div>
         </div>
       </section>
@@ -121,7 +127,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
           <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
-            Total Reports
+            Total Cases
           </p>
           <p className="text-3xl font-black mt-2 text-slate-900 dark:text-white">
             {loading ? "..." : stats.total}
@@ -161,80 +167,124 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              Recent Case Activity
-            </h3>
+      <section className="space-y-6">
+        <h3 className="text-lg font-black text-slate-900 dark:text-white">
+          Case Progress
+        </h3>
+
+        {recentCases.length === 0 && !loading ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-8 text-center">
+            <p className="text-slate-600 dark:text-slate-400 font-medium mb-4">
+              No cases yet. Start by submitting your first report.
+            </p>
             <button
-              onClick={onOpenReports}
-              className="text-xs font-bold text-emerald-600 dark:text-emerald-400"
+              onClick={onCreateReport}
+              className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold text-sm"
             >
-              View all
+              {t(language, "reportCase")}
             </button>
           </div>
-
-          {recentCases.length === 0 && !loading ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-8 text-center">
-              <p className="text-slate-600 dark:text-slate-400 font-medium mb-4">
-                No reports yet. Start by submitting your first case.
-              </p>
-              <button
-                onClick={onCreateReport}
-                className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold text-sm"
-              >
-                {t(language, "reportCase")}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentCases.map((item) => (
+        ) : (
+          <div className="space-y-5">
+            {recentCases.map((item) => {
+              const statusIdx = getStatusIndex(item.status as CaseStatus);
+              const isDisputed = item.status === CaseStatus.DISPUTED;
+              return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 dark:border-white/10 p-4"
+                  className={`rounded-3xl border p-6 bg-white dark:bg-[#080c18] ${
+                    isDisputed
+                      ? "border-rose-500/30"
+                      : "border-slate-200 dark:border-white/10"
+                  }`}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <p className="font-bold text-slate-900 dark:text-white">
-                      {item.id}
-                    </p>
-                    <span className={`text-xs font-bold uppercase ${item.status === "SUCCESSFUL" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-600 dark:text-slate-300"}`}>
-                      {item.status === "SUCCESSFUL" ? "✓ Successful" : item.status.replace("_", " ")}
-                    </span>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {item.id}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {item.institution} • {new Date(item.timestamp).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-bold uppercase ${
+                        item.status === "SUCCESSFUL"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : isDisputed
+                            ? "text-rose-500"
+                            : "text-slate-600 dark:text-slate-300"
+                      }`}>
+                        {item.status === "SUCCESSFUL" ? "✓ Successful" : item.status.replace("_", " ")}
+                      </span>
+                      {item.referenceCode && (
+                        <p className="font-mono text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                          {item.referenceCode}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 line-clamp-2">
+
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-5 line-clamp-2">
                     {item.description}
                   </p>
-                  <p className="text-xs text-slate-500 mt-2">
-                    {new Date(item.timestamp).toLocaleDateString()} •{" "}
-                    {item.institution}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-6 space-y-4">
-          <h3 className="text-lg font-black text-slate-900 dark:text-white">
-            Whistleblower Quick Guide
-          </h3>
-          <div className="rounded-xl bg-slate-100 dark:bg-white/5 p-4">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              1. File complete evidence in your report.
-            </p>
+                  {/* Progress bar */}
+                  <div className="relative flex justify-between items-center px-2">
+                    <div className="absolute left-6 right-6 h-0.5 bg-slate-200 dark:bg-white/5 top-1/2 -translate-y-1/2 z-0 rounded-full" />
+                    <div
+                      className={`absolute left-6 h-1 top-1/2 -translate-y-1/2 z-0 transition-all duration-700 ease-in-out rounded-full ${
+                        isDisputed
+                          ? "bg-rose-500 shadow-rose-500/30"
+                          : "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                      }`}
+                      style={{
+                        width: `calc(${(statusIdx / (stages.length - 1)) * 100}% - 12px)`,
+                      }}
+                    />
+
+                    {stages.map((s, idx) => {
+                      const isActive = idx <= statusIdx;
+                      const isCurrent =
+                        s.key === item.status ||
+                        (isDisputed && s.key === CaseStatus.INVESTIGATING);
+                      return (
+                        <div key={s.key} className="relative z-10 flex flex-col items-center">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center text-base transition-all duration-500 ${
+                              isCurrent
+                                ? isDisputed
+                                  ? "bg-rose-500 text-white scale-110 ring-4 ring-rose-500/10"
+                                  : "bg-emerald-500 text-white scale-110 ring-4 ring-emerald-500/10"
+                                : isActive
+                                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-500"
+                                  : "bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5 text-slate-400 dark:text-slate-700"
+                            }`}
+                          >
+                            {isDisputed && s.key === CaseStatus.INVESTIGATING ? "⚠️" : s.icon}
+                          </div>
+                          <p
+                            className={`text-[9px] font-bold uppercase mt-3 tracking-widest text-center transition-colors ${
+                              isCurrent
+                                ? "text-slate-900 dark:text-white"
+                                : isActive
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-slate-400 dark:text-slate-700"
+                            }`}
+                          >
+                            {s.label}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <BlockchainVerification reportId={item.id} />
+                </div>
+              );
+            })}
           </div>
-          <div className="rounded-xl bg-slate-100 dark:bg-white/5 p-4">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              2. Save your tracking code for follow-up.
-            </p>
-          </div>
-          <div className="rounded-xl bg-slate-100 dark:bg-white/5 p-4">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              3. Monitor updates in My Reports.
-            </p>
-          </div>
-        </div>
+        )}
       </section>
     </div>
   );
