@@ -524,23 +524,18 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const currentStatusOrder = getStatusOrder(trackedCase?.status ?? "SUBMITTED");
   const activeStatusIdx = currentStatusOrder.indexOf(trackedCase?.status ?? "SUBMITTED");
   const maxEvidenceReach = 10 - (trackedCase?.attachments_count ?? 0);
-  const useWideTabLayout =
-    (tab === "report" && !submitted) ||
-    tab === "signin" ||
-    (tab === "tracking" && !trackedCase);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-[#04060b] dark:to-[#0a0f1a] text-slate-900 dark:text-slate-200 flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
+    <div className="min-h-screen bg-[var(--zacc-bg)] text-[var(--zacc-text)] flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
       {/* Settings Bar */}
       <div className="w-full max-w-5xl flex justify-end gap-2 mb-4 sm:mb-5">
         <select value={themeMode} onChange={e => onThemeModeChange(e.target.value as any)}
-          className="px-3 py-2 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-semibold">
+          className="px-3 py-2 rounded-lg bg-[var(--zacc-card)] border border-[var(--zacc-border)] text-xs font-semibold">
           <option value="system">{t(language, "system")}</option>
           <option value="light">{t(language, "light")}</option>
           <option value="dark">{t(language, "dark")}</option>
         </select>
         <select value={language} onChange={e => onLanguageChange(e.target.value as Language)}
-          className="px-3 py-2 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-semibold">
+          className="px-3 py-2 rounded-lg bg-[var(--zacc-card)] border border-[var(--zacc-border)] text-xs font-semibold">
           <option value="en">English</option>
           <option value="sn">Shona</option>
           <option value="nd">Ndebele</option>
@@ -550,25 +545,25 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
       {/* Logo */}
       <div className="mb-6 sm:mb-8 text-center max-w-xl">
-        <img src="/zacc-logo.png" alt="ZACC" className="w-16 h-16 mx-auto mb-5 rounded-2xl object-cover shadow-lg" />
-        <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent">{t(language, "portalTitle")}</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">{t(language, "portalSubtitle")}</p>
+        <img src="/zacc-logo.png" alt="ZACC" className="w-36 h-36 mx-auto mb-5 rounded-2xl object-cover shadow-lg border border-[var(--zacc-border)]" />
+        <h1 className="text-4xl md:text-5xl font-black mb-2 bg-gradient-to-r from-blue-700 to-blue-500 dark:from-blue-300 dark:to-cyan-300 bg-clip-text text-transparent">{t(language, "portalTitle")}</h1>
+        <p className="text-sm text-[var(--zacc-muted)] font-medium">{t(language, "portalSubtitle")}</p>
       </div>
 
       {/* Main Card */}
-      <div className={`w-full ${useWideTabLayout ? "max-w-6xl" : "max-w-2xl"} rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] shadow-2xl overflow-hidden`}>
+      <div className="w-full max-w-6xl rounded-3xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] shadow-2xl overflow-hidden">
         {/* Tabs */}
         {tab !== "signin" && (
-          <div className="grid grid-cols-2 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20">
+          <div className="grid grid-cols-2 border-b border-[var(--zacc-border)] bg-[var(--zacc-card-soft)]">
             {[
               { id: "report", label: t(language, "fileReport"), icon: "📝" },
               { id: "tracking", label: t(language, "trackCase"), icon: "🔍" },
             ].map(item => (
               <button key={item.id} onClick={() => { setTab(item.id as PortalTab); setError(null); }}
-                className={`px-4 py-4 font-bold text-xs uppercase tracking-wider transition-all relative ${tab === item.id ? "text-emerald-600 dark:text-emerald-400 bg-white dark:bg-white/5" : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300"}`}>
+                className={`px-4 py-4 font-bold text-xs uppercase tracking-wider transition-all relative ${tab === item.id ? "text-blue-700 dark:text-blue-300 bg-[var(--zacc-card)]" : "text-[var(--zacc-muted)] hover:text-slate-900 dark:hover:text-slate-100"}`}>
                 <span className="text-base mb-1 block">{item.icon}</span>
                 {item.label}
-                {tab === item.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />}
+                {tab === item.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
               </button>
             ))}
           </div>
@@ -853,7 +848,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
 
           {/* ── TRACK CASE ── */}
           {tab === "tracking" && (
-            <div className="animate-fade-in max-w-3xl mx-auto">
+            <div className="animate-fade-in max-w-6xl mx-auto">
             <div className="space-y-6">
               <form onSubmit={handleTrack} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">

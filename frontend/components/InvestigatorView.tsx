@@ -530,21 +530,21 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 sm:space-y-6 animate-fade-in">
       {/* ── DOSSIER FULL PAGE ────────────────────────────────── */}
       {dossierOpen ? (
         <div className="animate-fade-in">
           {/* Back button */}
           <button
             onClick={closeDossier}
-            className="mb-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm font-bold text-slate-700 dark:text-slate-300 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+            className="mb-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm font-bold text-slate-700 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-all"
           >
             ← Back to Cases
           </button>
 
           {/* Dossier header */}
-          <div className="sticky top-0 z-10 bg-slate-100 dark:bg-[#04060b] pb-4">
-            <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] px-8 py-5 flex items-center justify-between">
+          <div className="sticky top-0 z-10 bg-[var(--zacc-bg)] pb-4">
+            <div className="zacc-surface rounded-2xl px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white">
                   {isAdmin ? "Case Details" : "Case Dossier"}
@@ -594,13 +594,13 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         <>
         {/* Role indicator */}
         <div
-          className={`rounded-2xl border p-4 ${isAdmin ? "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5" : "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/5"}`}
+          className={`rounded-2xl border p-4 ${isAdmin ? "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5" : "border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10"}`}
         >
         <div className="flex items-center gap-3">
           <span className="text-xl">{isAdmin ? "🛡️" : "🔍"}</span>
           <div>
             <p
-              className={`text-sm font-black uppercase tracking-wider ${isAdmin ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}`}
+              className={`text-sm font-black uppercase tracking-wider ${isAdmin ? "text-amber-700 dark:text-amber-400" : "text-blue-700 dark:text-blue-300"}`}
             >
               {isAdmin ? "Admin Monitoring Mode" : "Investigator Mode"}
             </p>
@@ -614,12 +614,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
       </div>
 
       {!isAdmin && (
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-4 sm:p-5">
+      <div className="zacc-surface rounded-2xl p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
             New Case Notifications
           </h3>
-          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+          <span className="text-xs font-bold text-blue-600 dark:text-blue-300">
             {newCaseNotifications.length} alerts
           </span>
         </div>
@@ -632,10 +632,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
             {newCaseNotifications.slice(0, 8).map((n) => (
               <div
                 key={n.id}
-                className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5"
+                className="rounded-xl border border-blue-200 dark:border-blue-500/25 bg-blue-50 dark:bg-blue-500/10 px-3 py-2.5"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-300 truncate">
+                  <p className="text-xs sm:text-sm font-bold text-blue-800 dark:text-blue-300 truncate">
                     {n.title}
                   </p>
                   <span className="text-[10px] text-slate-500 whitespace-nowrap">
@@ -645,7 +645,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                     })}
                   </span>
                 </div>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 line-clamp-2">
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 line-clamp-2">
                   {n.message}
                 </p>
               </div>
@@ -667,18 +667,18 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
               : "Review and manage reported cases through the investigation workflow."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search cases..."
-            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full sm:w-72 px-4 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
           />
         </div>
       </div>
 
       {/* ── Stats ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           {
             label: "Total Cases",
@@ -707,7 +707,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         ].map((s, i) => (
           <div
             key={i}
-            className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-4"
+            className="zacc-surface rounded-2xl p-4"
           >
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
               {s.label}
@@ -723,7 +723,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
           <button
             key={s}
             onClick={() => setFilter(s)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${filter === s ? "bg-emerald-500 text-black border-emerald-500 shadow-lg shadow-emerald-500/20" : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-white/20"}`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${filter === s ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-600/25" : "bg-[var(--zacc-card)] border-[var(--zacc-border)] text-slate-700 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-400/40"}`}
           >
             {s === "ALL" ? "All" : statusLabel(s)}
           </button>
@@ -731,10 +731,10 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
       </div>
 
       {/* ── Cases Table ── */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] overflow-hidden">
+      <div className="zacc-surface rounded-2xl overflow-hidden">
         {loading ? (
           <div className="p-16 text-center">
-            <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-10 h-10 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-sm font-bold text-slate-500">Loading cases...</p>
           </div>
         ) : filteredCases.length === 0 ? (
@@ -747,7 +747,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+              <thead className="bg-[var(--zacc-card-soft)] border-b border-[var(--zacc-border)]">
                 <tr>
                   {[
                     "#",
@@ -773,7 +773,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                 {filteredCases.map((c, idx) => (
                   <tr
                     key={c.id}
-                    className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors"
+                    className="hover:bg-blue-50/60 dark:hover:bg-blue-500/8 transition-colors"
                   >
                     <td className="px-5 py-4 text-xs text-slate-500 font-bold">
                       {idx + 1}

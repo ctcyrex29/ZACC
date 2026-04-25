@@ -488,10 +488,10 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       {/* Filters */}
-      <div className="glass-card p-4 rounded-2xl">
-        <div className="flex flex-wrap items-end gap-4">
+      <div className="zacc-surface p-4 rounded-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
               {t(language, "from")}
@@ -500,7 +500,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white"
             />
           </div>
           <div>
@@ -511,7 +511,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white"
             />
           </div>
           <div>
@@ -521,7 +521,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white"
             >
               <option value="">{t(language, "allTypes")}</option>
               <option value="Bribery">Bribery</option>
@@ -534,7 +534,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
           </div>
           <button
             onClick={fetchData}
-            className="px-5 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-600 transition-colors"
+            className="w-full px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors"
           >
             {t(language, "applyFilters")}
           </button>
@@ -549,8 +549,8 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all border ${
               activeTab === tab.id
-                ? "bg-white dark:bg-white/10 border-slate-200 dark:border-white/20 text-slate-900 dark:text-white shadow-sm"
-                : "bg-transparent border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                : "bg-[var(--zacc-card)] border-[var(--zacc-border)] text-slate-600 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-400/40"
             }`}
           >
             {tab.label}
@@ -593,7 +593,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
                 color: "text-rose-500",
               },
             ].map((s, i) => (
-              <div key={i} className="glass-card p-5 rounded-2xl">
+              <div key={i} className="zacc-surface p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-3">
                   {/* <span className="text-xl">{s.icon}</span> */}
                 </div>
@@ -607,15 +607,15 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 
           {/* Rates */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="glass-card rounded-2xl p-5 border border-emerald-500/20">
+            <div className="zacc-surface rounded-2xl p-5 border border-blue-300/40 dark:border-blue-500/30">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                 {t(language, "resolutionRate")}
               </p>
-              <p className="text-3xl font-black text-emerald-500">
+              <p className="text-3xl font-black text-blue-600 dark:text-blue-300">
                 {data.overview.resolution_rate}%
               </p>
             </div>
-            <div className="glass-card rounded-2xl p-5 border border-blue-500/20">
+            <div className="zacc-surface rounded-2xl p-5 border border-cyan-300/40 dark:border-cyan-500/30">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                 {t(language, "successRate")}
               </p>
@@ -623,7 +623,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
                 {data.overview.success_rate}%
               </p>
             </div>
-            <div className="glass-card rounded-2xl p-5 border border-amber-500/20">
+            <div className="zacc-surface rounded-2xl p-5 border border-amber-500/30">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                 {t(language, "avgRiskScore")}
               </p>
@@ -636,7 +636,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trend */}
-            <div className="glass-card p-6 rounded-3xl">
+            <div className="zacc-surface p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
                 {t(language, "monthlyTrend")}
               </h3>
@@ -716,7 +716,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
             </div>
 
             {/* Type Distribution */}
-            <div className="glass-card p-6 rounded-3xl">
+            <div className="zacc-surface p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
                 {t(language, "byType")}
               </h3>
@@ -778,7 +778,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 
           {/* Priority Breakdown Bar Chart */}
           {priorityData.length > 0 && (
-            <div className="glass-card p-6 rounded-3xl">
+            <div className="zacc-surface p-6 rounded-3xl">
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-4">
                 {t(language, "byPriority")}
               </h3>
@@ -850,13 +850,13 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
             </h3>
             <button
               onClick={() => generatePDF(activeTab, getCasesForTab(activeTab))}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors"
             >
             {t(language, "exportPdf")}
             </button>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] overflow-hidden">
+          <div className="zacc-surface rounded-2xl overflow-hidden">
             {getCasesForTab(activeTab).length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-slate-500 font-medium">
@@ -866,7 +866,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+                  <thead className="bg-[var(--zacc-card-soft)] border-b border-[var(--zacc-border)]">
                     <tr>
                       {[
                         "#",
@@ -898,7 +898,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
                           {idx + 1}
                         </td>
                         <td className="px-4 py-3">
-                          <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
+                          <code className="text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded">
                             {c.reference_code || c.case_id}
                           </code>
                         </td>

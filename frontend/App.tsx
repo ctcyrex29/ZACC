@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { ReportForm } from "./components/ReportForm";
@@ -35,6 +35,10 @@ const App: React.FC = () => {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [language, setLanguage] = useState<Language>("en");
   const [newCaseCount, setNewCaseCount] = useState(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [themePreviewOpen, setThemePreviewOpen] = useState(false);
+  const notificationPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("nexus_user");
@@ -85,6 +89,7 @@ const App: React.FC = () => {
     try {
       const response = await apiClient.getNotifications();
       if (response?.success && Array.isArray(response.data)) {
+        setNotifications(response.data);
         const viewedIds: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
         const newCases = response.data.filter(
           (n: any) =>
@@ -103,6 +108,48 @@ const App: React.FC = () => {
     const interval = window.setInterval(fetchNotificationCount, 30000);
     return () => window.clearInterval(interval);
   }, [fetchNotificationCount]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (
+        notificationPanelRef.current &&
+        !notificationPanelRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [notificationsOpen]);
+
+  const viewedNotificationIds = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]") as string[];
+    } catch {
+      return [];
+    }
+  }, [notifications, notificationsOpen]);
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((n: any) => !viewedNotificationIds.includes(String(n.id))),
+    [notifications, viewedNotificationIds],
+  );
+
+  const markNotificationsAsViewed = useCallback((ids?: string[]) => {
+    const targetIds = ids ?? notifications.map((n: any) => String(n.id));
+    const existing: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
+    const merged = [...new Set([...existing, ...targetIds])];
+    localStorage.setItem("zacc_viewed_notifications", JSON.stringify(merged));
+
+    const unreadNewCases = notifications.filter(
+      (n: any) =>
+        ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
+        !merged.includes(String(n.id)),
+    ).length;
+
+    setNewCaseCount(unreadNewCases);
+  }, [notifications]);
 
   // Mark a single case notification as viewed (called when investigator opens a dossier)
   const markCaseNotificationViewed = useCallback(async (caseId: string | number) => {
@@ -205,7 +252,8 @@ const App: React.FC = () => {
     switch (view) {
       case "dashboard":
         return user.role === UserRole.WHISTLEBLOWER
-           t(language, "myDashboard");
+          ? t(language, "myDashboard")
+          : t(language, "systemOverview");
       case "report":
         return t(language, "reportCase");
       case "investigator":
@@ -224,7 +272,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-[#04060b] dark:text-slate-300 overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-[var(--zacc-bg)] text-[var(--zacc-text)]">
       <Toaster position="top-right" />
       <Sidebar
         user={user}
@@ -239,19 +287,108 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8 scroll-smooth">
         <div className="max-w-7xl mx-auto">
-          <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
-            <div className="relative">
-              <div className="absolute top-0 left-0 w-20 h-2 bg-nexus-emerald/40 mb-8 rounded-full"></div>
-              <h1 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 pt-4 uppercase">
-                {getTitle(currentView)}
-              </h1>
+          <header className="flex flex-col gap-4 mb-6 sm:mb-8">
+            <div ref={notificationPanelRef} className="relative zacc-surface rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  className="w-10 h-10 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card-soft)] text-slate-700 dark:text-slate-200 font-black"
+                  aria-label="Menu"
+                >
+                  ☰
+                </button>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight truncate">
+                  {getTitle(currentView)}
+                </h1>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextOpen = !notificationsOpen;
+                    setNotificationsOpen(nextOpen);
+                    if (nextOpen) fetchNotificationCount();
+                  }}
+                  className="relative w-10 h-10 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card-soft)] text-slate-700 dark:text-slate-200"
+                  aria-label="Notifications"
+                  title="Notifications"
+                  aria-expanded={notificationsOpen}
+                >
+                  🔔
+                  {newCaseCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                      {newCaseCount > 9 ? "9+" : newCaseCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-3 sm:px-4 h-10 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-black uppercase tracking-wider"
+                >
+                  Logout
+                </button>
+              </div>
+
+              {notificationsOpen && (
+                <div className="absolute right-2 sm:right-4 top-[calc(100%+10px)] w-[min(360px,calc(100vw-2rem))] z-[80] rounded-2xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] shadow-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[var(--zacc-border)] flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-wider text-[var(--zacc-muted)]">
+                      Notifications
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => markNotificationsAsViewed(unreadNotifications.map((n: any) => String(n.id)))}
+                      className="text-[10px] font-bold px-2 py-1 rounded-md border border-blue-300/50 dark:border-blue-400/40 text-blue-700 dark:text-blue-300 bg-blue-500/10"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm text-[var(--zacc-muted)]">
+                      No notifications yet.
+                    </div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.map((n: any) => {
+                        const isUnread = !viewedNotificationIds.includes(String(n.id));
+                        return (
+                          <button
+                            key={String(n.id)}
+                            type="button"
+                            onClick={() => markNotificationsAsViewed([String(n.id)])}
+                            className={`w-full text-left px-4 py-3 border-b border-[var(--zacc-border)]/70 last:border-0 transition-colors ${isUnread ? "bg-blue-50/70 dark:bg-blue-500/10" : "bg-transparent hover:bg-[var(--zacc-card-soft)]"}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                                {n.title || n.type || "Notification"}
+                              </p>
+                              {isUnread && (
+                                <span className="mt-1 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-xs text-[var(--zacc-muted)] mt-1 line-clamp-2">
+                              {n.message || "No details available."}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1.5">
+                              {n.created_at ? new Date(n.created_at).toLocaleString() : ""}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-[#080c18] px-4 py-3 rounded-2xl border border-slate-200 dark:border-white/10">
+            <div className="zacc-surface flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-3 sm:px-4 rounded-2xl">
               <select
                 value={themeMode}
                 onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
-                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 text-xs font-semibold"
+                className="px-3 py-2 rounded-lg bg-[var(--zacc-card-soft)] border border-[var(--zacc-border)] text-xs font-semibold"
               >
                 <option value="system">{t(language, "system")}</option>
                 <option value="light">{t(language, "light")}</option>
@@ -260,7 +397,7 @@ const App: React.FC = () => {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as Language)}
-                className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 text-xs font-semibold"
+                className="px-3 py-2 rounded-lg bg-[var(--zacc-card-soft)] border border-[var(--zacc-border)] text-xs font-semibold"
               >
                 <option value="en">English</option>
                 <option value="sn">Shona</option>
@@ -268,17 +405,24 @@ const App: React.FC = () => {
                 <option value="to">Tonga</option>
               </select>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                <p className="text-[10px] font-black text-[var(--zacc-muted)] uppercase tracking-widest mb-1">
                   {t(language, "sessionIdentity")}
                 </p>
                 <p className="text-xs font-black text-slate-900 dark:text-white leading-none tracking-widest flex items-center gap-2">
                   {user.nexusKey}
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center font-black border border-emerald-400/30">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/25 text-blue-700 dark:text-blue-300 flex items-center justify-center font-black border border-blue-300/50 dark:border-blue-400/30">
                 {user.nexusKey.charAt(0)}
               </div>
+              <button
+                type="button"
+                onClick={() => setThemePreviewOpen((prev) => !prev)}
+                className="ml-auto px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-300/40 dark:border-blue-400/30 text-xs font-bold text-blue-700 dark:text-blue-300"
+              >
+                Theme Preview
+              </button>
             </div>
           </header>
 
@@ -290,6 +434,33 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {themePreviewOpen && (
+        <div className="fixed bottom-4 right-4 z-[70] w-[250px] zacc-surface rounded-2xl p-3 sm:p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-black uppercase tracking-wider text-[var(--zacc-muted)]">Quick Theme Preview</p>
+            <button
+              type="button"
+              onClick={() => setThemePreviewOpen(false)}
+              className="w-6 h-6 rounded-md bg-[var(--zacc-card-soft)] border border-[var(--zacc-border)] text-xs"
+            >
+              ×
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <button type="button" onClick={() => setThemeMode("light")} className={`px-2 py-2 rounded-lg border text-[11px] font-bold ${themeMode === "light" ? "bg-blue-600 text-white border-blue-600" : "bg-[var(--zacc-card-soft)] border-[var(--zacc-border)]"}`}>Light</button>
+            <button type="button" onClick={() => setThemeMode("dark")} className={`px-2 py-2 rounded-lg border text-[11px] font-bold ${themeMode === "dark" ? "bg-blue-600 text-white border-blue-600" : "bg-[var(--zacc-card-soft)] border-[var(--zacc-border)]"}`}>Dark</button>
+            <button type="button" onClick={() => setThemeMode("system")} className={`px-2 py-2 rounded-lg border text-[11px] font-bold ${themeMode === "system" ? "bg-blue-600 text-white border-blue-600" : "bg-[var(--zacc-card-soft)] border-[var(--zacc-border)]"}`}>System</button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
+            className="w-full px-2 py-2 rounded-lg bg-blue-500/10 border border-blue-300/40 dark:border-blue-400/30 text-xs font-bold text-blue-700 dark:text-blue-300"
+          >
+            Flip Light/Dark
+          </button>
+        </div>
+      )}
 
       <style>{`
         .stealth-blur #content-container {

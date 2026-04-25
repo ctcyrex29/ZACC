@@ -15,7 +15,7 @@ import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus } from "../types";
 
 
-const COLORS = ["#10b981", "#6366f1", "#f59e0b", "#f43f5e", "#a855f7"];
+const COLORS = ["#2563eb", "#38bdf8", "#22c55e", "#f59e0b", "#ef4444"];
 
 
 export const Dashboard: React.FC = () => {
@@ -78,26 +78,30 @@ export const Dashboard: React.FC = () => {
     {
       label: "Total Reports",
       value: cases.length,
-      icon: "📄",
+      icon: "📁",
+      accent: "border-l-blue-500",
       color: "text-slate-900 dark:text-white",
     },
     {
       label: "Active Pipeline",
       value: cases.filter((c) => !["CLOSED", "DISPUTED"].includes(c.status))
         .length,
-      icon: "⚡",
+      icon: "🕘",
+      accent: "border-l-amber-400",
       color: "text-slate-900 dark:text-white",
     },
     {
       label: "Integrity Alerts",
       value: cases.filter((c) => c.status === CaseStatus.DISPUTED).length,
-      icon: "🚨",
+      icon: "🔎",
+      accent: "border-l-cyan-400",
       color: "text-rose-400",
     },
     {
       label: "Finalized Dossiers",
       value: cases.filter((c) => c.status === CaseStatus.CLOSED).length,
-      icon: "✅",
+      icon: "✔",
+      accent: "border-l-emerald-500",
       color: "text-slate-900 dark:text-white",
     },
   ];
@@ -146,14 +150,18 @@ export const Dashboard: React.FC = () => {
         {stats.map((stat, i) => (
           <div
             key={i}
-            className={`glass-card p-6 rounded-3xl transition-all duration-300 border-l-4 ${stat.label === "Integrity Alerts" && stat.value > 0 ? "border-l-rose-500" : "border-l-transparent"}`}
+            className={`glass-card p-6 rounded-3xl transition-all duration-300 border-l-4 ${stat.label === "Integrity Alerts" && stat.value > 0 ? "border-l-rose-500" : stat.accent}`}
           >
-            
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                {stat.label}
+              </span>
+              <span className="w-9 h-9 rounded-xl bg-[var(--zacc-card-soft)] border border-[var(--zacc-border)] flex items-center justify-center text-base">
+                {stat.icon}
+              </span>
+            </div>
             <p className={`text-3xl font-bold mb-1 ${stat.color}`}>
               {loading ? "—" : stat.value}
-            </p>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              {stat.label}
             </p>
           </div>
         ))}
@@ -166,9 +174,9 @@ export const Dashboard: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               Engagement Activity
             </h3>
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 rounded-full">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-              <span className="text-[10px] font-bold text-emerald-500 uppercase">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 rounded-full">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-300 uppercase">
                 Live Intelligence
               </span>
             </div>
@@ -178,8 +186,8 @@ export const Dashboard: React.FC = () => {
               <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -207,7 +215,7 @@ export const Dashboard: React.FC = () => {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#10b981"
+                  stroke="#2563eb"
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorVal)"
@@ -273,11 +281,11 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-card rounded-3xl p-6 border border-emerald-300/30 dark:border-emerald-500/20">
+        <div className="glass-card rounded-3xl p-6 border border-blue-300/40 dark:border-blue-400/30">
           <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
             Blockchain Integrity
           </p>
-          <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+          <p className="text-3xl font-black text-blue-600 dark:text-blue-300">
             {anchoredRate}%
           </p>
           <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">

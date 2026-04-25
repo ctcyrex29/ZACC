@@ -6,32 +6,83 @@
     font-family: "Plus Jakarta Sans", system-ui, sans-serif;
     line-height: 1.5;
     font-weight: 400;
-    color-scheme: light dark;
-    background-color: #f8fafc;
+    color-scheme: light;
+    background-color: #f3f6fb;
     color: #0f172a;
+    --zacc-bg: #f3f6fb;
+    --zacc-bg-soft: #ecf1f9;
+    --zacc-text: #0f172a;
+    --zacc-muted: #5a6b86;
+    --zacc-card: #ffffff;
+    --zacc-card-soft: #f7f9fd;
+    --zacc-border: #d8e0ee;
+    --zacc-sidebar: #0d4cb6;
+    --zacc-sidebar-soft: #1a63d6;
+    --zacc-sidebar-border: #397bdb;
+    --zacc-sidebar-text: #dce9ff;
+    --zacc-sidebar-text-active: #ffffff;
+    --zacc-sidebar-item: rgba(255, 255, 255, 0.12);
+    --zacc-sidebar-item-hover: rgba(255, 255, 255, 0.16);
 }
 
 body {
     margin: 0;
     min-height: 100vh;
-    background-color: #f8fafc;
+    background:
+        radial-gradient(900px 420px at 0% -10%, #d7e6ff 0%, rgba(215, 230, 255, 0) 65%),
+        radial-gradient(800px 380px at 110% -10%, #e6efff 0%, rgba(230, 239, 255, 0) 60%),
+        var(--zacc-bg);
+    color: var(--zacc-text);
     -webkit-font-smoothing: antialiased;
 }
 
 .dark body {
-    background-color: #04060b;
-    color: #e2e8f0;
+    color-scheme: dark;
+    --zacc-bg: #040914;
+    --zacc-bg-soft: #0a1222;
+    --zacc-text: #e2e8f0;
+    --zacc-muted: #93a7c5;
+    --zacc-card: #0b1427;
+    --zacc-card-soft: #0f1b34;
+    --zacc-border: #20314f;
+    --zacc-sidebar: #091f4d;
+    --zacc-sidebar-soft: #0d2d72;
+    --zacc-sidebar-border: #1c3d83;
+    --zacc-sidebar-text: #bdd2ff;
+    --zacc-sidebar-text-active: #ffffff;
+    --zacc-sidebar-item: rgba(125, 173, 255, 0.2);
+    --zacc-sidebar-item-hover: rgba(125, 173, 255, 0.3);
+    background:
+        radial-gradient(900px 420px at 0% -10%, #0c2a57 0%, rgba(12, 42, 87, 0) 65%),
+        radial-gradient(800px 380px at 110% -10%, #0d2246 0%, rgba(13, 34, 70, 0) 60%),
+        var(--zacc-bg);
+    color: var(--zacc-text);
 }
 
 .glass-card {
-    background: rgba(255, 255, 255, 0.9);
+    background: color-mix(in srgb, var(--zacc-card) 92%, transparent);
     backdrop-filter: blur(14px);
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 1px solid var(--zacc-border);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
 .dark .glass-card {
-    background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 14px 40px rgba(3, 7, 18, 0.5);
+}
+
+.zacc-surface {
+    background: color-mix(in srgb, var(--zacc-card) 90%, transparent);
+    border: 1px solid var(--zacc-border);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+
+.dark .zacc-surface {
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.45);
+}
+
+.zacc-soft-surface {
+    background: color-mix(in srgb, var(--zacc-card-soft) 92%, transparent);
+    border: 1px solid var(--zacc-border);
 }
 
 .subtle-grid {

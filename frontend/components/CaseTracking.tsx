@@ -118,11 +118,11 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
 
   if (loading) {
     return (
-      <div className="glass-card p-16 rounded-5xl text-center max-w-2xl mx-auto">
-        <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-8 animate-pulse">
+      <div className="zacc-surface p-10 sm:p-16 rounded-3xl text-center max-w-2xl mx-auto">
+        <div className="w-20 h-20 bg-[var(--zacc-card-soft)] rounded-3xl flex items-center justify-center text-4xl mx-auto mb-8 animate-pulse">
           📊
         </div>
-        <h2 className="text-2xl font-bold text-white mb-4">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
           Loading your reports...
         </h2>
         <p className="text-slate-500 font-medium">
@@ -134,17 +134,17 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
 
   if (error) {
     return (
-      <div className="glass-card p-16 rounded-5xl text-center max-w-2xl mx-auto">
+      <div className="zacc-surface p-10 sm:p-16 rounded-3xl text-center max-w-2xl mx-auto">
         <div className="w-20 h-20 bg-rose-500/10 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-8">
           ⚠️
         </div>
-        <h2 className="text-2xl font-bold text-white mb-4">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
           Error Loading Reports
         </h2>
         <p className="text-slate-500 font-medium mb-8">{error}</p>
         <button
           onClick={loadCases}
-          className="bg-nexus-emerald text-nexus-950 px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-400 transition-all soft-glow"
+          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition-all"
         >
           Try Again
         </button>
@@ -154,11 +154,11 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
 
   if (cases.length === 0) {
     return (
-      <div className="glass-card p-16 rounded-5xl text-center max-w-2xl mx-auto">
-        <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-8 opacity-40">
+      <div className="zacc-surface p-10 sm:p-16 rounded-3xl text-center max-w-2xl mx-auto">
+        <div className="w-20 h-20 bg-[var(--zacc-card-soft)] rounded-3xl flex items-center justify-center text-4xl mx-auto mb-8 opacity-50">
           📊
         </div>
-        <h2 className="text-2xl font-bold text-white mb-4">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
           No submissions yet
         </h2>
         <p className="text-slate-500 font-medium leading-relaxed max-w-xs mx-auto mb-10">
@@ -166,7 +166,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
           its progress in real-time.
         </p>
         <button
-          className="bg-nexus-emerald text-nexus-950 px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-400 transition-all soft-glow"
+          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition-all"
           onClick={onCreateReport}
         >
           Create My First Report
@@ -176,18 +176,18 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-20">
-      <div className="bg-nexus-emerald/10 border border-nexus-emerald/10 p-10 rounded-4xl flex items-center justify-between gap-6">
+    <div className="space-y-6 sm:space-y-8 max-w-5xl mx-auto pb-14 sm:pb-20">
+      <div className="zacc-surface p-5 sm:p-8 rounded-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">My Submissions</h2>
-          <p className="text-slate-400 font-medium">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">My Submissions</h2>
+          <p className="text-[var(--zacc-muted)] font-medium">
             Tracking {cases.length} active investigation pipeline
             {cases.length > 1 ? "s" : ""}.
           </p>
         </div>
-        <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-nexus-950/40 rounded-full border border-white/5">
-          <div className="w-2 h-2 rounded-full bg-nexus-emerald animate-pulse"></div>
-          <span className="text-[10px] font-bold text-nexus-emerald uppercase tracking-widest">
+        <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-full border border-blue-300/30 dark:border-blue-400/30">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-widest">
             Active Sync
           </span>
         </div>
@@ -197,12 +197,12 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
         {cases.map((c) => (
           <div
             key={c.id}
-            className={`glass-card p-8 rounded-4xl transition-all duration-300 border ${c.status === CaseStatus.DISPUTED ? "border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.05)]" : "hover:border-nexus-emerald/20"}`}
+            className={`zacc-surface p-5 sm:p-8 rounded-3xl transition-all duration-300 border ${c.status === CaseStatus.DISPUTED ? "border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.05)]" : "hover:border-blue-400/40"}`}
           >
-            <div className="flex flex-col md:flex-row gap-8 mb-10">
+            <div className="flex flex-col md:flex-row gap-6 sm:gap-8 mb-8 sm:mb-10">
               <div className="flex-1">
                 <div className="flex items-center gap-4 mb-3">
-                  <h3 className="text-xl font-bold text-white tracking-tight">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
                     {c.id}
                   </h3>
                   <span
@@ -228,8 +228,8 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">
                   {c.institution} • {new Date(c.timestamp).toLocaleDateString()}
                 </p>
-                <div className="p-5 bg-nexus-950/40 rounded-2xl border border-white/5">
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium italic">
+                <div className="p-5 bg-[var(--zacc-card-soft)] rounded-2xl border border-[var(--zacc-border)]">
+                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium italic">
                     "{c.description}"
                   </p>
                 </div>
@@ -239,7 +239,7 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
                 <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">
                   Tracking Code
                 </p>
-                <p className="font-mono font-bold text-nexus-emerald bg-nexus-emerald/5 border border-nexus-emerald/10 px-4 py-2 rounded-xl text-lg tracking-tight inline-block">
+                <p className="font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-500/10 border border-blue-300/30 dark:border-blue-400/30 px-4 py-2 rounded-xl text-lg tracking-tight inline-block">
                   {c.referenceCode}
                 </p>
               </div>

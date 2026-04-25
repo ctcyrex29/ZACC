@@ -74,15 +74,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`${expanded ? "w-72" : "w-20 md:w-64"} bg-white dark:bg-[#04060b] border-r border-slate-200 dark:border-white/5 flex flex-col transition-all duration-300 relative z-50 overflow-y-auto max-h-screen`}
+      className={`${expanded ? "w-72" : "w-20 md:w-64"} bg-[var(--zacc-sidebar)] border-r border-[var(--zacc-sidebar-border)] flex flex-col transition-all duration-300 relative z-50 overflow-y-auto max-h-screen text-[var(--zacc-sidebar-text)]`}
     >
-      <div className="p-4 md:p-6 mb-2">
+      <div className="p-4 md:p-6 mb-2 border-b border-white/20">
         <div className="flex items-center justify-between gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-nexus-emerald to-emerald-800 rounded-xl flex items-center justify-center font-black text-nexus-950 text-xl shadow-lg shadow-nexus-emerald/10">
-            Z
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center font-black text-white text-xl shadow-lg">
+              Z
+            </div>
+            <div className="hidden md:block min-w-0">
+              <p className="font-black text-xl text-white leading-none">ZACC</p>
+              <p className="text-[11px] uppercase tracking-wider text-blue-100/90 truncate">Admin Management System</p>
+            </div>
           </div>
           <button
-            className="md:hidden text-slate-700 dark:text-slate-300"
+            className="md:hidden text-white"
             onClick={() => setExpanded((prev) => !prev)}
             aria-label="Toggle navigation"
           >
@@ -100,8 +106,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setView(item.id as View)}
               className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${
                 isActive
-                  ? "bg-nexus-emerald/10 text-nexus-emerald border border-nexus-emerald/20"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent"
+                  ? "bg-[var(--zacc-sidebar-item)] text-[var(--zacc-sidebar-text-active)] border border-white/25"
+                  : "text-[var(--zacc-sidebar-text)] hover:text-white hover:bg-[var(--zacc-sidebar-item-hover)] border border-transparent"
               }`}
             >
               <span
@@ -115,20 +121,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </span>
               <span
-                className={`hidden md:block font-black text-[11px] uppercase tracking-widest transition-colors ${isActive ? "text-nexus-emerald" : ""}`}
+                className={`hidden md:block font-black text-[11px] uppercase tracking-widest transition-colors ${isActive ? "text-[var(--zacc-sidebar-text-active)]" : ""}`}
               >
                 {item.label}
               </span>
               {isActive && (
-                <div className="absolute right-0 w-1.5 h-6 bg-nexus-emerald rounded-l-full shadow-[0_0_15px_rgba(16,185,129,0.5)]"></div>
+                <div className="absolute right-0 w-1.5 h-6 bg-white rounded-l-full shadow-[0_0_15px_rgba(255,255,255,0.5)]"></div>
               )}
             </button>
           );
         })}
 
         <div className="pt-6 px-2 hidden md:block">
-          <div className="h-[1px] bg-slate-200 dark:bg-white/5 w-full mb-6"></div>
-          <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 ml-2">
+          <div className="h-[1px] bg-white/20 w-full mb-6"></div>
+          <p className="text-[9px] font-black text-blue-100/80 uppercase tracking-[0.3em] mb-4 ml-2">
             Privacy Controls
           </p>
 
@@ -136,8 +142,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={toggleStealth}
             className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all mb-3 border ${
               stealthActive
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
-                : "bg-slate-100 dark:bg-white/5 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                ? "bg-amber-500/20 border-amber-300/40 text-amber-100"
+                : "bg-white/10 border-white/15 text-blue-100 hover:text-white hover:bg-white/15"
             }`}
           >
             <span className="text-xl">{stealthActive ? "👁️‍🗨️" : "👁️"}</span>
@@ -149,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <select
             value={language}
             onChange={(e) => onLanguageChange(e.target.value as Language)}
-            className="w-full mt-2 p-3 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-200"
+            className="w-full mt-2 p-3 rounded-xl bg-white/10 border border-white/20 text-xs font-semibold text-white"
           >
             <option value="en">English</option>
             <option value="sn">Shona</option>
@@ -164,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 mt-auto">
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center md:justify-start md:gap-3 p-3 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-400/5 transition-all font-black text-xs uppercase tracking-widest"
+          className="w-full flex items-center justify-center md:justify-start md:gap-3 p-3 rounded-xl text-blue-100 hover:text-white hover:bg-rose-500/20 transition-all font-black text-xs uppercase tracking-widest"
         >
           <span className="text-2xl">🚪</span>
           <span className="hidden md:block truncate">
