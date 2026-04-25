@@ -1405,24 +1405,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             </div>
                           )}
 
-                          {/* Investigation Checklist */}
-                          {expert.investigation_checklist?.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Investigation Checklist</p>
-                              <div className="space-y-1">
-                                {expert.investigation_checklist.map((item: any, i: number) => (
-                                  <div key={i} className="flex items-center gap-2 text-xs bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2 border border-slate-100 dark:border-white/5">
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                      item.priority === 'HIGH' ? 'bg-rose-500/10 text-rose-600' :
-                                      item.priority === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600' :
-                                      'bg-slate-500/10 text-slate-500'
-                                    }`}>{item.priority}</span>
-                                    <span className="text-slate-700 dark:text-slate-300">{item.task}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                      
 
                           {/* Report timestamp */}
                           <p className="text-[9px] text-slate-400 font-mono pt-1 text-right">
