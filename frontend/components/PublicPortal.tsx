@@ -179,6 +179,27 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   themeMode,
   onThemeModeChange,
 }) => {
+  const isDarkTheme = useMemo(() => {
+    if (themeMode === "dark") return true;
+    if (themeMode === "light") return false;
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }, [themeMode]);
+
+  const portalFieldTone = isDarkTheme
+    ? "bg-[var(--zacc-card-soft)] border-white/10 text-white"
+    : "bg-white border-slate-300 text-slate-900";
+
+  const portalFieldStyle = useMemo<React.CSSProperties>(
+    () => ({
+      backgroundColor: isDarkTheme ? "var(--zacc-card-soft)" : "#ffffff",
+      color: isDarkTheme ? "#e2e8f0" : "#0f172a",
+      borderColor: isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "#cbd5e1",
+      colorScheme: isDarkTheme ? "dark" : "light",
+    }),
+    [isDarkTheme],
+  );
+
   const [tab, setTab] = useState<PortalTab>(
     window.location.pathname.startsWith("/staff") ? "signin" : "report"
   );
@@ -586,13 +607,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
               <div>
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "emailAddress")}</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="staff@zacc.org.zw" required
-                  className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
+                  className={`w-full rounded-2xl border px-5 py-3.5 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium ${portalFieldTone}`} style={portalFieldStyle} />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "password")}</label>
                 <div className="relative">
                   <input type={showStaffPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 pr-14 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
+                    className={`w-full rounded-2xl border px-5 py-3.5 pr-14 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-medium ${portalFieldTone}`} style={portalFieldStyle} />
                   <button type="button" onClick={() => setShowStaffPassword(!showStaffPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-emerald-500 transition-colors p-1" tabIndex={-1}>
                     {showStaffPassword
@@ -624,7 +645,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <div>
                     <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "corruptionType")}</label>
                     <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
-                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
+                      className={`w-full rounded-2xl border px-5 py-3.5 focus:outline-none focus:border-emerald-500 font-medium ${portalFieldTone}`} style={portalFieldStyle}>
                       <option>Bribery</option><option>Procurement Fraud</option><option>Abuse of Office</option>
                       <option>Embezzlement</option><option>Nepotism</option><option>Other</option>
                     </select>
@@ -635,13 +656,13 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "affectedInstitution")}</label>
                   <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })}
                     placeholder={t(language, "institutionPlaceholder")} required
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                    className={`w-full rounded-2xl border px-5 py-3.5 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium ${portalFieldTone}`} style={portalFieldStyle} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">Province</label>
                     <select value={portalProvince} onChange={e => handlePortalProvinceChange(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium">
+                      className={`w-full rounded-2xl border px-5 py-3.5 focus:outline-none focus:border-emerald-500 font-medium ${portalFieldTone}`} style={portalFieldStyle}>
                       <option value="">All Provinces</option>
                       {PORTAL_PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
@@ -652,7 +673,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                       onFocus={() => { if (formData.location.length >= 1 && locationSuggestions.length > 0) setShowLocationDropdown(true); }}
                       onBlur={() => setTimeout(() => setShowLocationDropdown(false), 200)}
                       placeholder={t(language, "locationPlaceholder")}
-                      className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium" />
+                      className={`w-full rounded-2xl border px-5 py-3.5 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium ${portalFieldTone}`} style={portalFieldStyle} />
                     {showLocationDropdown && locationSuggestions.length > 0 && (
                       <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c1020] shadow-xl max-h-52 overflow-y-auto">
                         {locationSuggestions.map(loc => (
@@ -669,7 +690,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "detailedDescription")}</label>
                   <textarea rows={5} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
                     placeholder={t(language, "descriptionPlaceholder")} required
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none" />
+                    className={`w-full rounded-2xl border px-5 py-3.5 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-medium resize-none ${portalFieldTone}`} style={portalFieldStyle} />
                   <p className="text-xs text-slate-500 mt-1">{formData.description.length} {t(language, "characters")} ({t(language, "minChars")})</p>
                 </div>
                 <div>
@@ -855,7 +876,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "enterTrackingCode")}</label>
                   <input type="text" value={trackingCode} onChange={e => setTrackingCode(e.target.value.toUpperCase())}
                     placeholder="ZACC-REF-XXXXXXXXX"
-                    className="w-full rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-5 py-3.5 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono font-bold tracking-widest uppercase" />
+                    className={`w-full rounded-2xl border px-5 py-3.5 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono font-bold tracking-widest uppercase ${portalFieldTone}`} style={portalFieldStyle} />
                 </div>
                 <button type="submit" disabled={loading}
                   className="sm:mt-7 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-bold px-6 py-3.5 disabled:opacity-50 transition-all text-sm uppercase tracking-wider whitespace-nowrap shadow-lg shadow-emerald-500/20">
@@ -1010,7 +1031,7 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                             <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "disputeStatement")} <span className="text-rose-500">*</span></label>
                             <textarea rows={4} value={disputeReason} onChange={e => setDisputeReason(e.target.value)}
                               placeholder={t(language, "disputePlaceholder")}
-                              className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-medium resize-none" />
+                              className={`w-full rounded-xl border px-4 py-3 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-medium resize-none ${portalFieldTone}`} style={portalFieldStyle} />
                           </div>
                           <div>
                             <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">{t(language, "supportingEvidence")}</label>
