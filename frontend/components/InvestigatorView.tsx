@@ -15,7 +15,7 @@ const statusLabel = (s: string) => {
     SUBMITTED: "Submitted",
     UNDER_REVIEW: "Under Review",
     INVESTIGATING: "Investigating",
-    REFERRED: "Referred to Courts/ZRP",
+    REFERRED: "Referred to Other Authorities",
     SUCCESSFUL: "✓ Successful",
     CLOSED: "Closed",
     DISPUTED: "Disputed",
@@ -179,6 +179,13 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const [actionNotes, setActionNotes] = useState("");
   const [actionProcessing, setActionProcessing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [referralDraft, setReferralDraft] = useState({
+    authority: "National Prosecuting Authority (NPA)",
+    legalBasis:
+      "Evidence indicates potential criminal conduct requiring prosecution review under applicable anti-corruption and criminal law frameworks.",
+    reference: "",
+    transmissionDate: new Date().toISOString().slice(0, 10),
+  });
 
   // Expert review state
   const [expertReview, setExpertReview] = useState<any | null>(null);
@@ -440,7 +447,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   };
 
   // ── Stage action (investigators only) ──
-  const doAction = async (targetStage: string, requireNotes = true) => {
+  const doAction = async (
+    targetStage: string,
+    requireNotes = true,
+    extraPayload: Record<string, unknown> = {},
+  ) => {
     if (isAdmin) return;
     if (requireNotes && actionNotes.trim().length < 10) {
       toast.error("Please provide a report statement (minimum 10 characters) before proceeding.");
@@ -454,6 +465,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         stage: targetStage,
         investigator_notes:
           actionNotes.trim() || "Stage advanced by investigator.",
+        ...extraPayload,
       });
       if (resp?.success) {
         toast.success(`Case advanced to ${targetStage.replace("_", " ")} stage`);
@@ -488,6 +500,13 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     setPreReviewReport(null);
     setInvestigationLogs([]);
     setLogEntry({account: "", finding: "", progress: "In Progress"});
+    setReferralDraft({
+      authority: "National Prosecuting Authority (NPA)",
+      legalBasis:
+        "Evidence indicates potential criminal conduct requiring prosecution review under applicable anti-corruption and criminal law frameworks.",
+      reference: "",
+      transmissionDate: new Date().toISOString().slice(0, 10),
+    });
   };
 
   const runExpertReview = async () => {
@@ -543,13 +562,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const caseAttachments: any[] = Array.isArray(dossierData?.attachments)
     ? dossierData.attachments
     : [];
-  const newCaseNotifications = notifications.filter((n) => {
-    const viewedIds: string[] = JSON.parse(localStorage.getItem("zacc_viewed_notifications") || "[]");
-    return (
-      ["NEW_CASE_SUBMITTED", "ANONYMOUS_REPORT_SUBMITTED"].includes(n.type) &&
-      !viewedIds.includes(String(n.id))
-    );
-  });
 
   return (
     <div className="space-y-5 sm:space-y-6 animate-fade-in">
@@ -688,48 +700,6 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
           </div>
         )}
       </div>
-
-      {!isAdmin && (
-      <div className="zacc-surface rounded-2xl p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
-            New Case Notifications
-          </h3>
-          <span className="text-xs font-bold text-blue-600 dark:text-blue-300">
-            {newCaseNotifications.length} alerts
-          </span>
-        </div>
-        {newCaseNotifications.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No new case alerts right now.
-          </p>
-        ) : (
-          <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-            {newCaseNotifications.slice(0, 8).map((n) => (
-              <div
-                key={n.id}
-                className="rounded-xl border border-blue-200 dark:border-blue-500/25 bg-blue-50 dark:bg-blue-500/10 px-3 py-2.5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs sm:text-sm font-bold text-blue-800 dark:text-blue-300 truncate">
-                    {n.title}
-                  </p>
-                  <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                    {new Date(n.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1 line-clamp-2">
-                  {n.message}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      )}
 
       {/* ── Header & Filters ── */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1851,6 +1821,66 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                               {investigationLogs.length > 0 && ` · ${investigationLogs.length} investigation entries will be included in the report`}
                             </p>
                           </div>
+
+                          <div className="rounded-xl border border-purple-300 dark:border-purple-500/30 bg-white dark:bg-black/20 p-4 space-y-3">
+                            <p className="text-[10px] font-black text-purple-700 dark:text-purple-400 uppercase tracking-wider">
+                              Formal Referral Dossier (Required for Referral)
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Receiving Authority <span className="text-rose-500">*</span>
+                                </label>
+                                <select
+                                  value={referralDraft.authority}
+                                  onChange={(e) => setReferralDraft((prev) => ({ ...prev, authority: e.target.value }))}
+                                  className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                                >
+                                  <option>National Prosecuting Authority (NPA)</option>
+                                  <option>Zimbabwe Republic Police (ZRP)</option>
+                                  <option>Financial Intelligence Unit (FIU)</option>
+                                  <option>Zimbabwe Revenue Authority (ZIMRA)</option>
+                                  <option>Auditor-General</option>
+                                  <option>Other Competent Authority</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Referral Date <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={referralDraft.transmissionDate}
+                                  onChange={(e) => setReferralDraft((prev) => ({ ...prev, transmissionDate: e.target.value }))}
+                                  className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                Referral Reference <span className="text-rose-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={referralDraft.reference}
+                                onChange={(e) => setReferralDraft((prev) => ({ ...prev, reference: e.target.value }))}
+                                placeholder="e.g. ZACC/REF/2026/0427-A"
+                                className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-purple-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                Legal / Regulatory Basis <span className="text-rose-500">*</span>
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={referralDraft.legalBasis}
+                                onChange={(e) => setReferralDraft((prev) => ({ ...prev, legalBasis: e.target.value }))}
+                                placeholder="Cite relevant legal basis, mandate, and reason for referral."
+                                className="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-purple-500 resize-none"
+                              />
+                            </div>
+                          </div>
                           <div className="grid grid-cols-3 gap-3">
                             <button
                               onClick={() => {
@@ -1873,9 +1903,24 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                                 const fullNotes = investigationLogs.length > 0
                                   ? `${actionNotes}\n\n--- Investigation Log (${investigationLogs.length} entries) ---\n${investigationLogs.map((l, i) => `${i+1}. [${l.progress}] ${l.account}: ${l.finding} (${l.date})`).join('\n')}`
                                   : actionNotes;
+
+                                if (referralDraft.reference.trim().length < 3) {
+                                  toast.error("Please provide a formal referral reference.");
+                                  return;
+                                }
+                                if (referralDraft.legalBasis.trim().length < 10) {
+                                  toast.error("Please provide a valid legal/regulatory basis for referral.");
+                                  return;
+                                }
+
                                 const original = actionNotes;
                                 setActionNotes(fullNotes);
-                                doAction("REFERRED").then(() => setActionNotes(original));
+                                doAction("REFERRED", true, {
+                                  referral_authority: referralDraft.authority,
+                                  referral_legal_basis: referralDraft.legalBasis,
+                                  referral_reference: referralDraft.reference,
+                                  referral_transmission_date: referralDraft.transmissionDate,
+                                }).then(() => setActionNotes(original));
                               }}
                               disabled={actionProcessing}
                               className="py-3 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
@@ -1904,14 +1949,14 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                         </div>
                       )}
 
-                      {/* REFERRED: Awaiting Courts/ZRP decision */}
+                      {/* REFERRED: Awaiting competent authority decision */}
                       {currentStatus === "REFERRED" && (
                         <div className="rounded-2xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 p-5 space-y-4">
                           <p className="text-xs font-black text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-2">
-                            Referred to Courts / Zimbabwe Republic Police
+                            Referred to Other Authorities
                           </p>
                           <p className="text-sm text-purple-700 dark:text-purple-300">
-                            This case has been referred to the relevant authority (Courts or ZRP) for legal action.
+                            This case has been formally referred to a competent external authority for legal or regulatory action.
                             A referral report has been generated. Once results are received, upload the outcome files
                             and record the decision below.
                           </p>
@@ -1929,12 +1974,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             }}
                             className="w-full py-3 rounded-xl bg-purple-100 dark:bg-purple-500/20 hover:bg-purple-200 dark:hover:bg-purple-500/30 border border-purple-300 dark:border-purple-500/30 text-purple-700 dark:text-purple-300 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
                           >
-                            📄 Print Referral Report for Courts / ZRP
+                            📄 Print Formal Referral Report
                           </button>
 
                           <div className="border-t border-purple-200 dark:border-purple-500/20 pt-4">
                             <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-3">
-                              Record Court / ZRP Outcome
+                              Record Authority Outcome
                             </p>
                             <div>
                               <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
@@ -1945,7 +1990,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                                 value={actionNotes}
                                 onChange={(e) => setActionNotes(e.target.value)}
                                 disabled={actionProcessing}
-                                placeholder="Record the court/ZRP decision, case outcome, sentencing details, or acquittal reasons. Attach result documents using the evidence upload feature (min 10 characters)..."
+                                placeholder="Record the authority decision, case outcome, directives, sanctions, or reasons. Attach supporting outcome documents (min 10 characters)..."
                                 className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none font-medium"
                               />
                               <p className="text-xs text-slate-500 mt-1">
@@ -1979,7 +2024,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             Case Resolved Successfully
                           </p>
                           <p className="text-sm text-teal-700 dark:text-teal-300">
-                            The courts or ZRP have acted on this case and the results have been recorded.
+                            The receiving authority has acted on this case and the results have been recorded.
                             The case has been successfully concluded with legal action taken.
                           </p>
                         </div>
@@ -2087,7 +2132,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                         {currentStatus === "INVESTIGATING" &&
                           "This case is under active investigation."}
                         {currentStatus === "REFERRED" &&
-                          "This case has been referred to the Courts or ZRP for legal action."}
+                          "This case has been referred to a competent authority for legal or regulatory action."}
                         {currentStatus === "SUCCESSFUL" &&
                           "This case has been successfully resolved through legal proceedings."}
                         {currentStatus === "CLOSED" &&

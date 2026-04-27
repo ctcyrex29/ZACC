@@ -93,12 +93,29 @@ export const Dashboard: React.FC = () => {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [cases]);
 
-  const trendData = [
-    { name: "Week 1", value: 12 },
-    { name: "Week 2", value: 18 },
-    { name: "Week 3", value: 15 },
-    { name: "Week 4", value: Math.max(cases.length, 1) },
-  ];
+  const trendData = useMemo(() => {
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const now = new Date();
+    const buckets: { year: number; month: number; name: string; value: number }[] = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        name: `${monthNames[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`,
+        value: 0,
+      });
+    }
+
+    for (const c of cases) {
+      const t = new Date(c.timestamp);
+      const hit = buckets.find((b) => b.year === t.getFullYear() && b.month === t.getMonth());
+      if (hit) hit.value += 1;
+    }
+
+    return buckets.map((b) => ({ name: b.name, value: b.value }));
+  }, [cases]);
 
   return (
     <div className="space-y-8">
@@ -129,7 +146,7 @@ export const Dashboard: React.FC = () => {
         <div className="lg:col-span-8 glass-card p-8 rounded-4xl">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Engagement Activity
+              Monthly Trend
             </h3>
             <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 rounded-full">
               <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>

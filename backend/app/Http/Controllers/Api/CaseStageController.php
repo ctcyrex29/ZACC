@@ -17,7 +17,7 @@ class CaseStageController extends Controller
         'SUBMITTED' => ['UNDER_REVIEW'],
         'UNDER_REVIEW' => ['INVESTIGATING', 'CLOSED'],
         'INVESTIGATING' => ['REFERRED', 'SUCCESSFUL', 'CLOSED'],
-        'REFERRED' => ['SUCCESSFUL', 'CLOSED'],
+        'REFERRED' => ['REFERRED', 'SUCCESSFUL', 'CLOSED'],
         'SUCCESSFUL' => ['CLOSED'],
         'DISPUTED' => ['UNDER_REVIEW', 'INVESTIGATING', 'REFERRED', 'CLOSED'],
         'CLOSED' => [],
@@ -66,11 +66,22 @@ class CaseStageController extends Controller
             return response()->json(['success' => false, 'message' => 'You are not assigned to this report'], 403);
         }
 
-        $validated = $request->validate([
+        $validationRules = [
             'stage' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,SUCCESSFUL,CLOSED,DISPUTED',
             'investigator_notes' => 'required|string|min:10',
             'manual_score' => 'nullable|integer|min:0|max:100',
-        ]);
+        ];
+
+        if ((string) $request->input('stage') === 'REFERRED') {
+            $validationRules = array_merge($validationRules, [
+                'referral_authority' => 'required|string|min:3|max:255',
+                'referral_legal_basis' => 'required|string|min:10|max:1000',
+                'referral_reference' => 'required|string|min:3|max:255',
+                'referral_transmission_date' => 'required|date',
+            ]);
+        }
+
+        $validated = $request->validate($validationRules);
 
         $currentStage = (string) $report->status;
         $requestedStage = (string) $validated['stage'];
@@ -87,10 +98,28 @@ class CaseStageController extends Controller
             ], 422);
         }
 
+        $formalReferral = null;
+        $investigatorNotes = (string) $validated['investigator_notes'];
+        if ($requestedStage === 'REFERRED') {
+            $formalReferral = [
+                'authority' => (string) $validated['referral_authority'],
+                'legal_basis' => (string) $validated['referral_legal_basis'],
+                'reference' => (string) $validated['referral_reference'],
+                'transmission_date' => (string) $validated['referral_transmission_date'],
+            ];
+
+            $investigatorNotes = trim($investigatorNotes)
+                . "\n\n--- Formal Referral Record ---"
+                . "\nReferral Authority: " . $formalReferral['authority']
+                . "\nLegal Basis: " . $formalReferral['legal_basis']
+                . "\nReferral Reference: " . $formalReferral['reference']
+                . "\nTransmission Date: " . $formalReferral['transmission_date'];
+        }
+
         $expert = $this->expertEvaluationService->evaluateStage(
             $report,
             $validated['stage'],
-            $validated['investigator_notes'],
+            $investigatorNotes,
         );
 
         $manualScore = isset($validated['manual_score']) ? (int) $validated['manual_score'] : null;
@@ -101,11 +130,13 @@ class CaseStageController extends Controller
         $stageEvaluation = $report->stageEvaluations()->create([
             'investigator_id' => $user->id,
             'stage' => $validated['stage'],
-            'investigator_notes' => $validated['investigator_notes'],
+            'investigator_notes' => $investigatorNotes,
             'expert_score' => (int) $expert['score'],
             'manual_score' => $manualScore,
             'final_score' => $finalScore,
-            'expert_context' => $expert,
+            'expert_context' => array_merge($expert, [
+                'formal_referral' => $formalReferral,
+            ]),
         ]);
 
         $updateData = [
@@ -132,6 +163,7 @@ class CaseStageController extends Controller
                 'expert_score' => (int) $expert['score'],
                 'manual_score' => $manualScore,
                 'final_score' => $finalScore,
+                'formal_referral' => $formalReferral,
             ],
         );
 

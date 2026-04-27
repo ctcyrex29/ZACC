@@ -15,7 +15,7 @@ const stagesDefault = [
   { key: CaseStatus.SUBMITTED, label: "Submitted", icon: "📥" },
   { key: CaseStatus.UNDER_REVIEW, label: "Reviewing", icon: "🔎" },
   { key: CaseStatus.INVESTIGATING, label: "Investigation", icon: "🔍" },
-  { key: CaseStatus.REFERRED, label: "Courts/ZRP", icon: "⚖️" },
+  { key: CaseStatus.REFERRED, label: "Other Authorities", icon: "⚖️" },
   { key: CaseStatus.CLOSED, label: "Closed", icon: "✅" },
 ];
 

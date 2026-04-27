@@ -12,6 +12,7 @@ import { WhistleblowerDashboard } from "./components/WhistleblowerDashboard";
 import { HelpGuide } from "./components/HelpGuide";
 import { ReportGeneration } from "./components/ReportGeneration";
 import { CorruptionHotspots } from "./components/CorruptionHotspots";
+import { AuthorityFindings } from "./components/AuthorityFindings";
 import { Toaster } from "react-hot-toast";
 import { apiClient } from "./services/api";
 
@@ -27,7 +28,8 @@ export type View =
   | "tracking"
   | "users"
   | "reports"
-  | "hotspots";
+  | "hotspots"
+  | "authorities";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -243,6 +245,8 @@ const App: React.FC = () => {
         return <ReportGeneration language={language} />;
       case "hotspots":
         return <CorruptionHotspots />;
+      case "authorities":
+        return <AuthorityFindings />;
       default:
         return <Dashboard />;
     }
@@ -266,6 +270,8 @@ const App: React.FC = () => {
         return t(language, "reportGeneration");
       case "hotspots":
         return t(language, "corruptionHotspots");
+      case "authorities":
+        return "Authority Findings";
       default:
         return t(language, "appTitle");
     }
@@ -281,7 +287,6 @@ const App: React.FC = () => {
         onLogout={handleLogout}
         language={language}
         onLanguageChange={setLanguage}
-        notificationCount={newCaseCount}
       />
       {user.role === UserRole.WHISTLEBLOWER && <HelpGuide />}
 
@@ -305,83 +310,12 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    const nextOpen = !notificationsOpen;
-                    setNotificationsOpen(nextOpen);
-                    if (nextOpen) fetchNotificationCount();
-                  }}
-                  className="relative w-10 h-10 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card-soft)] text-slate-700 dark:text-slate-200"
-                  aria-label="Notifications"
-                  title="Notifications"
-                  aria-expanded={notificationsOpen}
-                >
-                  🔔
-                  {newCaseCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
-                      {newCaseCount > 9 ? "9+" : newCaseCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
                   onClick={handleLogout}
                   className="px-3 sm:px-4 h-10 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-black uppercase tracking-wider"
                 >
                   Logout
                 </button>
               </div>
-
-              {notificationsOpen && (
-                <div className="absolute right-2 sm:right-4 top-[calc(100%+10px)] w-[min(360px,calc(100vw-2rem))] z-[80] rounded-2xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] shadow-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[var(--zacc-border)] flex items-center justify-between gap-3">
-                    <p className="text-xs font-black uppercase tracking-wider text-[var(--zacc-muted)]">
-                      Notifications
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => markNotificationsAsViewed(unreadNotifications.map((n: any) => String(n.id)))}
-                      className="text-[10px] font-bold px-2 py-1 rounded-md border border-blue-300/50 dark:border-blue-400/40 text-blue-700 dark:text-blue-300 bg-blue-500/10"
-                    >
-                      Mark all read
-                    </button>
-                  </div>
-
-                  {notifications.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-sm text-[var(--zacc-muted)]">
-                      No notifications yet.
-                    </div>
-                  ) : (
-                    <div className="max-h-80 overflow-y-auto">
-                      {notifications.map((n: any) => {
-                        const isUnread = !viewedNotificationIds.includes(String(n.id));
-                        return (
-                          <button
-                            key={String(n.id)}
-                            type="button"
-                            onClick={() => markNotificationsAsViewed([String(n.id)])}
-                            className={`w-full text-left px-4 py-3 border-b border-[var(--zacc-border)]/70 last:border-0 transition-colors ${isUnread ? "bg-blue-50/70 dark:bg-blue-500/10" : "bg-transparent hover:bg-[var(--zacc-card-soft)]"}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
-                                {n.title || n.type || "Notification"}
-                              </p>
-                              {isUnread && (
-                                <span className="mt-1 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-                              )}
-                            </div>
-                            <p className="text-xs text-[var(--zacc-muted)] mt-1 line-clamp-2">
-                              {n.message || "No details available."}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mt-1.5">
-                              {n.created_at ? new Date(n.created_at).toLocaleString() : ""}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="zacc-surface flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-3 sm:px-4 rounded-2xl">

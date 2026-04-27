@@ -186,7 +186,7 @@ YOUR EXPERTISE AND MANDATE:
 
 OBJECTIVES you must fulfill:
 1. Guide whistleblowers step-by-step through filing corruption reports with expert advice on what details strengthen a case
-2. Explain the investigation process in depth (Submitted → Under Review → Investigating → Referred → Closed) including what happens at each stage, typical timelines, and what the whistleblower should expect
+2. Explain the investigation process in depth (Submitted → Under Review → Investigating → Referred to Other Authorities → Closed) including what happens at each stage, typical timelines, and what the whistleblower should expect
 3. Help users understand tracking codes and how to follow up on cases
 4. Provide detailed reassurance about privacy and anonymity protections backed by technical and legal explanations
 5. Explain how to submit evidence effectively — what types of evidence are most impactful, how to document corruption properly
@@ -273,7 +273,7 @@ PROMPT;
 
             [
                 'patterns' => ['track', 'check status', 'case status', 'my case', 'follow up', 'update', 'progress'],
-                'response' => "To track your case:\n\n1. Click the **Track Case** tab\n2. Enter your tracking code (e.g., ZACC-REF-XXXXXX)\n3. Click **Track Case**\n\nYou'll see:\n- **Current status** — where your case is in the investigation pipeline\n- **Timeline** — a visual progress tracker through each stage\n- **Investigator notes** — updates at each stage of the investigation\n- **Options** — upload additional evidence or dispute a closure\n\n**Investigation Stages:**\n📥 Submitted → 🔍 Under Review → 🕵️ Investigating → 📋 Referred → ✅ Closed\n\nIf you've lost your tracking code, unfortunately we cannot retrieve it (for anonymity reasons), but you can always file a new report."
+                'response' => "To track your case:\n\n1. Click the **Track Case** tab\n2. Enter your tracking code (e.g., ZACC-REF-XXXXXX)\n3. Click **Track Case**\n\nYou'll see:\n- **Current status** — where your case is in the investigation pipeline\n- **Timeline** — a visual progress tracker through each stage\n- **Investigator notes** — updates at each stage of the investigation\n- **Options** — upload additional evidence or dispute a closure\n\n**Investigation Stages:**\n📥 Submitted → 🔍 Under Review → 🕵️ Investigating → 📋 Referred to Other Authorities → ✅ Closed\n\nIf you've lost your tracking code, unfortunately we cannot retrieve it (for anonymity reasons), but you can always file a new report."
             ],
 
             [
@@ -298,7 +298,7 @@ PROMPT;
 
             [
                 'patterns' => ['stage', 'investigation', 'process', 'what happens', 'timeline', 'how long'],
-                'response' => "Here's how the ZACC investigation process works:\n\n**📥 Stage 1: SUBMITTED**\nYour report is received and an AI expert system automatically assesses priority based on corruption type, details, and financial magnitude.\n\n**🔍 Stage 2: UNDER REVIEW**\nA ZACC investigator reviews the report, verifies the information, and determines if a full investigation is warranted.\n\n**🕵️ Stage 3: INVESTIGATING**\nActive investigation — gathering evidence, interviewing witnesses, analysing documents. This is typically the longest stage.\n\n**📋 Stage 4: REFERRED**\nIf the case involves criminal conduct, it may be referred to the National Prosecuting Authority (NPA) or other relevant bodies.\n\n**✅ Stage 5: CLOSED**\nThe investigation concludes with findings documented. If you disagree with the closure, you can **dispute** the decision.\n\nHigher-priority cases (more detail, more evidence) are typically investigated faster."
+                'response' => "Here's how the ZACC investigation process works:\n\n**📥 Stage 1: SUBMITTED**\nYour report is received and an AI expert system automatically assesses priority based on corruption type, details, and financial magnitude.\n\n**🔍 Stage 2: UNDER REVIEW**\nA ZACC investigator reviews the report, verifies the information, and determines if a full investigation is warranted.\n\n**🕵️ Stage 3: INVESTIGATING**\nActive investigation — gathering evidence, interviewing witnesses, analysing documents. This is typically the longest stage.\n\n**📋 Stage 4: REFERRED TO OTHER AUTHORITIES**\nIf the case involves criminal or regulatory misconduct, it is formally referred to competent external authorities (such as NPA, ZRP, or other statutory agencies).\n\n**✅ Stage 5: CLOSED**\nThe investigation concludes with findings documented. If you disagree with the closure, you can **dispute** the decision.\n\nHigher-priority cases (more detail, more evidence) are typically investigated faster."
             ],
 
             [

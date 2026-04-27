@@ -844,7 +844,7 @@ function getFallbackResponse(input: string): string {
     {
       patterns: ["stage", "investigation", "process", "what happens", "timeline", "how long", "after"],
       response:
-        "The ZACC investigation process:\n\n📥 **Submitted** — AI expert system classifies priority automatically\n🔍 **Under Review** — Investigator assigned, initial assessment\n🕵️ **Investigating** — Active evidence gathering and analysis\n📋 **Referred** — May be sent to National Prosecuting Authority\n✅ **Closed** — Case resolved with documented findings\n\nHigher-priority cases (more detail, more evidence) are investigated faster. You can track progress anytime with your tracking code.",
+        "The ZACC investigation process:\n\n📥 **Submitted** — AI expert system classifies priority automatically\n🔍 **Under Review** — Investigator assigned, initial assessment\n🕵️ **Investigating** — Active evidence gathering and analysis\n📋 **Referred to Other Authorities** — Formally transmitted to competent authorities for legal or regulatory action\n✅ **Closed** — Case resolved with documented findings\n\nHigher-priority cases (more detail, more evidence) are investigated faster. You can track progress anytime with your tracking code.",
     },
     {
       patterns: ["blockchain", "verify", "hash", "tamper", "integrity"],

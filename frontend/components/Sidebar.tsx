@@ -10,7 +10,6 @@ interface SidebarProps {
   onLogout: () => void;
   language: Language;
   onLanguageChange: (language: Language) => void;
-  notificationCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -20,7 +19,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   language,
   onLanguageChange,
-  notificationCount = 0,
 }) => {
   const [stealthActive, setStealthActive] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -48,12 +46,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const investigatorItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
+    { id: "authorities", label: "Authority Findings", icon: "🧾" },
     { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
     { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
   ];
 
   const adminItems = [
     { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
+    { id: "authorities", label: "Authority Findings", icon: "🧾" },
     { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
     { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
     { id: "users", label: t(language, "userManagement"), icon: "👤" },
@@ -114,11 +114,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`text-2xl transition-transform group-hover:scale-110 ${isActive ? "scale-110" : ""} relative`}
               >
                 {item.icon}
-                {item.id === "dashboard" && notificationCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-lg">
-                    {notificationCount > 9 ? "9+" : notificationCount}
-                  </span>
-                )}
               </span>
               <span
                 className={`hidden md:block font-black text-[11px] uppercase tracking-widest transition-colors ${isActive ? "text-[var(--zacc-sidebar-text-active)]" : ""}`}
