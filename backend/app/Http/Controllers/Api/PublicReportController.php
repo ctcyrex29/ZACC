@@ -97,6 +97,23 @@ class PublicReportController extends Controller
                 ]);
 
                 $report->save();
+
+                // Persist correction metadata for audit view.
+                $report->ai_summary = array_merge(
+                    is_array($report->ai_summary) ? $report->ai_summary : [],
+                    [
+                        'type_inference' => [
+                            'selected_type' => $this->lastTypeInference['selected_type'] ?? $report->type,
+                            'inferred_type' => $this->lastTypeInference['inferred_type'] ?? $report->type,
+                            'resolved_type' => $this->lastTypeInference['resolved_type'] ?? $report->type,
+                            'was_corrected' => (bool) ($this->lastTypeInference['was_corrected'] ?? false),
+                            'confidence' => (int) ($this->lastTypeInference['confidence'] ?? 0),
+                            'captured_at' => now()->toIso8601String(),
+                        ],
+                    ]
+                );
+                $report->save();
+
                 $report->submitToBlockchain();
 
                 return $report;

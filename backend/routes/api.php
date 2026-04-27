@@ -53,6 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Report routes
     Route::get('/reports', [ReportController::class, 'index']);
+    Route::get('/reports/type-correction-audit', [ReportController::class, 'typeCorrectionAudit']);
     Route::get('/cases', [ReportController::class, 'index']); // Frontend alias
     Route::post('/reports', [ReportController::class, 'store']);
     Route::get('/reports/stats', [ReportController::class, 'stats']);

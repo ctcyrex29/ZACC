@@ -239,7 +239,11 @@ PROMPT;
             $aiResult['classified_at'] = now()->toIso8601String();
             $aiResult['model_used'] = $model;
 
-            // Store AI classification
+            // Store AI classification while preserving non-AI metadata (e.g., type inference).
+            $existingSummary = is_array($report->ai_summary) ? $report->ai_summary : [];
+            if (isset($existingSummary['type_inference']) && !isset($aiResult['type_inference'])) {
+                $aiResult['type_inference'] = $existingSummary['type_inference'];
+            }
             $report->ai_summary = $aiResult;
 
             // AI can only upgrade priority, never downgrade

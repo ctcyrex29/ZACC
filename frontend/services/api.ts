@@ -246,6 +246,11 @@ class ApiClient {
     return this.request('/hotspots');
   }
 
+  async getTypeCorrectionAudit(limit: number = 50) {
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(limit || 50)));
+    return this.request(`/reports/type-correction-audit?limit=${safeLimit}`);
+  }
+
   async getPublicHotspots() {
     return this.request('/hotspots/public');
   }

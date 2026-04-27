@@ -223,7 +223,26 @@ class ReportController extends Controller
 
                     // Re-score with file content + attachment bonus
                     $this->recalculateReportPriority($report);
+
+                    // Refresh inference after evidence-aware recalculation.
+                    $typeInference = $this->lastTypeInference ?: $typeInference;
                 }
+
+                // Persist inference metadata for audit and future tuning.
+                $report->ai_summary = array_merge(
+                    is_array($report->ai_summary) ? $report->ai_summary : [],
+                    [
+                        'type_inference' => [
+                            'selected_type' => $typeInference['selected_type'] ?? $report->type,
+                            'inferred_type' => $typeInference['inferred_type'] ?? $report->type,
+                            'resolved_type' => $typeInference['resolved_type'] ?? $report->type,
+                            'was_corrected' => (bool) ($typeInference['was_corrected'] ?? false),
+                            'confidence' => (int) ($typeInference['confidence'] ?? 0),
+                            'captured_at' => now()->toIso8601String(),
+                        ],
+                    ]
+                );
+                $report->save();
 
                 // Submit to blockchain
                 $report->submitToBlockchain();
@@ -586,6 +605,10 @@ class ReportController extends Controller
                 ]);
 
                 try {
+                    $existingSummary = is_array($report->ai_summary) ? $report->ai_summary : [];
+                    if (isset($existingSummary['type_inference']) && !isset($aiData['type_inference'])) {
+                        $aiData['type_inference'] = $existingSummary['type_inference'];
+                    }
                     $report->ai_summary = $aiData;
                     $report->save();
                 } catch (\Exception $e) {
@@ -700,6 +723,71 @@ class ReportController extends Controller
             'total'    => $total,
             'updated'  => $updated,
             'details'  => $details,
+        ]);
+    }
+
+    /**
+     * Audit feed for expert type auto-corrections.
+     * Accessible to admins and investigators.
+     */
+    public function typeCorrectionAudit(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !($user->isAdmin() || $user->isInvestigator())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $limit = max(1, min(200, (int) $request->query('limit', 50)));
+        $scanLimit = max(80, min(800, $limit * 6));
+
+        $reports = Report::query()
+            ->with(['user:id,name,email'])
+            ->latest('created_at')
+            ->take($scanLimit)
+            ->get();
+
+        $items = $reports
+            ->filter(function (Report $report) {
+                $summary = is_array($report->ai_summary) ? $report->ai_summary : [];
+                return (bool) ($summary['type_inference']['was_corrected'] ?? false);
+            })
+            ->take($limit)
+            ->map(function (Report $report) {
+                $summary = is_array($report->ai_summary) ? $report->ai_summary : [];
+                $inf = $summary['type_inference'] ?? [];
+
+                return [
+                    'case_id' => $report->case_id,
+                    'reference_code' => $report->reference_code,
+                    'priority' => $report->priority,
+                    'status' => $report->status,
+                    'selected_type' => $inf['selected_type'] ?? null,
+                    'inferred_type' => $inf['inferred_type'] ?? null,
+                    'resolved_type' => $inf['resolved_type'] ?? $report->type,
+                    'confidence' => $inf['confidence'] ?? null,
+                    'captured_at' => $inf['captured_at'] ?? optional($report->created_at)->toIso8601String(),
+                    'created_at' => optional($report->created_at)->toIso8601String(),
+                    'reporter' => $report->user ? [
+                        'id' => $report->user->id,
+                        'name' => $report->user->name,
+                        'email' => $report->user->email,
+                    ] : null,
+                    'is_anonymous' => (bool) $report->is_anonymous,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+            'meta' => [
+                'count' => $items->count(),
+                'limit' => $limit,
+                'scan_limit' => $scanLimit,
+            ],
         ]);
     }
 

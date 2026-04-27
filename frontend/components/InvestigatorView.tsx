@@ -166,6 +166,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const [filter, setFilter] = useState<CaseStatus | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [typeCorrectionAudit, setTypeCorrectionAudit] = useState<any[]>([]);
+  const [typeCorrectionLoading, setTypeCorrectionLoading] = useState(false);
 
   // Dossier modal
   const [dossierOpen, setDossierOpen] = useState(false);
@@ -306,6 +308,26 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     const intervalId = window.setInterval(fetchNotifications, 30000);
     return () => window.clearInterval(intervalId);
   }, [fetchNotifications]);
+
+  const fetchTypeCorrectionAudit = useCallback(async () => {
+    setTypeCorrectionLoading(true);
+    try {
+      const response = await apiClient.getTypeCorrectionAudit(12);
+      if (response?.success && Array.isArray(response.data)) {
+        setTypeCorrectionAudit(response.data);
+      } else {
+        setTypeCorrectionAudit([]);
+      }
+    } catch {
+      setTypeCorrectionAudit([]);
+    } finally {
+      setTypeCorrectionLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTypeCorrectionAudit();
+  }, [fetchTypeCorrectionAudit]);
 
   // ── Authenticated evidence download (avoids 401 from <a href target="_blank">) ──
   const downloadEvidence = async (url: string, fileName: string) => {
@@ -611,6 +633,60 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="zacc-surface rounded-2xl p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
+            Auto-Corrected Type Audit
+          </h3>
+          <button
+            onClick={fetchTypeCorrectionAudit}
+            className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-[var(--zacc-border)] text-slate-600 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-500/30"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {typeCorrectionLoading ? (
+          <p className="text-sm text-slate-500">Loading audit feed...</p>
+        ) : typeCorrectionAudit.length === 0 ? (
+          <p className="text-sm text-slate-500">No auto-corrected submissions found in recent records.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 uppercase tracking-wider">
+                  <th className="text-left py-2 pr-3">Case</th>
+                  <th className="text-left py-2 pr-3">Selected</th>
+                  <th className="text-left py-2 pr-3">Resolved</th>
+                  <th className="text-left py-2 pr-3">Confidence</th>
+                  <th className="text-left py-2 pr-3">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {typeCorrectionAudit.map((item) => (
+                  <tr key={item.case_id} className="border-t border-slate-100 dark:border-white/5">
+                    <td className="py-2 pr-3">
+                      <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {item.reference_code || item.case_id}
+                      </div>
+                      <div className="text-[10px] text-slate-500">{item.status} · {item.priority}</div>
+                    </td>
+                    <td className="py-2 pr-3 text-slate-600 dark:text-slate-300">{item.selected_type || "-"}</td>
+                    <td className="py-2 pr-3">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold">
+                        {item.resolved_type || "-"}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-slate-700 dark:text-slate-200 font-bold">{item.confidence ?? "-"}%</td>
+                    <td className="py-2 pr-3 text-slate-500">{new Date(item.captured_at || item.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {!isAdmin && (
