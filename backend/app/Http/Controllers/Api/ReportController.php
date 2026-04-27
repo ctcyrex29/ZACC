@@ -150,6 +150,9 @@ class ReportController extends Controller
 
         $validated = $validator->validated();
 
+        $typeInference = $this->inferCorruptionType($validated);
+        $validated['type'] = $typeInference['resolved_type'];
+
         // Priority is assigned by the expert system, not by the reporter.
         $expertPriority = $this->determineExpertPriority($validated);
 
@@ -173,7 +176,7 @@ class ReportController extends Controller
 
         try {
             // Start database transaction
-            return DB::transaction(function () use ($validated, $user, $expertPriority, $reportLanguage, $clarityScore) {
+            return DB::transaction(function () use ($validated, $user, $expertPriority, $reportLanguage, $clarityScore, $typeInference) {
                 // Generate unique IDs
                 $caseId = Report::generateCaseId();
                 $referenceCode = 'REF-' . strtoupper(Str::random(8));
@@ -259,6 +262,9 @@ class ReportController extends Controller
                         'priority' => $report->priority,
                         'risk_score' => $report->risk_score,
                         'type' => $report->type,
+                        'type_selected' => $typeInference['selected_type'] ?? $report->type,
+                        'type_corrected' => $typeInference['was_corrected'] ?? false,
+                        'type_confidence' => $typeInference['confidence'] ?? null,
                         'created_at' => $report->created_at,
                         'is_anonymous' => $report->is_anonymous,
                         'report_language' => $report->report_language,

@@ -311,6 +311,133 @@ PROMPT;
     protected array $lastClarityResult = [];
 
     /**
+     * Type inference metadata from the last determineExpertPriority() call.
+     */
+    protected array $lastTypeInference = [];
+
+    /**
+     * Normalize user/AI supplied corruption type labels to canonical values.
+     */
+    protected function normalizeCorruptionType(string $type): string
+    {
+        $normalized = strtolower(trim($type));
+        $compact = str_replace(['_', '-', '  '], ' ', $normalized);
+
+        $map = [
+            'bribery' => 'Bribery',
+            'bribe' => 'Bribery',
+            'petty bribery' => 'Bribery',
+            'procurement fraud' => 'Procurement Fraud',
+            'procurement' => 'Procurement Fraud',
+            'tender fraud' => 'Procurement Fraud',
+            'abuse of office' => 'Abuse of Office',
+            'abuse' => 'Abuse of Office',
+            'misuse of office' => 'Abuse of Office',
+            'embezzlement' => 'Embezzlement',
+            'embezzle' => 'Embezzlement',
+            'nepotism' => 'Nepotism',
+            'fraud' => 'Other',
+            'extortion' => 'Other',
+            'money laundering' => 'Other',
+            'other' => 'Other',
+            'uncategorized' => 'Other',
+            'unknown' => 'Other',
+            'bribery and corruption' => 'Bribery',
+            'abuse_of_office' => 'Abuse of Office',
+            'procurement_fraud' => 'Procurement Fraud',
+        ];
+
+        return $map[$compact] ?? ucfirst($compact ?: 'other');
+    }
+
+    /**
+     * Infer corruption type from narrative/evidence text and correct wrong selections.
+     *
+     * Returns metadata including selected, inferred and resolved type.
+     * A correction is only made when confidence and score margin are sufficient.
+     */
+    protected function inferCorruptionType(array $data): array
+    {
+        $selectedType = $this->normalizeCorruptionType((string) ($data['type'] ?? 'Other'));
+        $text = strtolower(
+            trim(
+                ($data['description'] ?? '') . ' ' .
+                ($data['institution'] ?? '') . ' ' .
+                ($data['location'] ?? '')
+            )
+        );
+
+        $signals = [
+            'Bribery' => [
+                'bribe' => 8, 'bribery' => 8, 'kickback' => 9, 'brown envelope' => 7,
+                'payment to officer' => 6, 'paid official' => 6, 'chiokomuhomwe' => 8,
+                'rushwa' => 8, 'kupihwa mari' => 5,
+            ],
+            'Procurement Fraud' => [
+                'procurement' => 9, 'tender' => 9, 'bid' => 6, 'bid rigging' => 10,
+                'supplier' => 5, 'quotation' => 6, 'invoice inflation' => 8,
+                'overpricing' => 8, 'contract award' => 7, 'ghost company' => 8,
+                'shell company' => 8, 'irregular tender' => 9,
+            ],
+            'Abuse of Office' => [
+                'abuse of office' => 10, 'misuse of power' => 9, 'misuse of office' => 9,
+                'abuse' => 5, 'authority' => 4, 'position' => 4,
+                'kushandisa simba' => 8, 'ukusebenzisa amandla' => 8,
+            ],
+            'Embezzlement' => [
+                'embezzle' => 10, 'embezzlement' => 10, 'stole funds' => 8,
+                'stolen funds' => 8, 'diverted funds' => 8, 'misappropriation' => 8,
+                'siphon' => 8, 'loot' => 7, 'kuba mari' => 8, 'ukudla imali' => 8,
+            ],
+            'Nepotism' => [
+                'nepotism' => 10, 'relative appointed' => 9, 'family hired' => 8,
+                'favouritism' => 8, 'favoritism' => 8, 'brother appointed' => 8,
+                'sister appointed' => 8, 'son appointed' => 8, 'daughter appointed' => 8,
+            ],
+            'Other' => [
+                'fraud' => 5, 'extortion' => 6, 'coercion' => 5, 'intimidation' => 4,
+            ],
+        ];
+
+        $scores = [];
+        foreach ($signals as $type => $keywords) {
+            $scores[$type] = 0;
+            foreach ($keywords as $kw => $pts) {
+                if (str_contains($text, $kw)) {
+                    $scores[$type] += $pts;
+                }
+            }
+        }
+
+        // Respect user choice lightly, but allow confident correction.
+        if (isset($scores[$selectedType])) {
+            $scores[$selectedType] += 3;
+        }
+
+        arsort($scores);
+        $rankedTypes = array_keys($scores);
+        $bestType = $rankedTypes[0] ?? $selectedType;
+        $bestScore = (int) ($scores[$bestType] ?? 0);
+        $secondScore = (int) ($scores[$rankedTypes[1] ?? $bestType] ?? 0);
+        $margin = max(0, $bestScore - $secondScore);
+
+        $confidence = min(95, 40 + ($bestScore * 4) + ($margin * 5));
+        $shouldCorrect = ($bestType !== $selectedType) && $bestScore >= 10 && $margin >= 3;
+        $resolvedType = $shouldCorrect ? $bestType : $selectedType;
+
+        return [
+            'selected_type' => $selectedType,
+            'inferred_type' => $bestType,
+            'resolved_type' => $resolvedType,
+            'was_corrected' => $shouldCorrect,
+            'confidence' => $confidence,
+            'best_score' => $bestScore,
+            'margin' => $margin,
+            'scores' => $scores,
+        ];
+    }
+
+    /**
      * Extract readable text from a report's uploaded attachments.
      * Reads .txt, .csv, .json, .md, .log and similar text files.
      * For binary files (images, PDFs) returns filenames & metadata only.
@@ -433,9 +560,11 @@ PROMPT;
 
         $oldPriority  = $report->priority;
         $oldRisk      = $report->risk_score;
+        $oldType      = $report->type;
 
         // Run expert scoring on combined text
         $newPriority = $this->determineExpertPriority($data);
+        $resolvedType = $this->lastTypeInference['resolved_type'] ?? $report->type;
 
         // Add attachment bonus to the raw score
         $attachmentBonus = $this->scoreAttachmentBonus($report);
@@ -449,8 +578,9 @@ PROMPT;
 
         $newRisk = $this->calculateRiskScore(array_merge($data, ['priority' => $newPriority]));
 
-        $changed = ($newPriority !== $oldPriority || $newRisk !== $oldRisk);
+        $changed = ($newPriority !== $oldPriority || $newRisk !== $oldRisk || $resolvedType !== $oldType);
 
+        $report->type       = $resolvedType;
         $report->priority   = $newPriority;
         $report->risk_score = $newRisk;
 
@@ -468,6 +598,8 @@ PROMPT;
                 'new_priority' => $newPriority,
                 'old_risk'     => $oldRisk,
                 'new_risk'     => $newRisk,
+                'old_type'     => $oldType,
+                'new_type'     => $resolvedType,
                 'raw_score'    => $this->lastExpertRawScore,
                 'file_bonus'   => $attachmentBonus,
                 'adjusted'     => $adjustedScore,
@@ -997,7 +1129,10 @@ PROMPT;
      */
     protected function determineExpertPriority(array $data): string
     {
-        $type = strtolower($data['type'] ?? '');
+        $typeInference = $this->inferCorruptionType($data);
+        $this->lastTypeInference = $typeInference;
+
+        $type = strtolower($typeInference['resolved_type'] ?? ($data['type'] ?? ''));
         $description = $data['description'] ?? '';
         $institution = $data['institution'] ?? '';
         $location = $data['location'] ?? '';
@@ -1379,6 +1514,10 @@ PROMPT;
 
         Log::info('Expert system scoring', [
             'type' => $type,
+            'selected_type' => $typeInference['selected_type'] ?? null,
+            'inferred_type' => $typeInference['inferred_type'] ?? null,
+            'type_corrected' => $typeInference['was_corrected'] ?? false,
+            'type_confidence' => $typeInference['confidence'] ?? null,
             'total_score' => $score,
             'factor_hits' => $factorHits,
             'desc_length' => $len,

@@ -1806,7 +1806,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             >
                               {actionProcessing
                                 ? "Processing..."
-                                : "Refer to Courts / ZRP"}
+                                : "Refer to Other Authority"}
                             </button>
                             <button
                               onClick={() => {

@@ -88,11 +88,8 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
     const closed = cases.filter(
       (item) => item.status === CaseStatus.CLOSED,
     ).length;
-    const highPriority = cases.filter(
-      (item) => item.priority === "HIGH" || item.priority === "CRITICAL",
-    ).length;
 
-    return { total, active, successful, closed, highPriority };
+    return { total, active, successful, closed };
   }, [cases]);
 
   const recentCases = useMemo(
@@ -103,6 +100,16 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
         ),
     [cases],
+  );
+
+  const successfulCases = useMemo(
+    () => recentCases.filter((item) => item.status === CaseStatus.SUCCESSFUL).slice(0, 4),
+    [recentCases],
+  );
+
+  const closedCases = useMemo(
+    () => recentCases.filter((item) => item.status === CaseStatus.CLOSED).slice(0, 4),
+    [recentCases],
   );
 
   return (
@@ -133,7 +140,7 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
           <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
             Total Cases
@@ -166,13 +173,43 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
             {loading ? "..." : stats.closed}
           </p>
         </div>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-emerald-400/20 bg-white dark:bg-[#080c18] p-5">
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold tracking-wider mb-3">
+            Successful Reports
+          </p>
+          {successfulCases.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No successful reports yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {successfulCases.map((item) => (
+                <div key={item.id} className="rounded-xl border border-emerald-400/20 px-3 py-2">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">{item.id}</p>
+                  <p className="text-xs text-slate-500">{new Date(item.timestamp).toLocaleDateString()} • {item.type}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
-          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
-            High Priority
+          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-3">
+            Closed Reports
           </p>
-          <p className="text-3xl font-black mt-2 text-rose-500">
-            {loading ? "..." : stats.highPriority}
-          </p>
+          {closedCases.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No closed reports yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {closedCases.map((item) => (
+                <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">{item.id}</p>
+                  <p className="text-xs text-slate-500">{new Date(item.timestamp).toLocaleDateString()} • {item.type}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

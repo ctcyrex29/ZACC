@@ -44,6 +44,9 @@ class PublicReportController extends Controller
 
         $validated = $validator->validated();
 
+        $typeInference = $this->inferCorruptionType($validated);
+        $validated['type'] = $typeInference['resolved_type'];
+
         // Expert system determines priority
         $expertPriority = $this->determineExpertPriority($validated);
 
@@ -135,6 +138,10 @@ class PublicReportController extends Controller
                     'status' => $report->status,
                     'risk_score' => $report->risk_score,
                     'priority' => $report->priority,
+                    'type' => $report->type,
+                    'type_selected' => $typeInference['selected_type'] ?? $report->type,
+                    'type_corrected' => $typeInference['was_corrected'] ?? false,
+                    'type_confidence' => $typeInference['confidence'] ?? null,
                     'created_at' => $report->created_at,
                 ],
             ], 201);

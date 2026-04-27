@@ -21,10 +21,6 @@ const COLORS = ["#2563eb", "#38bdf8", "#22c55e", "#f59e0b", "#ef4444"];
 export const Dashboard: React.FC = () => {
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hotspotData, setHotspotData] = useState<{
-    by_province: { name: string; total: number }[];
-    critical_hotspots: { institution: string; total: number }[];
-  } | null>(null);
 
   useEffect(() => {
     const fetchCases = async () => {
@@ -55,23 +51,6 @@ export const Dashboard: React.FC = () => {
       }
     };
     fetchCases();
-  }, []);
-
-  useEffect(() => {
-    const fetchHotspots = async () => {
-      try {
-        const response = await apiClient.getHotspots();
-        if (response?.success) {
-          setHotspotData({
-            by_province: response.data.by_province,
-            critical_hotspots: response.data.critical_hotspots,
-          });
-        }
-      } catch (err) {
-        console.error("Hotspot fetch error:", err);
-      }
-    };
-    fetchHotspots();
   }, []);
 
   const stats = [
@@ -105,28 +84,6 @@ export const Dashboard: React.FC = () => {
       color: "text-slate-900 dark:text-white",
     },
   ];
-
-  const anchoredCount = cases.filter((c: any) =>
-    Boolean(c.blockchain_tx_hash),
-  ).length;
-  const anchoredRate =
-    cases.length > 0 ? Math.round((anchoredCount / cases.length) * 100) : 0;
-  const closedCount = cases.filter(
-    (c) => c.status === CaseStatus.CLOSED,
-  ).length;
-  const disputeCount = cases.filter(
-    (c) => c.status === CaseStatus.DISPUTED,
-  ).length;
-  const confidenceIndex =
-    closedCount > 0
-      ? Math.max(
-          0,
-          Math.min(
-            100,
-            Math.round(((closedCount - disputeCount) / closedCount) * 100),
-          ),
-        )
-      : 100;
 
   const distributionData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -279,119 +236,6 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-card rounded-3xl p-6 border border-blue-300/40 dark:border-blue-400/30">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
-            Blockchain Integrity
-          </p>
-          <p className="text-3xl font-black text-blue-600 dark:text-blue-300">
-            {anchoredRate}%
-          </p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-            {anchoredCount} of {cases.length} reports are anchored with
-            blockchain proof records.
-          </p>
-        </div>
-        <div className="glass-card rounded-3xl p-6 border border-indigo-300/30 dark:border-indigo-500/20">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
-            Public Confidence Index
-          </p>
-          <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
-            {confidenceIndex}%
-          </p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-            Derived from finalized outcomes versus disputed outcomes to show
-            process stability.
-          </p>
-        </div>
-      </div>
-
-      {/* Corruption Hotspots Preview */}
-      {hotspotData && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="glass-card rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                Top Provinces
-              </h3>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Corruption Hotspots
-              </span>
-            </div>
-            <div className="space-y-2">
-              {hotspotData.by_province
-                .filter((p) => p.total > 0)
-                .slice(0, 5)
-                .map((province, i) => {
-                  const maxVal = Math.max(
-                    ...hotspotData.by_province.map((p) => p.total),
-                    1,
-                  );
-                  const pct = Math.round((province.total / maxVal) * 100);
-                  return (
-                    <div
-                      key={province.name}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-xs font-black text-slate-400 w-5">
-                        #{i + 1}
-                      </span>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {province.name}
-                          </span>
-                          <span className="text-xs font-black text-slate-600 dark:text-slate-300">
-                            {province.total}
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${pct > 70 ? "bg-rose-500" : pct > 40 ? "bg-amber-500" : "bg-emerald-500"}`}
-                            style={{ width: `${pct}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              {hotspotData.by_province.filter((p) => p.total > 0).length ===
-                0 && (
-                <p className="text-slate-500 text-sm text-center py-4">
-                  No location data available.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {hotspotData.critical_hotspots.length > 0 && (
-            <div className="glass-card rounded-3xl p-6 border border-rose-500/20">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-lg">🚨</span>
-                <h3 className="text-sm font-black text-rose-500 uppercase tracking-wider">
-                  Critical Hotspots
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {hotspotData.critical_hotspots.map((hs, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-3 rounded-xl bg-rose-500/5 border border-rose-500/20"
-                  >
-                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
-                      {hs.institution}
-                    </span>
-                    <span className="text-sm font-black text-rose-500 flex-shrink-0 ml-2">
-                      {hs.total}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
     </div>
   );

@@ -476,6 +476,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
             </div>
           )}
 
+          {submittedReport.type_corrected && (
+            <div className="rounded-2xl p-4 mb-8 border border-amber-200 dark:border-amber-500/20 bg-amber-50/80 dark:bg-amber-500/10">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                We auto-corrected the case type from {submittedReport.type_selected || "your selected category"} to {submittedReport.type} based on your description and evidence.
+              </p>
+            </div>
+          )}
+
           <div className="bg-white/20 dark:bg-white/5 rounded-2xl p-6 mb-8 border border-emerald-200/30 dark:border-white/10">
             <h3 className="font-bold text-emerald-900 dark:text-white mb-4">
               {t(language, "whatHappensNext")}
