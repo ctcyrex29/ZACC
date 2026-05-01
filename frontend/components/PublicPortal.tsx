@@ -545,6 +545,25 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
   const currentStatusOrder = getStatusOrder(trackedCase?.status ?? "SUBMITTED");
   const activeStatusIdx = currentStatusOrder.indexOf(trackedCase?.status ?? "SUBMITTED");
   const maxEvidenceReach = 10 - (trackedCase?.attachments_count ?? 0);
+
+  const orderedStageEvaluations = useMemo(() => {
+    if (!Array.isArray(trackedCase?.stage_evaluations)) return [];
+    return [...trackedCase.stage_evaluations].sort(
+      (a: any, b: any) =>
+        new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
+    );
+  }, [trackedCase]);
+
+  const finalOutcomeStage = useMemo(() => {
+    if (orderedStageEvaluations.length === 0) return null;
+    return (
+      [...orderedStageEvaluations]
+        .reverse()
+        .find((s: any) => ["SUCCESSFUL", "CLOSED"].includes(String(s.stage))) ||
+      null
+    );
+  }, [orderedStageEvaluations]);
+
   return (
     <div className="min-h-screen bg-[var(--zacc-bg)] text-[var(--zacc-text)] flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-8">
       {/* Settings Bar */}
@@ -947,7 +966,27 @@ export const PublicPortal: React.FC<PublicPortalProps> = ({
                     </div>
                   </div>
 
-                
+                  {(trackedCase.status === "SUCCESSFUL" || trackedCase.status === "CLOSED") && (
+                    <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-5">
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-2">
+                        Final Outcome Summary
+                      </p>
+                      <p className="text-sm text-emerald-800 dark:text-emerald-200 whitespace-pre-wrap leading-relaxed">
+                        {finalOutcomeStage?.investigator_notes ||
+                          (trackedCase.status === "SUCCESSFUL"
+                            ? "This case concluded successfully with corrective or enforcement action."
+                            : "This case was closed after final review and assessment of available evidence.")}
+                      </p>
+                      <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 mt-3">
+                        Recorded at: {finalOutcomeStage?.created_at
+                          ? new Date(finalOutcomeStage.created_at).toLocaleString()
+                          : trackedCase.last_updated
+                          ? new Date(trackedCase.last_updated).toLocaleString()
+                          : "Date not available"}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Evidence Upload */}
                   {!["CLOSED", "DISPUTED"].includes(trackedCase.status) && (
                     <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#080c18] p-5">
