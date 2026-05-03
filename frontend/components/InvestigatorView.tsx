@@ -77,79 +77,153 @@ function generateStagePDF(caseData: any, stage: any) {
   const inv = stage.investigator;
   const invName = inv?.name || "Investigator";
   const invEmail = inv?.email || "";
+  const dateStr = new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const reportId =
+    "ZACC/RPT/REF/" +
+    new Date().getFullYear() +
+    "/" +
+    Date.now().toString(36).toUpperCase();
   const win = window.open("", "_blank", "width=900,height=750");
   if (!win) return;
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>ZACC Stage Report – ${caseData.reference_code || caseData.case_id}</title>
+  <title>ZACC Official Filing - Referral Stage Report - ${caseData.reference_code || caseData.case_id}</title>
   <style>
+    @page { size: A4; margin: 20mm 18mm 25mm 18mm; }
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:Arial,sans-serif;color:#111;padding:52px;background:#fff;}
-    .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:80px;color:rgba(0,0,0,0.035);pointer-events:none;font-weight:900;letter-spacing:4px;white-space:nowrap;}
-    .header{border-bottom:3px solid #059669;padding-bottom:20px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:flex-end;}
-    .header-logo{width:52px;height:52px;border-radius:50%;object-fit:cover;margin-right:12px;}
-    .header-left{display:flex;align-items:center;}
-    .header-left-text h1{font-size:20px;font-weight:900;color:#059669;letter-spacing:2px;text-transform:uppercase;}
-    .header-left h2{font-size:13px;color:#555;margin-top:4px;}
-    .confid{font-size:10px;font-weight:900;color:#e11d48;letter-spacing:3px;text-transform:uppercase;margin-top:6px;}
-    .header-right{text-align:right;font-size:11px;color:#888;}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:24px;}
-    .row2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
-    .field .label{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#777;margin-bottom:4px;}
-    .field .value{font-size:13px;color:#111;font-weight:600;}
-    .divider{height:1px;background:#e2e8f0;margin:24px 0;}
-    .notes-box{background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #059669;border-radius:4px;padding:16px;font-size:13px;line-height:1.7;color:#333;margin-top:6px;}
-    .section-title{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#059669;margin-bottom:12px;}
-    .footer{margin-top:52px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:10px;color:#aaa;display:flex;justify-content:space-between;}
-    @media print{body{padding:36px;}}
+    body{font-family:'Times New Roman',Georgia,'Segoe UI',serif;color:#1a1a1a;background:#fff;font-size:11pt;line-height:1.6;}
+    .page{max-width:760px;margin:0 auto;padding:30px 40px;}
+    .official-header{text-align:center;padding-bottom:18px;border-bottom:3px double #1a472a;margin-bottom:20px;}
+    .coat-of-arms{width:72px;height:72px;margin:0 auto 10px;border-radius:50%;overflow:hidden;border:3px solid #b5985a;}
+    .coat-of-arms img{width:100%;height:100%;object-fit:cover;}
+    .state-name{font-size:9pt;font-weight:bold;letter-spacing:4px;text-transform:uppercase;color:#666;margin-bottom:2px;}
+    .commission-name{font-size:15pt;font-weight:bold;text-transform:uppercase;letter-spacing:2px;color:#1a472a;margin-bottom:2px;}
+    .commission-sub{font-size:9pt;color:#555;font-style:italic;margin-bottom:8px;}
+    .motto{font-size:8pt;color:#888;font-style:italic;letter-spacing:1px;}
+    .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding:12px 16px;background:#f9f7f2;border:1px solid #e5e0d5;border-radius:4px;}
+    .doc-meta-left{text-align:left;} .doc-meta-right{text-align:right;}
+    .doc-meta .label{font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#888;display:block;}
+    .doc-meta .value{font-size:10pt;font-weight:bold;color:#1a1a1a;}
+    .doc-meta .ref-num{font-size:11pt;font-weight:bold;color:#1a472a;font-family:'Courier New',monospace;}
+    .classification{display:inline-block;font-size:8pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#b91c1c;border:2px solid #b91c1c;padding:2px 10px;border-radius:2px;margin-top:4px;}
+    .doc-title{text-align:center;margin:20px 0;padding:16px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;}
+    .doc-title h1{font-size:16pt;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#1a1a1a;margin-bottom:4px;}
+    .doc-title .subtitle{font-size:10pt;color:#555;}
+    .section{margin-bottom:22px;}
+    .section-num{font-size:11pt;font-weight:bold;color:#1a472a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+    .section-body{font-size:10.5pt;color:#333;text-align:justify;}
+    .section-body p{margin-bottom:8px;}
+    .priority-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:10pt;}
+    .priority-table th{background:#1a472a;color:#fff;padding:8px 12px;text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:1px;}
+    .priority-table td{padding:8px 12px;border-bottom:1px solid #e5e5e5;vertical-align:top;}
+    .priority-table tr:nth-child(even) td{background:#fafaf7;}
+    .notes-box{font-size:10pt;color:#333;line-height:1.65;background:#f9f7f2;border-left:3px solid #1a472a;border:1px solid #e5e0d5;border-left-width:3px;border-radius:4px;padding:12px;}
+    .doc-footer{margin-top:30px;padding-top:12px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:8pt;color:#999;}
+    @media print { body{padding:0;} .page{padding:0;} }
   </style>
 </head>
 <body>
-<div class="watermark">CONFIDENTIAL</div>
-<div class="header">
-  <div class="header-left">
-    <img class="header-logo" src="${window.location.origin}/zacc-logo.png" alt="ZACC"/>
-    <div class="header-left-text">
-      <h1>Zimbabwe Anti-Corruption Commission</h1>
-      <h2>Official Case Stage Report</h2>
-      <div class="confid">Confidential — For Official Use Only</div>
+<div class="page">
+  <div class="official-header">
+    <div class="coat-of-arms"><img src="${window.location.origin}/zacc-logo.png" alt="ZACC"/></div>
+    <div class="state-name">Republic of Zimbabwe</div>
+    <div class="commission-name">Zimbabwe Anti-Corruption Commission</div>
+    <div class="commission-sub">Established under Section 254 of the Constitution of Zimbabwe</div>
+    <div class="motto">"Fighting Corruption, Promoting Integrity"</div>
+  </div>
+
+  <div class="doc-meta">
+    <div class="doc-meta-left">
+      <span class="label">Document Reference</span>
+      <span class="ref-num">${reportId}</span>
+      <br/><span class="classification">CONFIDENTIAL</span>
+    </div>
+    <div class="doc-meta-right">
+      <span class="label">Date of Issue</span>
+      <span class="value">${dateStr}</span><br/>
+      <span class="label" style="margin-top:6px;">Prepared By</span>
+      <span class="value">${invName}</span>
     </div>
   </div>
-  <div class="header-right">
-    Report Generated:<br/><strong>${new Date().toLocaleString()}</strong>
+
+  <div class="doc-title">
+    <h1>Referral Stage Case Report</h1>
+    <div class="subtitle">Case: ${caseData.reference_code || caseData.case_id || caseData.id || "N/A"}</div>
   </div>
-</div>
 
-<div class="row3">
-  <div class="field"><div class="label">Case Reference</div><div class="value" style="color:#059669;font-size:15px;">${caseData.reference_code || "—"}</div></div>
-  <div class="field"><div class="label">Case ID</div><div class="value">${caseData.case_id || caseData.id || "—"}</div></div>
-  <div class="field"><div class="label">Corruption Type</div><div class="value">${caseData.type || "—"}</div></div>
-</div>
+  <div class="section">
+    <div class="section-num">1. Case Details</div>
+    <table class="priority-table">
+      <thead>
+        <tr>
+          <th>Case Reference</th>
+          <th>Case ID</th>
+          <th>Corruption Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${caseData.reference_code || "—"}</td>
+          <td>${caseData.case_id || caseData.id || "—"}</td>
+          <td>${caseData.type || "—"}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-<div class="divider"></div>
-<div class="section-title">Stage Action</div>
-<div class="row3">
-  <div class="field"><div class="label">Stage</div><div class="value" style="font-size:15px;color:#1e293b;">${statusLabel(stage.stage)}</div></div>
-  <div class="field"><div class="label">Action Date &amp; Time</div><div class="value">${new Date(stage.created_at).toLocaleString()}</div></div>
-  <div class="field"><div class="label">Assessment Score</div><div class="value">${stage.final_score != null ? stage.final_score + " / 100" : "—"}</div></div>
-</div>
+  <div class="section">
+    <div class="section-num">2. Stage Action</div>
+    <table class="priority-table">
+      <thead>
+        <tr>
+          <th>Stage</th>
+          <th>Action Date &amp; Time</th>
+          <th>Assessment Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${statusLabel(stage.stage)}</td>
+          <td>${new Date(stage.created_at).toLocaleString()}</td>
+          <td>${stage.final_score != null ? stage.final_score + " / 100" : "—"}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-<div class="divider"></div>
-<div class="section-title">Action Performed By</div>
-<div class="row2" style="margin-bottom:24px;">
-  <div class="field"><div class="label">Officer Name</div><div class="value">${invName}</div></div>
-  <div class="field"><div class="label">Officer Email</div><div class="value">${invEmail}</div></div>
-</div>
+  <div class="section">
+    <div class="section-num">3. Action Performed By</div>
+    <table class="priority-table">
+      <thead>
+        <tr>
+          <th>Officer Name</th>
+          <th>Officer Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${invName}</td>
+          <td>${invEmail || "—"}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-<div class="divider"></div>
-<div class="section-title">Report Statement</div>
-<div class="notes-box">${stage.investigator_notes || "No statement recorded."}</div>
+  <div class="section">
+    <div class="section-num">4. Report Statement</div>
+    <div class="notes-box">${stage.investigator_notes || "No statement recorded."}</div>
+  </div>
 
-<div class="footer">
-  <span>Zimbabwe Anti-Corruption Commission · Integrity Management System</span>
-  <span>Document Ref: ${caseData.reference_code || caseData.case_id}-${stage.stage}-${new Date().getFullYear()}</span>
+  <div class="doc-footer">
+    <div>Zimbabwe Anti-Corruption Commission<br/>This document is confidential. Unauthorised disclosure is an offence under the Official Secrets Act.</div>
+    <div style="text-align:right;">Ref: ${reportId}<br/>Generated: ${new Date().toLocaleString()}</div>
+  </div>
 </div>
 <script>window.onload=()=>setTimeout(()=>window.print(),500);</script>
 </body>
@@ -513,7 +587,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     });
   };
 
-  const runExpertReview = async () => {
+  const runExpertReview = useCallback(async () => {
     if (!dossierData) return;
     setExpertReviewLoading(true);
     try {
@@ -526,7 +600,14 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     } finally {
       setExpertReviewLoading(false);
     }
-  };
+  }, [dossierData]);
+
+  useEffect(() => {
+    if (!dossierOpen || !dossierData) return;
+    if (["CLOSED", "DISPUTED", "SUCCESSFUL"].includes(dossierData.status)) {
+      runExpertReview();
+    }
+  }, [dossierOpen, dossierData, runExpertReview]);
 
   const runPreReviewAnalysis = async (reportId?: string) => {
     const id = reportId || dossierData?.case_id || dossierData?.id;
@@ -546,6 +627,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   // ── Derived lists ──
   const priorityRank: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
   const filteredCases = cases.filter((c) => {
+    if (!isAdmin && c.status === CaseStatus.REFERRED) {
+      return false;
+    }
     const matchesFilter = filter === "ALL" || c.status === filter;
     const matchesSearch =
       !search ||
@@ -697,7 +781,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
 
       {/* ── Status Filters ── */}
       <div className="flex flex-wrap gap-2">
-        {(["ALL", ...Object.values(CaseStatus)] as const).map((s) => (
+        {([
+          "ALL",
+          ...(isAdmin
+            ? Object.values(CaseStatus)
+            : Object.values(CaseStatus).filter((s) => s !== CaseStatus.REFERRED)),
+        ] as const).map((s) => (
           <button
             key={s}
             onClick={() => setFilter(s)}
@@ -1129,7 +1218,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             <div>
                               <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Analysis</p>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {Object.entries(expert.dimensions as Record<string, any>).map(([key, dim]: [string, any]) => (
+                                {Object.entries(expert.dimensions as Record<string, any>)
+                                  .filter(([key]) => key !== "complexity")
+                                  .map(([key, dim]: [string, any]) => (
                                   <div key={key} className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
                                     <div className="flex items-center justify-between mb-1.5">
                                       <p className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
@@ -1818,7 +1909,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             <button
                               onClick={() => {
                                 if (!showReferralMenu) {
+                                  const proceed = window.confirm(
+                                    "Proceed to refer this case to an external authority? You will need to select the authority and then click Proceed Referral.",
+                                  );
+                                  if (!proceed) return;
                                   setShowReferralMenu(true);
+                                  toast.success("Select the relevant authority, complete referral details, then click Proceed Referral.");
                                   return;
                                 }
 
@@ -1850,7 +1946,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                               {actionProcessing
                                 ? "Processing..."
                                 : showReferralMenu
-                                ? "Submit Referral"
+                                ? "Proceed Referral"
                                 : "Refer to Other Authority"}
                             </button>
                             <button
@@ -1873,7 +1969,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                         </div>
                       )}
 
-                      {/* REFERRED: Awaiting competent authority decision */}
+                      {/* REFERRED: handled in Authority Findings page */}
                       {currentStatus === "REFERRED" && (
                         <div className="rounded-2xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 p-5 space-y-4">
                           <p className="text-xs font-black text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-2">
@@ -1881,8 +1977,8 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           </p>
                           <p className="text-sm text-purple-700 dark:text-purple-300">
                             This case has been formally referred to a competent external authority for legal or regulatory action.
-                            A referral report has been generated. Once results are received, upload the outcome files
-                            and record the decision below.
+                            All case proceedings and final outcomes for referred cases are now recorded in the Authority Findings page.
+                            This dossier is read-only at this stage.
                           </p>
 
                           {/* Print Referral Report PDF */}
@@ -1902,41 +1998,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           </button>
 
                           <div className="border-t border-purple-200 dark:border-purple-500/20 pt-4">
-                            <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-3">
-                              Record Authority Outcome
+                            <p className="text-xs text-purple-700 dark:text-purple-300">
+                              Use the Authority Findings page to log external authority proceedings, print table-format reports, and complete this case.
                             </p>
-                            <div>
-                              <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                                Results Commentary <span className="text-rose-500">*</span>
-                              </label>
-                              <textarea
-                                rows={4}
-                                value={actionNotes}
-                                onChange={(e) => setActionNotes(e.target.value)}
-                                disabled={actionProcessing}
-                                placeholder="Record the authority decision, case outcome, directives, sanctions, or reasons. Attach supporting outcome documents (min 10 characters)..."
-                                className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none font-medium"
-                              />
-                              <p className="text-xs text-slate-500 mt-1">
-                                {actionNotes.length} characters
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 mt-3">
-                              <button
-                                onClick={() => doAction("SUCCESSFUL")}
-                                disabled={actionProcessing}
-                                className="py-3 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
-                              >
-                                {actionProcessing ? "Processing..." : "Case Successful — Record Results"}
-                              </button>
-                              <button
-                                onClick={() => doAction("CLOSED")}
-                                disabled={actionProcessing}
-                                className="py-3 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-slate-800 dark:text-slate-200 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
-                              >
-                                {actionProcessing ? "Processing..." : "Close — No Action Taken"}
-                              </button>
-                            </div>
                           </div>
                         </div>
                       )}
@@ -2078,81 +2142,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                     </div>
                   )}
 
-                  {/* ── Post-Case Expert Review (CLOSED/DISPUTED/SUCCESSFUL) ── */}
-                  {(currentStatus === "CLOSED" || currentStatus === "DISPUTED" || currentStatus === "SUCCESSFUL") && (
-                    <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/5 p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">
-                          Post-Case Expert Review
-                        </p>
-                        
-                      </div>
-                      {expertReviewLoading && (
-                        <div className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400">
-                          <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                          Expert system is reviewing the case...
-                        </div>
-                      )}
-                      {expertReview && !expertReview.error && (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                              expertReview.verdict === "HANDLED_CORRECTLY" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" :
-                              expertReview.verdict === "NEEDS_IMPROVEMENT" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" :
-                              "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
-                            }`}>
-                              {expertReview.verdict?.replace(/_/g, " ")}
-                            </span>
-                            <span className="text-xs font-bold text-slate-500">
-                              Confidence: {expertReview.confidence}% | Investigation Score: {expertReview.investigation_score}/100
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{expertReview.summary}</p>
-                          {expertReview.strengths?.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Strengths</p>
-                              <ul className="space-y-1">
-                                {expertReview.strengths.map((s: string, i: number) => (
-                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                    <span className="text-emerald-500 mt-0.5">✓</span> {s}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {expertReview.weaknesses?.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Areas for Improvement</p>
-                              <ul className="space-y-1">
-                                {expertReview.weaknesses.map((w: string, i: number) => (
-                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                    <span className="text-amber-500 mt-0.5">!</span> {w}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {expertReview.recommendations?.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Recommendations</p>
-                              <ul className="space-y-1">
-                                {expertReview.recommendations.map((r: string, i: number) => (
-                                  <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                                    <span className="text-blue-500 mt-0.5">→</span> {r}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {expertReview?.error && (
-                        <p className="text-xs text-rose-500">{expertReview.error}</p>
-                      )}
-                    </div>
-                  )}
 
-                  
                 </div>
               ) : null}
         </div>

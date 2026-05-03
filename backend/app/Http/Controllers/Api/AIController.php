@@ -258,11 +258,44 @@ PROMPT;
         }
 
         try {
+            // Expert-system baseline (always available).
+            $expertReport = $this->expertEvaluationService->generatePreReviewReport($report);
+            $investigationScore = (int) ($expertReport['overall_score'] ?? 50);
+
+            $defaultVerdict = 'NEEDS_IMPROVEMENT';
+            if ($investigationScore >= 75) {
+                $defaultVerdict = 'HANDLED_CORRECTLY';
+            } elseif ($investigationScore < 45) {
+                $defaultVerdict = 'MISHANDLED';
+            }
+
+            $dimensionStrengths = [];
+            foreach (($expertReport['dimensions'] ?? []) as $dimKey => $dim) {
+                if (($dim['score'] ?? 0) >= 60) {
+                    $dimensionStrengths[] = ($dim['label'] ?? ucfirst((string) $dimKey)) . ' dimension scored strongly.';
+                }
+            }
+
+            $baseReview = [
+                'verdict' => $defaultVerdict,
+                'confidence' => 72,
+                'summary' => $expertReport['summary'] ?? 'Expert-system review completed.',
+                'strengths' => !empty($dimensionStrengths) ? $dimensionStrengths : ['Case handling has at least one strong assessment dimension.'],
+                'weaknesses' => !empty($expertReport['flags']) ? array_values($expertReport['flags']) : ['No major weaknesses flagged by the expert system.'],
+                'recommendations' => !empty($expertReport['recommendations']) ? array_values($expertReport['recommendations']) : ['Continue with documented case-handling best practices.'],
+                'investigation_score' => $investigationScore,
+                'expert_analysis' => $expertReport,
+                'ai_enhancement' => null,
+            ];
+
             $apiKey = (string) config('services.gemini.api_key');
             $model = (string) config('services.gemini.model', 'gemini-2.0-flash');
 
             if (!$apiKey) {
-                return response()->json(['success' => false, 'message' => 'AI service is not configured. Please ask the administrator to set GEMINI_API_KEY.'], 503);
+                return response()->json([
+                    'success' => true,
+                    'data' => $baseReview,
+                ]);
             }
 
             // Build comprehensive case summary for review
@@ -355,12 +388,28 @@ PROMPT;
             $response = $this->makeGeminiRequest($url, $payload);
 
             if (!$response['success']) {
-                return response()->json(['success' => false, 'message' => 'AI review failed'], 500);
+                return response()->json([
+                    'success' => true,
+                    'data' => $baseReview,
+                ]);
             }
+
+            $aiReview = is_array($response['data'] ?? null) ? $response['data'] : [];
+            $merged = [
+                'verdict' => $aiReview['verdict'] ?? $baseReview['verdict'],
+                'confidence' => max(0, min(100, (int) ($aiReview['confidence'] ?? $baseReview['confidence']))),
+                'summary' => $aiReview['summary'] ?? $baseReview['summary'],
+                'strengths' => is_array($aiReview['strengths'] ?? null) ? $aiReview['strengths'] : $baseReview['strengths'],
+                'weaknesses' => is_array($aiReview['weaknesses'] ?? null) ? $aiReview['weaknesses'] : $baseReview['weaknesses'],
+                'recommendations' => is_array($aiReview['recommendations'] ?? null) ? $aiReview['recommendations'] : $baseReview['recommendations'],
+                'investigation_score' => max(0, min(100, (int) ($aiReview['investigation_score'] ?? $baseReview['investigation_score']))),
+                'expert_analysis' => $expertReport,
+                'ai_enhancement' => $aiReview,
+            ];
 
             return response()->json([
                 'success' => true,
-                'data' => $response['data'],
+                'data' => $merged,
             ]);
         } catch (\Exception $e) {
             Log::error('Expert case review failed: ' . $e->getMessage());
