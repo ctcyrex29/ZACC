@@ -395,7 +395,7 @@ const App: React.FC = () => {
         <div className="fixed bottom-4 right-4 z-[70] w-[250px] zacc-surface rounded-2xl p-3 sm:p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-black uppercase tracking-wider text-[var(--zacc-muted)]">
-              Quick Theme Preview
+              Quick +review
             </p>
             <button
               type="button"

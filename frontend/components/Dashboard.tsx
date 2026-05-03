@@ -70,7 +70,7 @@ export const Dashboard: React.FC = () => {
       color: "text-slate-900 dark:text-white",
     },
     {
-      label: "Integrity Alerts",
+      label: "Critical Alerts",
       value: cases.filter((c) => c.status === CaseStatus.DISPUTED).length,
       icon: "🔎",
       accent: "border-l-cyan-400",

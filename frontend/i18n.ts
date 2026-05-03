@@ -131,7 +131,7 @@ const dictionary: Record<Language, Record<string, string>> = {
     closed: "Closed",
     disputed: "Disputed",
     totalCases: "Total Cases",
-    resolutionRate: "Resolution Rate",
+    
     successRate: "Success Rate",
     avgRiskScore: "Avg Risk Score",
     monthlyTrend: "Monthly Trend",

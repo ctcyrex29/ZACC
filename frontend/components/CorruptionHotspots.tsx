@@ -275,24 +275,7 @@ export const CorruptionHotspots: React.FC = () => {
             Critical Hotspots
           </p>
         </div>
-        <div className="glass-card p-5 rounded-2xl">
-          <p className="text-xl">📈</p>
-          <p className="text-2xl font-black mt-2">
-            <span
-              className={
-                data.trend.change_percent > 0
-                  ? "text-rose-500"
-                  : "text-emerald-500"
-              }
-            >
-              {data.trend.change_percent > 0 ? "+" : ""}
-              {data.trend.change_percent}%
-            </span>
-          </p>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
-            30-Day Trend
-          </p>
-        </div>
+        
         <div className="glass-card p-5 rounded-2xl">
           <p className="text-xl">🏢</p>
           <p className="text-2xl font-black text-indigo-500 mt-2">

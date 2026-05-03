@@ -634,21 +634,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         <div
           className={`rounded-2xl border p-4 ${isAdmin ? "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5" : "border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10"}`}
         >
-        <div className="flex items-center gap-3">
-          <span className="text-xl">{isAdmin ? "🛡️" : "🔍"}</span>
-          <div>
-            <p
-              className={`text-sm font-black uppercase tracking-wider ${isAdmin ? "text-amber-700 dark:text-amber-400" : "text-blue-700 dark:text-blue-300"}`}
-            >
-              {isAdmin ? "Admin Monitoring Mode" : "Investigator Mode"}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isAdmin
-                ? "You can view all cases and monitor progress. Case review actions are restricted to investigators."
-                : "You can review dossiers, assess cases, and advance investigation stages."}
-            </p>
-          </div>
-        </div>
+        
       </div>
 
      {/* ── Header & Filters ── */}
@@ -657,11 +643,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
           <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             {isAdmin ? "System Monitoring Dashboard" : "Investigation Pipeline"}
           </h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            {isAdmin
-              ? "Monitor all reported cases and track investigator progress across the system."
-              : "Review and manage reported cases through the investigation workflow."}
-          </p>
+          
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <input
@@ -980,16 +962,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                             )}
                           </div>
                         )}
-                        {dossierData.ai_summary.investigation_complexity && (
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexity</p>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              dossierData.ai_summary.investigation_complexity === 'HIGH' ? 'bg-purple-500/10 text-purple-600 border-purple-200 dark:border-purple-500/20' :
-                              dossierData.ai_summary.investigation_complexity === 'MEDIUM' ? 'bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-500/20' :
-                              'bg-slate-500/10 text-slate-600 border-slate-200 dark:border-slate-500/20'
-                            }`}>{dossierData.ai_summary.investigation_complexity}</span>
-                          </div>
-                        )}
+                        
                       </div>
 
                       {/* Urgency explanation */}
@@ -1080,11 +1053,9 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">
-                          Expert System — Pre-Review Findings Report
+                          Pre-Review Findings Report
                         </p>
-                        <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">
-                          Multi-dimensional case analysis with evidence assessment
-                        </p>
+                
                       </div>
                       {!preReviewReport && !preReviewLoading && (
                         <button onClick={() => runPreReviewAnalysis()} className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-bold uppercase tracking-wider transition-all">
@@ -1101,7 +1072,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                     {preReviewLoading && (
                       <div className="flex items-center gap-3 py-6 justify-center">
                         <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Analyzing case across 7 dimensions...</p>
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Analyzing...</p>
                       </div>
                     )}
 
@@ -1151,20 +1122,12 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                                 'bg-rose-500/10 text-rose-600 border-rose-200'
                               }`}>{expert.evidence_assessment?.quality || 'N/A'}</span>
                             </div>
-                            <div className="bg-white/60 dark:bg-white/5 rounded-xl p-3 border border-slate-100 dark:border-white/5 text-center">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Complexity</p>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
-                                expert.complexity_level === 'HIGH' ? 'bg-purple-500/10 text-purple-600 border-purple-200' :
-                                expert.complexity_level === 'MEDIUM' ? 'bg-blue-500/10 text-blue-600 border-blue-200' :
-                                'bg-slate-500/10 text-slate-600 border-slate-200'
-                              }`}>{expert.complexity_level}</span>
-                            </div>
                           </div>
 
                           {/* Dimensional Breakdown */}
                           {expert.dimensions && (
                             <div>
-                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Dimensional Analysis</p>
+                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Analysis</p>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {Object.entries(expert.dimensions as Record<string, any>).map(([key, dim]: [string, any]) => (
                                   <div key={key} className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
@@ -1390,7 +1353,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           {/* Recommendations */}
                           {expert.recommendations?.length > 0 && (
                             <div>
-                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Expert System Recommendations</p>
+                              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Recommendations</p>
                               <ul className="space-y-1.5">
                                 {expert.recommendations.map((r: string, i: number) => (
                                   <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2">
@@ -1403,10 +1366,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
 
                       
 
-                          {/* Report timestamp */}
-                          <p className="text-[9px] text-slate-400 font-mono pt-1 text-right">
-                            Expert report generated: {expert.generated_at ? new Date(expert.generated_at).toLocaleString() : 'now'}
-                          </p>
+                         
                         </div>
                       );
                     })()}
@@ -1415,9 +1375,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                   {/* Case Book — Timeline */}
                   <div className="rounded-2xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <p className="text-xs font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest">
-                        Case Book Timeline
-                      </p>
+                      
                       <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
                         Bookmark: {statusLabel(bookmarkStage)}
                       </p>
@@ -1471,9 +1429,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                       })}
                     </div>
 
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                      Past stages are locked for editing. Investigators can only continue from the bookmarked stage.
-                    </p>
+                    
                   </div>
 
                   {/* Evidence Shelf */}
@@ -2196,66 +2152,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                     </div>
                   )}
 
-                  {/* ── Stage History ── */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                      Stage History
-                    </p>
-                    {stagesData.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">
-                        No stage records yet.
-                      </p>
-                    ) : (
-                      stagesData.map((stage: any) => (
-                        <div
-                          key={stage.id}
-                          className="rounded-2xl border border-slate-200 dark:border-white/10 p-4"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <span
-                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${statusBadge(stage.stage)}`}
-                                >
-                                  {statusLabel(stage.stage)}
-                                </span>
-                                {stage.investigator && (
-                                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    by {stage.investigator.name}
-                                    {stage.investigator.email
-                                      ? ` (${stage.investigator.email})`
-                                      : ""}
-                                  </span>
-                                )}
-                                <span className="text-xs text-slate-500">
-                                  {new Date(stage.created_at).toLocaleString()}
-                                </span>
-                              </div>
-                              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                                {stage.investigator_notes}
-                              </p>
-                              {stage.final_score != null && (
-                                <p className="text-xs text-slate-500 mt-2">
-                                  Score:{" "}
-                                  <strong className="text-emerald-600 dark:text-emerald-400">
-                                    {stage.final_score}/100
-                                  </strong>
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() =>
-                                generateStagePDF(dossierData, stage)
-                              }
-                              className="flex-shrink-0 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all whitespace-nowrap"
-                            >
-                              PDF Report
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  
                 </div>
               ) : null}
         </div>

@@ -607,14 +607,7 @@ export const ReportGeneration: React.FC<{ language: Language }> = ({ language })
 
           {/* Rates */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="zacc-surface rounded-2xl p-5 border border-blue-300/40 dark:border-blue-500/30">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                {t(language, "resolutionRate")}
-              </p>
-              <p className="text-3xl font-black text-blue-600 dark:text-blue-300">
-                {data.overview.resolution_rate}%
-              </p>
-            </div>
+            
             <div className="zacc-surface rounded-2xl p-5 border border-cyan-300/40 dark:border-cyan-500/30">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                 {t(language, "successRate")}
