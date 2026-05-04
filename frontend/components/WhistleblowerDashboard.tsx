@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { CaseReport, CaseStatus, User } from "../types";
@@ -42,40 +42,62 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadCases = async () => {
-      try {
-        setLoading(true);
-        const response = await apiClient.getReports();
-        if (response.success && Array.isArray(response.data)) {
-          const mappedCases = response.data.map((report: any) => ({
-            id: report.case_id,
-            timestamp: report.created_at,
-            type: report.type,
-            description: report.description,
-            location: report.location,
-            institution: report.institution,
-            status: report.status,
-            riskScore: report.risk_score,
-            priority: report.priority,
-            reporterId: report.user_id,
-            referenceCode: report.reference_code,
-            disputeReason: report.dispute_reason,
-            lastUpdated: report.last_updated,
-            blockchain_tx_hash: report.blockchain_tx_hash,
-            blockchain_block_number: report.blockchain_block_number,
-          }));
-          setCases(mappedCases);
-        }
-      } catch (error) {
-        console.error("Failed to load whistleblower dashboard data", error);
-      } finally {
-        setLoading(false);
+  const loadCases = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const response = await apiClient.getReports();
+      if (response.success && Array.isArray(response.data)) {
+        const mappedCases = response.data.map((report: any) => ({
+          id: report.case_id,
+          timestamp: report.created_at,
+          type: report.type,
+          description: report.description,
+          location: report.location,
+          institution: report.institution,
+          status: report.status,
+          riskScore: report.risk_score,
+          priority: report.priority,
+          reporterId: report.user_id,
+          referenceCode: report.reference_code,
+          disputeReason: report.dispute_reason,
+          lastUpdated: report.last_updated,
+          blockchain_tx_hash: report.blockchain_tx_hash,
+          blockchain_block_number: report.blockchain_block_number,
+          aiCategory:
+            report.ai_summary?.category ||
+            report.ai_summary?.type_inference?.inferred_type ||
+            report.type,
+          aiConfidence:
+            Number(
+              report.ai_summary?.confidence ??
+                report.ai_summary?.type_inference?.confidence ??
+                0,
+            ) || 0,
+        }));
+        setCases(mappedCases);
       }
-    };
+    } catch (error) {
+      if (!silent) {
+        console.error("Failed to load whistleblower dashboard data", error);
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadCases();
-  }, [user.id]);
+  }, [loadCases, user.id]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadCases(true);
+      }
+    }, 12000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadCases]);
 
   const stats = useMemo(() => {
     const total = cases.length;
@@ -269,6 +291,10 @@ export const WhistleblowerDashboard: React.FC<WhistleblowerDashboardProps> = ({
                           {item.referenceCode}
                         </p>
                       )}
+                      <p className="text-[10px] font-bold text-violet-600 dark:text-violet-300 mt-1">
+                        AI: {item.aiCategory || item.type}
+                        {item.aiConfidence ? ` (${item.aiConfidence}%)` : ""}
+                      </p>
                     </div>
                   </div>
 

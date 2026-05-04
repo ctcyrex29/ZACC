@@ -63,17 +63,24 @@ class ReportController extends Controller
                 $q->select('id', 'name', 'email');
             }]);
         } elseif ($user->isInvestigator()) {
-            // Investigators can see reports matching their allowed case types
+            // Investigators see their allowed case types plus unassigned intake cases.
             $query->with(['user' => function ($q) {
                 $q->select('id', 'name', 'email');
             }]);
-            $allowed = $user->allowed_case_types;
-            if (!empty($allowed)) {
-                $query->whereIn('type', $allowed);
-            } else {
-                // No types assigned — investigator sees nothing until admin assigns types
-                $query->whereRaw('1 = 0');
-            }
+            $allowed = is_array($user->allowed_case_types) ? $user->allowed_case_types : [];
+            $query->where(function ($investigatorQuery) use ($allowed) {
+                if (!empty($allowed)) {
+                    $investigatorQuery->whereIn('type', $allowed);
+                } else {
+                    $investigatorQuery->whereRaw('1 = 0');
+                }
+
+                $investigatorQuery->orWhere(function ($intakeQuery) {
+                    $intakeQuery
+                        ->whereIn('status', ['SUBMITTED', 'UNDER_REVIEW'])
+                        ->whereNull('assigned_to');
+                });
+            });
         } else {
             // Regular users can only see their own reports
             $query->where('user_id', $user->id);

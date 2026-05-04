@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import * as LucideIcons from "lucide-react";
 import { User, UserRole } from "../types";
 import { View } from "../App";
 import { Language, t } from "../i18n";
@@ -23,6 +24,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [stealthActive, setStealthActive] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  const iconMap: Record<string, keyof typeof LucideIcons> = {
+    dashboard: "Home",
+    report: "FileText",
+    tracking: "Search",
+    investigator: "Shield",
+    authorities: "Send",
+    reports: "BarChart3",
+    hotspots: "Flame",
+    users: "Users",
+    logout: "LogOut",
+  };
+
+  const renderIcon = (icon: string) => {
+    const iconName = iconMap[icon] ?? "Circle";
+    const IconComponent = LucideIcons[iconName] as React.ComponentType<{
+      className?: string;
+      strokeWidth?: number;
+      "aria-hidden"?: boolean;
+    }>;
+
+    return <IconComponent className="w-5 h-5" strokeWidth={2.2} aria-hidden={true} />;
+  };
+
   const toggleStealth = () => {
     setStealthActive(!stealthActive);
     document.documentElement.classList.toggle("stealth-blur");
@@ -35,28 +59,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
         user.role === UserRole.WHISTLEBLOWER
           ? t(language, "myDashboard")
           : t(language, "systemOverview"),
-      icon: "📊",
+      icon: "dashboard",
     },
   ];
 
   const whistleblowerItems = [
-    { id: "report", label: t(language, "reportCase"), icon: "📝" },
-    { id: "tracking", label: t(language, "myReports"), icon: "🛰️" },
+    { id: "report", label: t(language, "reportCase"), icon: "report" },
+    { id: "tracking", label: t(language, "myReports"), icon: "tracking" },
   ];
 
   const investigatorItems = [
-    { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
-    { id: "authorities", label: "Authority Findings", icon: "🧾" },
-    { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
-    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
+    { id: "investigator", label: t(language, "controlCenter"), icon: "investigator" },
+    { id: "authorities", label: "Referred", icon: "authorities" },
+    { id: "reports", label: t(language, "reportGeneration"), icon: "reports" },
+    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "hotspots" },
   ];
 
   const adminItems = [
-    { id: "investigator", label: t(language, "controlCenter"), icon: "📂" },
-    { id: "authorities", label: "Authority Findings", icon: "🧾" },
-    { id: "reports", label: t(language, "reportGeneration"), icon: "📋" },
-    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "🔥" },
-    { id: "users", label: t(language, "userManagement"), icon: "👤" },
+    { id: "investigator", label: t(language, "controlCenter"), icon: "investigator" },
+    { id: "authorities", label: "Referred", icon: "authorities" },
+    { id: "reports", label: t(language, "reportGeneration"), icon: "reports" },
+    { id: "hotspots", label: t(language, "corruptionHotspots"), icon: "hotspots" },
+    { id: "users", label: t(language, "userManagement"), icon: "users" },
   ];
 
   const getMenuItems = () => {
@@ -113,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span
                 className={`text-2xl transition-transform group-hover:scale-110 ${isActive ? "scale-110" : ""} relative`}
               >
-                {item.icon}
+                {renderIcon(item.icon)}
               </span>
               <span
                 className={`hidden md:block font-black text-[11px] uppercase tracking-widest transition-colors ${isActive ? "text-[var(--zacc-sidebar-text-active)]" : ""}`}
@@ -141,7 +165,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 : "bg-white/10 border-white/15 text-blue-100 hover:text-white hover:bg-white/15"
             }`}
           >
-            <span className="text-xl">{stealthActive ? "👁️‍🗨️" : "👁️"}</span>
+            <span className="text-xl">
+              {stealthActive ? (
+                <LucideIcons.EyeOff className="w-5 h-5" strokeWidth={2.25} aria-hidden={true} />
+              ) : (
+                <LucideIcons.Eye className="w-5 h-5" strokeWidth={2.25} aria-hidden={true} />
+              )}
+            </span>
             <span className="font-black text-[10px] uppercase tracking-widest hidden lg:block">
               {stealthActive ? "Stealth: ON" : "Stealth Mode"}
             </span>
@@ -167,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={onLogout}
           className="w-full flex items-center justify-center md:justify-start md:gap-3 p-3 rounded-xl text-blue-100 hover:text-white hover:bg-rose-500/20 transition-all font-black text-xs uppercase tracking-widest"
         >
-          <span className="text-2xl">🚪</span>
+          <span className="text-2xl">{renderIcon("logout")}</span>
           <span className="hidden md:block truncate">
             {t(language, "signOut")}
           </span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "react-hot-toast";
 import { apiClient } from "../services/api";
 import { User, CaseReport, CaseStatus } from "../types";
@@ -22,10 +22,12 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [reportGeneratingId, setReportGeneratingId] = useState<string | null>(null);
 
-  const loadCases = async () => {
+  const loadCases = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
       const response = await apiClient.getReports();
 
       if (response.success) {
@@ -53,17 +55,29 @@ export const CaseTracking: React.FC<CaseTrackingProps> = ({
         throw new Error(response.message || "Failed to load reports");
       }
     } catch (err: any) {
-      console.error("Error loading cases:", err);
-      toast.error(err.message || "Failed to load your reports. Please try again.");
-      setError(err.message || "Failed to load your reports. Please try again.");
+      if (!silent) {
+        console.error("Error loading cases:", err);
+        toast.error(err.message || "Failed to load your reports. Please try again.");
+        setError(err.message || "Failed to load your reports. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadCases();
-  }, [user.id]);
+  }, [loadCases, user.id]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadCases(true);
+      }
+    }, 12000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadCases]);
 
   const handleDispute = async (caseId: string) => {
     if (!reason.trim() || reason.length < 10) {

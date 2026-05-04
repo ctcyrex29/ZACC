@@ -53,4 +53,7 @@ export interface CaseReport {
   blockchain_block_number?: number;
   attachments_count?: number;
   stage_evaluations_count?: number;
+  aiCategory?: string;
+  aiConfidence?: number;
+  isBlockchainVerified?: boolean;
 }

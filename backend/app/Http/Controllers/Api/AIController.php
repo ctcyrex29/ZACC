@@ -97,7 +97,7 @@ PROMPT;
                 ]
             ];
 
-            $response = $this->makeGeminiRequest($url, $payload);
+            $response = $this->makeGeminiRequest($payload, $model);
 
             if (!$response['success']) {
                 return response()->json([
@@ -134,11 +134,22 @@ PROMPT;
     }
 
     /**
-     * Make a request to Gemini API
+     * Make a request to Gemini API with model fallback.
      */
-    private function makeGeminiRequest(string $url, array $payload): array
+    private function makeGeminiRequest(array $payload, ?string $preferredModel = null): array
     {
-        try {
+        $models = $this->geminiModelCandidates($preferredModel);
+        $lastError = 'AI request failed';
+
+        foreach ($models as $model) {
+            try {
+                $apiKey = (string) config('services.gemini.api_key');
+                $url = sprintf(
+                    'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                    urlencode($model),
+                    urlencode($apiKey)
+                );
+
             $jsonPayload = json_encode($payload);
             if ($jsonPayload === false) {
                 Log::error('Gemini: Failed to encode request payload');
@@ -164,7 +175,8 @@ PROMPT;
 
             if ($response === false) {
                 Log::error('Gemini: cURL request failed', ['error' => $curlError]);
-                return ['success' => false, 'message' => 'Network error connecting to AI service'];
+                $lastError = 'Network error connecting to AI service';
+                continue;
             }
 
             if ($httpCode !== 200) {
@@ -176,22 +188,24 @@ PROMPT;
                 // Parse error message from Gemini for better diagnostics
                 $errorData = json_decode($response, true);
                 $errorMsg = $errorData['error']['message'] ?? 'AI service returned HTTP ' . $httpCode;
-
-                return ['success' => false, 'message' => $errorMsg];
+                $lastError = $errorMsg;
+                continue;
             }
 
             $decoded = json_decode($response, true);
 
             if (!$decoded) {
                 Log::error('Gemini: Could not decode JSON response');
-                return ['success' => false, 'message' => 'Invalid JSON response from AI'];
+                $lastError = 'Invalid JSON response from AI';
+                continue;
             }
 
             // Check for blocked content
             $finishReason = $decoded['candidates'][0]['finishReason'] ?? null;
             if ($finishReason === 'SAFETY') {
                 Log::warning('Gemini: Response blocked by safety filters');
-                return ['success' => false, 'message' => 'Content was filtered by AI safety system'];
+                $lastError = 'Content was filtered by AI safety system';
+                continue;
             }
 
             if (!isset($decoded['candidates'][0]['content']['parts'][0]['text'])) {
@@ -199,7 +213,8 @@ PROMPT;
                     'keys' => array_keys($decoded),
                     'candidates_count' => count($decoded['candidates'] ?? []),
                 ]);
-                return ['success' => false, 'message' => 'Unexpected AI response format'];
+                $lastError = 'Unexpected AI response format';
+                continue;
             }
 
             $text = trim($decoded['candidates'][0]['content']['parts'][0]['text']);
@@ -220,16 +235,47 @@ PROMPT;
                 Log::warning('Gemini: Could not parse JSON from response text', [
                     'text_preview' => mb_substr($text, 0, 300),
                 ]);
-                return ['success' => false, 'message' => 'Could not parse AI response'];
+                $lastError = 'Could not parse AI response';
+                continue;
             }
 
-            return ['success' => true, 'data' => $data];
-        } catch (\Exception $e) {
-            Log::error('Gemini request error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return ['success' => false, 'message' => 'AI request failed: ' . $e->getMessage()];
+                return ['success' => true, 'data' => $data, 'model' => $model];
+            } catch (\Exception $e) {
+                $lastError = 'AI request failed: ' . $e->getMessage();
+                Log::error('Gemini request error: ' . $e->getMessage(), [
+                    'model' => $model,
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
         }
+
+        return ['success' => false, 'message' => $lastError];
+    }
+
+    /**
+     * Ordered model list for resilient Gemini calls.
+     */
+    private function geminiModelCandidates(?string $preferredModel = null): array
+    {
+        $primary = $preferredModel ?: (string) config('services.gemini.model', 'gemini-2.0-flash');
+        $fallback = config('services.gemini.fallback_models', []);
+        $strategy = strtolower((string) config('services.gemini.routing_strategy', 'balanced'));
+        $strategyOrders = config('services.gemini.strategy_orders', []);
+        if (!is_array($fallback)) {
+            $fallback = [];
+        }
+
+        $strategyCandidates = [];
+        if (is_array($strategyOrders) && isset($strategyOrders[$strategy]) && is_array($strategyOrders[$strategy])) {
+            $strategyCandidates = array_values(array_filter(array_map('strval', $strategyOrders[$strategy])));
+        }
+
+        $defaultCandidates = array_values(array_filter(array_map('strval', array_merge([$primary], $fallback))));
+        $all = !empty($strategyCandidates) ? $strategyCandidates : $defaultCandidates;
+        if ($preferredModel && !in_array($preferredModel, $all, true)) {
+            array_unshift($all, $preferredModel);
+        }
+        return array_values(array_unique($all));
     }
 
     /**
@@ -385,7 +431,7 @@ PROMPT;
                 'generationConfig' => ['responseMimeType' => 'application/json'],
             ];
 
-            $response = $this->makeGeminiRequest($url, $payload);
+            $response = $this->makeGeminiRequest($payload, $model);
 
             if (!$response['success']) {
                 return response()->json([
@@ -511,7 +557,7 @@ PROMPT;
                 'generationConfig' => ['responseMimeType' => 'application/json'],
             ];
 
-            $response = $this->makeGeminiRequest($url, $payload);
+            $response = $this->makeGeminiRequest($payload, $model);
 
             if (!$response['success']) {
                 return response()->json(['success' => false, 'message' => 'Evidence scan failed'], 500);
@@ -568,7 +614,7 @@ PROMPT;
                 'generationConfig' => ['responseMimeType' => 'application/json'],
             ];
 
-            $response = $this->makeGeminiRequest($url, $payload);
+            $response = $this->makeGeminiRequest($payload, $model);
 
             if (!$response['success']) {
                 return response()->json(['success' => false, 'message' => 'Suggestion service failed'], 500);
@@ -802,11 +848,11 @@ PROMPT;
                 ],
             ];
 
-            $response = $this->makeGeminiRequest($url, $payload);
+            $response = $this->makeGeminiRequest($payload, $model);
 
             if ($response['success']) {
                 $response['data']['ai_generated_at'] = now()->toIso8601String();
-                $response['data']['model_used'] = $model;
+                $response['data']['model_used'] = $response['model'] ?? $model;
                 return $response['data'];
             }
 

@@ -13,6 +13,15 @@ use Illuminate\Http\Request;
 
 class CaseStageController extends Controller
 {
+    private const CASE_TYPES = [
+        'Bribery',
+        'Procurement Fraud',
+        'Abuse of Office',
+        'Embezzlement',
+        'Nepotism',
+        'Other',
+    ];
+
     private const STAGE_TRANSITIONS = [
         'SUBMITTED' => ['UNDER_REVIEW'],
         'UNDER_REVIEW' => ['INVESTIGATING', 'CLOSED'],
@@ -70,6 +79,7 @@ class CaseStageController extends Controller
             'stage' => 'required|in:SUBMITTED,UNDER_REVIEW,INVESTIGATING,REFERRED,SUCCESSFUL,CLOSED,DISPUTED',
             'investigator_notes' => 'required|string|min:10',
             'manual_score' => 'nullable|integer|min:0|max:100',
+            'resolved_case_type' => 'nullable|string|in:Bribery,Procurement Fraud,Abuse of Office,Embezzlement,Nepotism,Other',
         ];
 
         if ((string) $request->input('stage') === 'REFERRED') {
@@ -127,6 +137,28 @@ class CaseStageController extends Controller
             ? (int) $expert['score']
             : (int) round(($manualScore + (int) $expert['score']) / 2);
 
+        $selectedCaseType = null;
+        if ($currentStage === 'UNDER_REVIEW' && $requestedStage === 'INVESTIGATING') {
+            $selectedCaseType = isset($validated['resolved_case_type'])
+                ? trim((string) $validated['resolved_case_type'])
+                : null;
+
+            if (!$selectedCaseType || !in_array($selectedCaseType, self::CASE_TYPES, true)) {
+                $selectedCaseType = (string) $report->type;
+            }
+        }
+
+        $typeResolution = null;
+        if ($selectedCaseType !== null) {
+            $typeResolution = [
+                'selected_type' => $selectedCaseType,
+                'previous_type' => (string) $report->type,
+                'was_corrected' => $selectedCaseType !== (string) $report->type,
+                'selected_by_user_id' => (int) $user->id,
+                'selected_at' => now()->toIso8601String(),
+            ];
+        }
+
         $stageEvaluation = $report->stageEvaluations()->create([
             'investigator_id' => $user->id,
             'stage' => $validated['stage'],
@@ -136,6 +168,7 @@ class CaseStageController extends Controller
             'final_score' => $finalScore,
             'expert_context' => array_merge($expert, [
                 'formal_referral' => $formalReferral,
+                'type_resolution' => $typeResolution,
             ]),
         ]);
 
@@ -150,7 +183,17 @@ class CaseStageController extends Controller
             $updateData['closed_at_stage'] = $currentStage;
         }
 
+        $assignedInvestigatorId = null;
+        if ($selectedCaseType !== null) {
+            $updateData['type'] = $selectedCaseType;
+            $assignedInvestigatorId = $this->resolveInvestigatorAssignment($selectedCaseType, $user);
+            if ($assignedInvestigatorId !== null) {
+                $updateData['assigned_to'] = $assignedInvestigatorId;
+            }
+        }
+
         $report->update($updateData);
+        $report->refresh();
 
         $this->auditService->record(
             action: 'STAGE_EVALUATION_RECORDED',
@@ -164,6 +207,8 @@ class CaseStageController extends Controller
                 'manual_score' => $manualScore,
                 'final_score' => $finalScore,
                 'formal_referral' => $formalReferral,
+                'type_resolution' => $typeResolution,
+                'assigned_to' => $assignedInvestigatorId,
             ],
         );
 
@@ -177,6 +222,8 @@ class CaseStageController extends Controller
                 'expert_score' => (int) $expert['score'],
                 'final_score' => $finalScore,
                 'urgency' => $expert['urgency'] ?? 'MEDIUM',
+                'resolved_case_type' => $selectedCaseType,
+                'assigned_to' => $assignedInvestigatorId,
             ],
         );
 
@@ -185,7 +232,61 @@ class CaseStageController extends Controller
             'message' => 'Stage report recorded successfully',
             'data' => $stageEvaluation,
             'expert_system' => $expert,
+            'report' => [
+                'id' => $report->id,
+                'case_id' => $report->case_id,
+                'status' => $report->status,
+                'type' => $report->type,
+                'assigned_to' => $report->assigned_to,
+            ],
         ], 201);
+    }
+
+    private function resolveInvestigatorAssignment(string $caseType, User $actingUser): ?int
+    {
+        $actingAllowedTypes = is_array($actingUser->allowed_case_types)
+            ? $actingUser->allowed_case_types
+            : [];
+
+        if (
+            $actingUser->isInvestigator()
+            && (empty($actingAllowedTypes) || in_array($caseType, $actingAllowedTypes, true))
+        ) {
+            return (int) $actingUser->id;
+        }
+
+        $eligible = User::query()
+            ->where('role', User::ROLE_INVESTIGATOR)
+            ->where('is_active', true)
+            ->get()
+            ->filter(function (User $investigator) use ($caseType) {
+                $allowed = is_array($investigator->allowed_case_types)
+                    ? $investigator->allowed_case_types
+                    : [];
+
+                return empty($allowed) || in_array($caseType, $allowed, true);
+            })
+            ->values();
+
+        if ($eligible->isEmpty()) {
+            return null;
+        }
+
+        $eligibleIds = $eligible->pluck('id')->all();
+        $openLoad = Report::query()
+            ->whereIn('assigned_to', $eligibleIds)
+            ->whereNotIn('status', ['CLOSED', 'SUCCESSFUL'])
+            ->selectRaw('assigned_to, COUNT(*) as total')
+            ->groupBy('assigned_to')
+            ->pluck('total', 'assigned_to');
+
+        $selected = $eligible
+            ->sortBy(function (User $investigator) use ($openLoad) {
+                return (int) ($openLoad[$investigator->id] ?? 0);
+            })
+            ->first();
+
+        return $selected ? (int) $selected->id : null;
     }
 
     public function notifications(Request $request): JsonResponse

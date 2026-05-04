@@ -19,6 +19,7 @@ import { HelpGuide } from "./components/HelpGuide";
 import { ReportGeneration } from "./components/ReportGeneration";
 import { CorruptionHotspots } from "./components/CorruptionHotspots";
 import { AuthorityFindings } from "./components/AuthorityFindings";
+import { CaseDetailView } from "./components/CaseDetailView";
 import { Toaster } from "react-hot-toast";
 import { apiClient } from "./services/api";
 
@@ -46,6 +47,9 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [themePreviewOpen, setThemePreviewOpen] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | number | null>(
+    null,
+  );
   const notificationPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -223,7 +227,14 @@ const App: React.FC = () => {
     setUser(null);
     localStorage.removeItem("nexus_user");
     setCurrentView("dashboard");
+    setSelectedCaseId(null);
   };
+
+  useEffect(() => {
+    if (currentView !== "investigator") {
+      setSelectedCaseId(null);
+    }
+  }, [currentView]);
 
   if (!user) {
     return (
@@ -262,6 +273,15 @@ const App: React.FC = () => {
           />
         );
       case "investigator":
+        if (selectedCaseId) {
+          return (
+            <CaseDetailView
+              caseId={selectedCaseId}
+              user={user}
+              onBack={() => setSelectedCaseId(null)}
+            />
+          );
+        }
         return (
           <InvestigatorView
             user={user}
@@ -307,7 +327,7 @@ const App: React.FC = () => {
       case "hotspots":
         return t(language, "corruptionHotspots");
       case "authorities":
-        return "Authority Findings";
+        return "Referred";
       default:
         return t(language, "appTitle");
     }

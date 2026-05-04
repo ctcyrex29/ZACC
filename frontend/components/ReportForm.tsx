@@ -132,6 +132,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
   // Evidence upload
   const [files, setFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
+  const [isDraggingEvidence, setIsDraggingEvidence] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Location type-ahead
@@ -216,29 +217,35 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
   };
 
   // ── File handling ──
+  const processSelectedFiles = useCallback((selected: File[]) => {
+    const errors: string[] = [];
+
+    setFiles((prev) => {
+      const valid: File[] = [];
+      for (const file of selected) {
+        if (prev.length + valid.length >= MAX_FILES) {
+          errors.push(`Maximum ${MAX_FILES} files allowed.`);
+          break;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          errors.push(`"${file.name}" exceeds 10MB limit.`);
+          continue;
+        }
+        if (!ACCEPTED_TYPES.includes(file.type)) {
+          errors.push(`"${file.name}" is not a supported file type.`);
+          continue;
+        }
+        valid.push(file);
+      }
+      return [...prev, ...valid];
+    });
+
+    setFileErrors(errors);
+  }, []);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);
-    const errors: string[] = [];
-    const valid: File[] = [];
-
-    for (const file of selected) {
-      if (files.length + valid.length >= MAX_FILES) {
-        errors.push(`Maximum ${MAX_FILES} files allowed.`);
-        break;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        errors.push(`"${file.name}" exceeds 10MB limit.`);
-        continue;
-      }
-      if (!ACCEPTED_TYPES.includes(file.type)) {
-        errors.push(`"${file.name}" is not a supported file type.`);
-        continue;
-      }
-      valid.push(file);
-    }
-
-    setFiles((prev) => [...prev, ...valid]);
-    setFileErrors(errors);
+    processSelectedFiles(selected);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -258,6 +265,41 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
         l.code.toLowerCase() === q
     ).slice(0, 15);
   }, [langSearchQuery]);
+
+  const priorityPreview = useMemo(() => {
+    const typeWeights: Record<string, number> = {
+      [CorruptionType.EMBEZZLEMENT]: 22,
+      [CorruptionType.PROCUREMENT_FRAUD]: 20,
+      [CorruptionType.ABUSE_OF_OFFICE]: 16,
+      [CorruptionType.BRIBERY]: 14,
+      [CorruptionType.NEPOTISM]: 9,
+      [CorruptionType.OTHER]: 8,
+    };
+
+    let score = 0;
+    score += typeWeights[formData.type] || 8;
+
+    const len = formData.description.trim().length;
+    if (len >= 500) score += 25;
+    else if (len >= 250) score += 18;
+    else if (len >= 120) score += 12;
+    else if (len >= 60) score += 6;
+
+    score += Math.min(25, files.length * 5);
+
+    if (clarityResult?.clarity_score) {
+      score += Math.max(0, Math.round(clarityResult.clarity_score / 10));
+    }
+
+    if (preSuggestions?.strength_score) {
+      score = Math.max(score, Number(preSuggestions.strength_score) || score);
+    }
+
+    score = Math.min(100, Math.max(0, score));
+
+    const priority = score >= 76 ? "CRITICAL" : score >= 51 ? "HIGH" : score >= 26 ? "MEDIUM" : "LOW";
+    return { score, priority };
+  }, [formData.type, formData.description, files.length, clarityResult, preSuggestions]);
 
   const checkTextClarity = useCallback(async (text: string) => {
     if (text.trim().length < 20) {
@@ -818,12 +860,32 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
               {t(language, "uploadEvidence")}
             </label>
             <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingEvidence(true);
+              }}
+              onDragLeave={() => setIsDraggingEvidence(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingEvidence(false);
+                const dropped = Array.from(e.dataTransfer.files || []);
+                if (dropped.length > 0) {
+                  processSelectedFiles(dropped);
+                }
+              }}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-300 dark:border-white/15 rounded-2xl p-8 text-center cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5 transition-all"
+              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                isDraggingEvidence
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
+                  : "border-slate-300 dark:border-white/15 hover:border-emerald-400 dark:hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/5"
+              }`}
             >
               <div className="text-3xl mb-2">📎</div>
               <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                 {t(language, "clickToUpload")}
+              </p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+                Or drag and drop evidence files here
               </p>
               <p className="text-xs text-slate-500 mt-1">
                 {t(language, "uploadHintDetailed")}
@@ -966,6 +1028,36 @@ export const ReportForm: React.FC<ReportFormProps> = ({ user, language, onSucces
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Priority Preview */}
+          {formData.description.trim().length >= 20 && (
+            <div className="rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50/70 dark:bg-blue-500/10 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest">
+                  Priority Preview
+                </p>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                    priorityPreview.priority === "CRITICAL"
+                      ? "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20"
+                      : priorityPreview.priority === "HIGH"
+                        ? "bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-500/20"
+                        : priorityPreview.priority === "MEDIUM"
+                          ? "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20"
+                          : "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20"
+                  }`}
+                >
+                  {priorityPreview.priority}
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Estimated risk score: {priorityPreview.score}/100
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                Final case priority is determined by the expert engine and AI after submission.
+              </p>
             </div>
           )}
 

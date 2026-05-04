@@ -14,6 +14,32 @@ use Illuminate\Support\Str;
 trait ReportControllerHelpers
 {
     /**
+     * Ordered model list for resilient Gemini calls.
+     */
+    protected function geminiModelCandidates(?string $preferredModel = null): array
+    {
+        $primary = $preferredModel ?: (string) config('services.gemini.model', 'gemini-2.0-flash');
+        $fallback = config('services.gemini.fallback_models', []);
+        $strategy = strtolower((string) config('services.gemini.routing_strategy', 'balanced'));
+        $strategyOrders = config('services.gemini.strategy_orders', []);
+        if (!is_array($fallback)) {
+            $fallback = [];
+        }
+
+        $strategyCandidates = [];
+        if (is_array($strategyOrders) && isset($strategyOrders[$strategy]) && is_array($strategyOrders[$strategy])) {
+            $strategyCandidates = array_values(array_filter(array_map('strval', $strategyOrders[$strategy])));
+        }
+
+        $defaultCandidates = array_values(array_filter(array_map('strval', array_merge([$primary], $fallback))));
+        $all = !empty($strategyCandidates) ? $strategyCandidates : $defaultCandidates;
+        if ($preferredModel && !in_array($preferredModel, $all, true)) {
+            array_unshift($all, $preferredModel);
+        }
+        return array_values(array_unique($all));
+    }
+
+    /**
      * Run AI classification on a submitted report.
      * Uses a two-layer approach: expert system sets a baseline, then Gemini AI
      * refines with deeper contextual analysis of description + file contents.
@@ -163,55 +189,68 @@ Return ONLY valid JSON matching this exact schema:
 }
 PROMPT;
 
-            $url = sprintf(
-                'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
-                urlencode($model),
-                urlencode($apiKey)
-            );
+            $aiResult = null;
+            $modelUsed = $model;
+            foreach ($this->geminiModelCandidates($model) as $candidateModel) {
+                $url = sprintf(
+                    'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                    urlencode($candidateModel),
+                    urlencode($apiKey)
+                );
 
-            $response = \Illuminate\Support\Facades\Http::timeout(30)
-                ->retry(2, 500)
-                ->acceptJson()
-                ->post($url, [
-                    'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => [
-                        'responseMimeType' => 'application/json',
-                        'temperature' => 0.2,
-                    ],
-                ]);
+                $response = \Illuminate\Support\Facades\Http::timeout((int) config('services.gemini.timeout', 30))
+                    ->retry(2, 500)
+                    ->acceptJson()
+                    ->post($url, [
+                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'generationConfig' => [
+                            'responseMimeType' => 'application/json',
+                            'temperature' => 0.2,
+                        ],
+                    ]);
 
-            if (!$response->successful()) {
-                Log::warning('AI classification Gemini API error', [
-                    'case_id' => $report->case_id,
-                    'http_status' => $response->status(),
-                ]);
-                return;
-            }
-
-            $text = $response->json('candidates.0.content.parts.0.text');
-
-            if (!is_string($text) || trim($text) === '') {
-                Log::warning('AI classification returned empty response', [
-                    'case_id' => $report->case_id,
-                ]);
-                return;
-            }
-
-            $aiResult = json_decode($text, true);
-            if (!$aiResult) {
-                // Try extracting JSON from markdown code blocks or surrounding text
-                if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $text, $matches)) {
-                    $aiResult = json_decode($matches[1], true);
-                } elseif (preg_match('/\{.*\}/s', $text, $matches)) {
-                    $aiResult = json_decode($matches[0], true);
+                if (!$response->successful()) {
+                    Log::warning('AI classification Gemini API error', [
+                        'case_id' => $report->case_id,
+                        'http_status' => $response->status(),
+                        'model' => $candidateModel,
+                    ]);
+                    continue;
                 }
+
+                $text = $response->json('candidates.0.content.parts.0.text');
+                if (!is_string($text) || trim($text) === '') {
+                    Log::warning('AI classification returned empty response', [
+                        'case_id' => $report->case_id,
+                        'model' => $candidateModel,
+                    ]);
+                    continue;
+                }
+
+                $parsed = json_decode($text, true);
+                if (!$parsed) {
+                    // Try extracting JSON from markdown code blocks or surrounding text
+                    if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $text, $matches)) {
+                        $parsed = json_decode($matches[1], true);
+                    } elseif (preg_match('/\{.*\}/s', $text, $matches)) {
+                        $parsed = json_decode($matches[0], true);
+                    }
+                }
+
+                if (is_array($parsed)) {
+                    $aiResult = $parsed;
+                    $modelUsed = $candidateModel;
+                    break;
+                }
+
+                Log::warning('AI classification could not parse JSON response', [
+                    'case_id' => $report->case_id,
+                    'model' => $candidateModel,
+                    'raw_text_preview' => mb_substr($text, 0, 200),
+                ]);
             }
 
             if (!$aiResult || !is_array($aiResult)) {
-                Log::warning('AI classification could not parse JSON response', [
-                    'case_id' => $report->case_id,
-                    'raw_text_preview' => mb_substr($text, 0, 200),
-                ]);
                 return;
             }
 
@@ -237,7 +276,7 @@ PROMPT;
 
             // Add metadata
             $aiResult['classified_at'] = now()->toIso8601String();
-            $aiResult['model_used'] = $model;
+            $aiResult['model_used'] = $modelUsed;
 
             // Store AI classification while preserving non-AI metadata (e.g., type inference).
             $existingSummary = is_array($report->ai_summary) ? $report->ai_summary : [];
@@ -1067,12 +1106,6 @@ PROMPT;
             return ['success' => false, 'translated_text' => '', 'error' => 'Gemini API key not configured'];
         }
 
-        $url = sprintf(
-            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
-            urlencode($model),
-            urlencode($apiKey)
-        );
-
         $prompt = <<<PROMPT
 You are a professional translator with expertise in world languages, including African languages (Shona, Ndebele, Tonga, Swahili, Zulu, Xhosa, etc.) and all major international languages.
 
@@ -1091,26 +1124,39 @@ TEXT TO TRANSLATE:
 PROMPT;
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(20)
-                ->retry(2, 500)
-                ->acceptJson()
-                ->post($url, [
-                    'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => [
-                        'temperature' => 0.1,
-                    ],
-                ]);
+            $lastError = 'Empty translation response';
+            foreach ($this->geminiModelCandidates($model) as $candidateModel) {
+                $url = sprintf(
+                    'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+                    urlencode($candidateModel),
+                    urlencode($apiKey)
+                );
 
-            if (!$response->successful()) {
-                return ['success' => false, 'translated_text' => '', 'error' => 'Translation API returned ' . $response->status()];
+                $response = \Illuminate\Support\Facades\Http::timeout((int) config('services.gemini.timeout', 20))
+                    ->retry(2, 500)
+                    ->acceptJson()
+                    ->post($url, [
+                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'generationConfig' => [
+                            'temperature' => 0.1,
+                        ],
+                    ]);
+
+                if (!$response->successful()) {
+                    $lastError = 'Translation API returned ' . $response->status();
+                    continue;
+                }
+
+                $translated = $response->json('candidates.0.content.parts.0.text');
+                if (!is_string($translated) || trim($translated) === '') {
+                    $lastError = 'Empty translation response';
+                    continue;
+                }
+
+                return ['success' => true, 'translated_text' => trim($translated)];
             }
 
-            $translated = $response->json('candidates.0.content.parts.0.text');
-            if (!is_string($translated) || trim($translated) === '') {
-                return ['success' => false, 'translated_text' => '', 'error' => 'Empty translation response'];
-            }
-
-            return ['success' => true, 'translated_text' => trim($translated)];
+            return ['success' => false, 'translated_text' => '', 'error' => $lastError];
         } catch (\Exception $e) {
             Log::warning('Translation failed', ['error' => $e->getMessage()]);
             return ['success' => false, 'translated_text' => '', 'error' => $e->getMessage()];

@@ -57,6 +57,15 @@ const CASE_BOOK_STAGES = [
   "CLOSED",
 ] as const;
 
+const CASE_TYPES = [
+  "Bribery",
+  "Procurement Fraud",
+  "Abuse of Office",
+  "Embezzlement",
+  "Nepotism",
+  "Other",
+] as const;
+
 const stageIndex = (status?: string) => {
   const idx = CASE_BOOK_STAGES.indexOf((status || "") as (typeof CASE_BOOK_STAGES)[number]);
   return idx === -1 ? 0 : idx;
@@ -238,7 +247,24 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<CaseStatus | "ALL">("ALL");
+  const [sortMode, setSortMode] = useState<"PRIORITY" | "NEWEST">("PRIORITY");
   const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<"ALL" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW">("ALL");
+  const [riskFilter, setRiskFilter] = useState<"ALL" | "HIGH_RISK" | "MEDIUM_RISK" | "LOW_RISK">("ALL");
+  const [verificationFilter, setVerificationFilter] = useState<"ALL" | "VERIFIED" | "UNVERIFIED">("ALL");
+  const [recalcLoading, setRecalcLoading] = useState(false);
+  const [verifyState, setVerifyState] = useState<
+    Record<
+      string,
+      {
+        loading?: boolean;
+        verified?: boolean;
+        txHash?: string | null;
+        blockNumber?: number | null;
+        error?: string | null;
+      }
+    >
+  >({});
   const [notifications, setNotifications] = useState<any[]>([]);
   const [typeCorrectionAudit, setTypeCorrectionAudit] = useState<any[]>([]);
   const [typeCorrectionLoading, setTypeCorrectionLoading] = useState(false);
@@ -254,6 +280,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
   const [actionProcessing, setActionProcessing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showReferralMenu, setShowReferralMenu] = useState(false);
+  const [resolvedCaseType, setResolvedCaseType] = useState<string>("Bribery");
   const [referralDraft, setReferralDraft] = useState({
     authority: "National Prosecuting Authority (NPA)",
     legalBasis:
@@ -358,6 +385,21 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
             referenceCode: r.reference_code,
             attachments_count: r.attachments_count,
             stage_evaluations_count: r.stage_evaluations_count,
+            aiCategory:
+              r.ai_summary?.category ||
+              r.ai_summary?.type_inference?.inferred_type ||
+              r.type,
+            aiConfidence:
+              Number(
+                r.ai_summary?.confidence ??
+                  r.ai_summary?.type_inference?.confidence ??
+                  0,
+              ) || 0,
+            isBlockchainVerified: Boolean(
+              r.blockchain_tx_hash && r.blockchain_block_number,
+            ),
+            blockchain_tx_hash: r.blockchain_tx_hash,
+            blockchain_block_number: r.blockchain_block_number,
           })),
         );
       } else {
@@ -372,6 +414,16 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
 
   useEffect(() => {
     fetchCases();
+  }, [fetchCases]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchCases();
+      }
+    }, 8000);
+
+    return () => window.clearInterval(intervalId);
   }, [fetchCases]);
 
   const fetchNotifications = useCallback(async () => {
@@ -462,6 +514,62 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     }
   }, []);
 
+  const recalculatePriorities = async () => {
+    if (!isAdmin || recalcLoading) return;
+    setRecalcLoading(true);
+    try {
+      const resp = await apiClient.post("/reports/recalculate-priorities", {});
+      if (resp?.success) {
+        toast.success("Priorities recalculated from latest scoring rules.");
+        await fetchCases();
+      } else {
+        toast.error(resp?.message || "Failed to recalculate priorities.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to recalculate priorities.");
+    } finally {
+      setRecalcLoading(false);
+    }
+  };
+
+  const verifyCaseOnChain = async (c: CaseReport) => {
+    const reportId = c.case_id || c.id;
+    setVerifyState((prev) => ({
+      ...prev,
+      [String(reportId)]: { ...(prev[String(reportId)] || {}), loading: true, error: null },
+    }));
+
+    try {
+      const resp = await apiClient.verifyReport(String(reportId));
+      setVerifyState((prev) => ({
+        ...prev,
+        [String(reportId)]: {
+          loading: false,
+          verified: Boolean(resp?.verified),
+          txHash: resp?.tx_hash || null,
+          blockNumber: resp?.block_number || null,
+          error: null,
+        },
+      }));
+      if (resp?.verified) {
+        toast.success("Blockchain verification successful.");
+      } else {
+        toast.error("Verification failed for this case.");
+      }
+    } catch (err: any) {
+      setVerifyState((prev) => ({
+        ...prev,
+        [String(reportId)]: {
+          ...(prev[String(reportId)] || {}),
+          loading: false,
+          verified: false,
+          error: err?.message || "Verification failed",
+        },
+      }));
+      toast.error(err?.message || "Verification failed");
+    }
+  };
+
   // ── Open dossier ──
   const openDossier = async (c: CaseReport) => {
     setDossierOpen(true);
@@ -509,6 +617,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
       const resp = await apiClient.get(`/reports/${resolvedId}`);
       if (resp?.success) {
         setDossierData(resp.data);
+        setResolvedCaseType(resp.data?.type || "Bribery");
         await loadStages(resolvedId);
         // Auto-run pre-review analysis in background
         runPreReviewAnalysis(resolvedId);
@@ -544,13 +653,23 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         ...extraPayload,
       });
       if (resp?.success) {
+        const responseReport = resp.report || {};
         toast.success(`Case advanced to ${targetStage.replace("_", " ")} stage`);
         const updatedStatus = targetStage as CaseStatus;
-        setDossierData((prev: any) => ({ ...prev, status: updatedStatus }));
+        setDossierData((prev: any) => ({
+          ...prev,
+          status: responseReport.status || updatedStatus,
+          type: responseReport.type || prev?.type,
+          assigned_to: responseReport.assigned_to ?? prev?.assigned_to,
+        }));
         setCases((prev) =>
           prev.map((x) =>
             x.id === id || (x as any).case_id === id
-              ? { ...x, status: updatedStatus }
+              ? {
+                  ...x,
+                  status: (responseReport.status || updatedStatus) as CaseStatus,
+                  type: responseReport.type || x.type,
+                }
               : x,
           ),
         );
@@ -574,6 +693,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     setActionNotes("");
     setActionError(null);
     setShowReferralMenu(false);
+    setResolvedCaseType("Bribery");
     setExpertReview(null);
     setPreReviewReport(null);
     setInvestigationLogs([]);
@@ -630,16 +750,43 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
     if (!isAdmin && c.status === CaseStatus.REFERRED) {
       return false;
     }
+
+    const searchTerm = search.toLowerCase();
+    const caseRisk = Number(c.riskScore || 0);
+    const isVerified = Boolean(c.isBlockchainVerified || verifyState[String(c.case_id || c.id)]?.verified);
+
     const matchesFilter = filter === "ALL" || c.status === filter;
     const matchesSearch =
-      !search ||
-      c.type?.toLowerCase().includes(search.toLowerCase()) ||
-      c.institution?.toLowerCase().includes(search.toLowerCase()) ||
-      (c.referenceCode || "").toLowerCase().includes(search.toLowerCase()) ||
-      (c.id || "").toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+      !searchTerm ||
+      c.type?.toLowerCase().includes(searchTerm) ||
+      c.institution?.toLowerCase().includes(searchTerm) ||
+      c.status?.toLowerCase().includes(searchTerm) ||
+      c.location?.toLowerCase().includes(searchTerm) ||
+      (c.aiCategory || "").toLowerCase().includes(searchTerm) ||
+      (c.referenceCode || "").toLowerCase().includes(searchTerm) ||
+      (c.id || "").toLowerCase().includes(searchTerm);
+    const matchesPriority = priorityFilter === "ALL" || c.priority === priorityFilter;
+    const matchesRisk =
+      riskFilter === "ALL" ||
+      (riskFilter === "HIGH_RISK" && caseRisk >= 70) ||
+      (riskFilter === "MEDIUM_RISK" && caseRisk >= 40 && caseRisk < 70) ||
+      (riskFilter === "LOW_RISK" && caseRisk < 40);
+    const matchesVerification =
+      verificationFilter === "ALL" ||
+      (verificationFilter === "VERIFIED" && isVerified) ||
+      (verificationFilter === "UNVERIFIED" && !isVerified);
+
+    return matchesFilter && matchesSearch && matchesPriority && matchesRisk && matchesVerification;
   }).sort((a, b) => {
-    // Sort by newest first (most recent timestamp on top)
+    if (sortMode === "PRIORITY") {
+      const rankDiff = (priorityRank[b.priority] || 0) - (priorityRank[a.priority] || 0);
+      if (rankDiff !== 0) return rankDiff;
+
+      const riskDiff = (b.riskScore || 0) - (a.riskScore || 0);
+      if (riskDiff !== 0) return riskDiff;
+    }
+
+    // Tie-breaker (or NEWEST mode): most recent on top
     return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
   });
 
@@ -730,10 +877,67 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
           
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as "PRIORITY" | "NEWEST")}
+            className="px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="PRIORITY">Sort: Priority Queue</option>
+            <option value="NEWEST">Sort: Newest First</option>
+          </select>
+          <select
+            value={priorityFilter}
+            onChange={(e) =>
+              setPriorityFilter(
+                e.target.value as "ALL" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+              )
+            }
+            className="px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="ALL">Priority: All</option>
+            <option value="CRITICAL">Priority: Critical</option>
+            <option value="HIGH">Priority: High</option>
+            <option value="MEDIUM">Priority: Medium</option>
+            <option value="LOW">Priority: Low</option>
+          </select>
+          <select
+            value={riskFilter}
+            onChange={(e) =>
+              setRiskFilter(
+                e.target.value as "ALL" | "HIGH_RISK" | "MEDIUM_RISK" | "LOW_RISK",
+              )
+            }
+            className="px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="ALL">Risk: All</option>
+            <option value="HIGH_RISK">Risk: 70-100</option>
+            <option value="MEDIUM_RISK">Risk: 40-69</option>
+            <option value="LOW_RISK">Risk: 0-39</option>
+          </select>
+          <select
+            value={verificationFilter}
+            onChange={(e) =>
+              setVerificationFilter(e.target.value as "ALL" | "VERIFIED" | "UNVERIFIED")
+            }
+            className="px-3 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="ALL">Chain: All</option>
+            <option value="VERIFIED">Chain: Verified</option>
+            <option value="UNVERIFIED">Chain: Unverified</option>
+          </select>
+          {isAdmin && (
+            <button
+              onClick={recalculatePriorities}
+              disabled={recalcLoading}
+              className="px-4 py-2 rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-black uppercase tracking-wider hover:bg-amber-100 dark:hover:bg-amber-500/15 transition-all disabled:opacity-60"
+            >
+              {recalcLoading ? "Recalculating..." : "Recalculate Priorities"}
+            </button>
+          )}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cases..."
+            placeholder="Search by type, institution, status, location, case ID, AI category..."
             className="w-full sm:w-72 px-4 py-2 rounded-xl border border-[var(--zacc-border)] bg-[var(--zacc-card)] text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -797,118 +1001,131 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
         ))}
       </div>
 
-      {/* ── Cases Table ── */}
       <div className="zacc-surface rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="p-16 text-center">
-            <div className="w-10 h-10 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-sm font-bold text-slate-500">Loading cases...</p>
-          </div>
-        ) : filteredCases.length === 0 ? (
-          <div className="p-16 text-center">
-            <p className="text-slate-500 font-medium">
-              No cases found
-              {filter !== "ALL" ? ` with status "${statusLabel(filter)}"` : ""}.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--zacc-card-soft)] border-b border-[var(--zacc-border)]">
-                <tr>
-                  {[
-                    "#",
-                    "Case Ref",
-                    "Type",
-                    "Institution",
-                    "Priority",
-                    "Status",
-                    "Evidence",
-                    "Date",
-                    "Action",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-5 py-3.5 text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {filteredCases.map((c, idx) => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-blue-50/60 dark:hover:bg-blue-500/8 transition-colors"
-                  >
-                    <td className="px-5 py-4 text-xs text-slate-500 font-bold">
-                      {idx + 1}
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-1.5">
-                        <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
-                          {c.referenceCode || c.id}
-                        </code>
-                        {c.referenceCode && (
-                          <button
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              navigator.clipboard.writeText(c.referenceCode!); 
-                              toast.success("Copied to clipboard!");
-                            }}
-                            title="Copy tracking code"
-                            className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 hover:bg-emerald-500/10 border border-slate-200 dark:border-white/10 text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
-                          >
-                            Copy
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                      {c.type}
-                    </td>
-                    <td className="px-5 py-4 text-slate-600 dark:text-slate-400 max-w-[180px] truncate">
-                      {c.institution}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`text-xs font-black uppercase ${priorityColor(c.priority)}`}
+          {loading ? (
+            <div className="p-16 text-center">
+              <div className="w-10 h-10 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-sm font-bold text-slate-500">Loading cases...</p>
+            </div>
+          ) : filteredCases.length === 0 ? (
+            <div className="p-16 text-center">
+              <p className="text-slate-500 font-medium">
+                No cases found
+                {filter !== "ALL" ? ` with status "${statusLabel(filter)}"` : ""}.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--zacc-card-soft)] border-b border-[var(--zacc-border)]">
+                  <tr>
+                    {[
+                      "#",
+                      "Case Ref",
+                      "Type",
+                      "Institution",
+                      "Priority",
+                      "Status",
+                      "Evidence",
+                      "Date",
+                      "Action",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left px-5 py-3.5 text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap"
                       >
-                        {c.priority}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusBadge(c.status)}`}
-                      >
-                        {statusLabel(c.status)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap">
-                      {c.attachments_count ?? 0} file{(c.attachments_count ?? 0) === 1 ? "" : "s"}
-                    </td>
-                    <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(c.timestamp).toLocaleDateString()}
-                    </td>
-                    <td className="px-5 py-4">
-                      <button
-                        onClick={() => openDossier(c)}
-                        className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all whitespace-nowrap ${
-                          isAdmin
-                            ? "bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300"
-                            : "bg-emerald-500 hover:bg-emerald-600 text-black"
-                        }`}
-                      >
-                        {isAdmin ? "View Details" : "View Dossier"}
-                      </button>
-                    </td>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                  {filteredCases.map((c, idx) => (
+                    <tr
+                      key={c.id}
+                      className="hover:bg-blue-50/60 dark:hover:bg-blue-500/8 transition-colors"
+                    >
+                      <td className="px-5 py-4 text-xs text-slate-500 font-bold">
+                        {idx + 1}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-1.5">
+                          <code className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded">
+                            {c.referenceCode || c.id}
+                          </code>
+                          {c.referenceCode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(c.referenceCode!);
+                                toast.success("Copied to clipboard!");
+                              }}
+                              title="Copy tracking code"
+                              className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 hover:bg-emerald-500/10 border border-slate-200 dark:border-white/10 text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
+                            >
+                              Copy
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                        {c.type}
+                        <p className="text-[10px] text-violet-600 dark:text-violet-300 font-bold mt-1">
+                          AI: {c.aiCategory || c.type}{c.aiConfidence ? ` (${c.aiConfidence}%)` : ""}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 text-slate-600 dark:text-slate-400 max-w-[180px] truncate">
+                        {c.institution}
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={`text-xs font-black uppercase ${priorityColor(c.priority)}`}
+                        >
+                          {c.priority}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${statusBadge(c.status)}`}
+                        >
+                          {statusLabel(c.status)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap">
+                        {c.attachments_count ?? 0} file{(c.attachments_count ?? 0) === 1 ? "" : "s"}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
+                        {new Date(c.timestamp).toLocaleDateString()}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openDossier(c)}
+                            className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all whitespace-nowrap ${
+                              isAdmin
+                                ? "bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300"
+                                : "bg-emerald-500 hover:bg-emerald-600 text-black"
+                            }`}
+                          >
+                            {isAdmin ? "View Details" : "View Dossier"}
+                          </button>
+                          <button
+                            onClick={() => verifyCaseOnChain(c)}
+                            disabled={verifyState[String(c.case_id || c.id)]?.loading}
+                            className="px-3 py-2 rounded-xl border border-cyan-300/40 dark:border-cyan-400/30 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap disabled:opacity-60"
+                          >
+                            {verifyState[String(c.case_id || c.id)]?.loading
+                              ? "Verifying..."
+                              : "Verify"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </div>
       </>
       )}
@@ -1016,122 +1233,30 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                   </div>
 
                   {/* AI Case Classification */}
-                  {dossierData.ai_summary && (
-                    <div className="rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/5 p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest">
-                          AI Case Classification
-                        </p>
-                        {dossierData.ai_summary.confidence != null && (
-                          <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-500/20">
-                            {dossierData.ai_summary.confidence}% confidence
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Primary metrics row */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {dossierData.ai_summary.urgency && (
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Urgency</p>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${
-                              dossierData.ai_summary.urgency === 'CRITICAL' ? 'bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20' :
-                              dossierData.ai_summary.urgency === 'HIGH' ? 'bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-500/20' :
-                              dossierData.ai_summary.urgency === 'MEDIUM' ? 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-500/20' :
-                              'bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20'
-                            }`}>{dossierData.ai_summary.urgency}</span>
-                          </div>
-                        )}
-                        {dossierData.ai_summary.category && (
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Category</p>
-                            <p className="text-xs font-semibold text-slate-900 dark:text-white">{dossierData.ai_summary.category}</p>
-                            {dossierData.ai_summary.sub_category && (
-                              <p className="text-[10px] text-slate-500 mt-0.5">{dossierData.ai_summary.sub_category}</p>
-                            )}
-                          </div>
-                        )}
-                        
-                      </div>
-
-                      {/* Urgency explanation */}
-                      {dossierData.ai_summary.urgency_reason && (
-                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
-                          {dossierData.ai_summary.urgency_reason}
-                        </p>
-                      )}
-
-                      {/* Evidence & Pattern row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {dossierData.ai_summary.evidence_assessment && (
-                          <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Evidence Assessment</p>
-                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{dossierData.ai_summary.evidence_assessment}</p>
-                          </div>
-                        )}
-                        {dossierData.ai_summary.pattern_indicators && (
-                          <div className="bg-white/50 dark:bg-white/5 rounded-lg p-3 border border-slate-100 dark:border-white/5">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Pattern Analysis</p>
-                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{dossierData.ai_summary.pattern_indicators}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Key Findings */}
-                      {dossierData.ai_summary.key_findings?.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Key Findings</p>
-                          <ul className="space-y-1.5">
-                            {dossierData.ai_summary.key_findings.map((f: string, i: number) => (
-                              <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-white/40 dark:bg-white/5 rounded-lg px-3 py-2">
-                                <span className="text-blue-500 mt-0.5 font-bold">{i + 1}.</span> {f}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Recommended Actions */}
-                      {dossierData.ai_summary.recommended_actions?.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Recommended Actions</p>
-                          <ul className="space-y-1.5">
-                            {dossierData.ai_summary.recommended_actions.map((a: string, i: number) => (
-                              <li key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg px-3 py-2 border border-emerald-100 dark:border-emerald-500/10">
-                                <span className="text-emerald-500 mt-0.5 font-bold">→</span> {a}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Applicable Laws */}
-                      {dossierData.ai_summary.applicable_laws?.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Applicable Legislation</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {dossierData.ai_summary.applicable_laws.map((law: string, i: number) => (
-                              <span key={i} className="px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
-                                {law}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Impact + Model info footer */}
-                      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pt-2 border-t border-blue-100 dark:border-blue-500/10">
-                        {dossierData.ai_summary.estimated_impact && (
-                          <p className="text-xs text-slate-500 italic flex-1">
-                            <span className="font-bold not-italic text-slate-600 dark:text-slate-400">Impact:</span> {dossierData.ai_summary.estimated_impact}
+                  {dossierData?.ai_summary && (
+                    <div className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50/70 dark:bg-violet-500/5 p-5 space-y-3">
+                      <p className="text-xs font-black text-violet-700 dark:text-violet-400 uppercase tracking-widest">
+                        AI Auto-Categorization
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-white/70 dark:bg-white/5 p-3">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Inferred Type</p>
+                          <p className="text-sm font-black text-violet-700 dark:text-violet-300">
+                            {dossierData.ai_summary?.type_inference?.inferred_type || dossierData.ai_summary?.category || dossierData.type}
                           </p>
-                        )}
-                        {dossierData.ai_summary.model_used && (
-                          <p className="text-[9px] text-slate-400 font-mono">
-                            Model: {dossierData.ai_summary.model_used}
-                            {dossierData.ai_summary.classified_at && ` · ${new Date(dossierData.ai_summary.classified_at).toLocaleString()}`}
+                        </div>
+                        <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-white/70 dark:bg-white/5 p-3">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Confidence</p>
+                          <p className="text-sm font-black text-violet-700 dark:text-violet-300">
+                            {dossierData.ai_summary?.type_inference?.confidence ?? dossierData.ai_summary?.confidence ?? 0}%
                           </p>
-                        )}
+                        </div>
+                        <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-white/70 dark:bg-white/5 p-3">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">AI Risk</p>
+                          <p className="text-sm font-black text-violet-700 dark:text-violet-300">
+                            {dossierData.ai_summary?.risk_score ?? dossierData.risk_score ?? 0}/100
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1646,6 +1771,41 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           </p>
                           <div>
                             <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                              Resolved Case Type <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={resolvedCaseType}
+                              onChange={(e) => setResolvedCaseType(e.target.value)}
+                              disabled={actionProcessing}
+                              className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-black/20 px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
+                            >
+                              {CASE_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
+                            {dossierData?.ai_summary?.type_inference?.inferred_type && (
+                              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-indigo-200/70 dark:border-indigo-400/20 bg-white/70 dark:bg-black/20 p-2">
+                                <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                                  AI suggestion: {dossierData.ai_summary.type_inference.inferred_type}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setResolvedCaseType(dossierData.ai_summary.type_inference.inferred_type)}
+                                  disabled={actionProcessing}
+                                  className="px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
+                                >
+                                  Use AI
+                                </button>
+                              </div>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">
+                              This type is used for assignment and investigator visibility.
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block mb-2">
                               Validity Report{" "}
                               <span className="text-rose-500">*</span>
                             </label>
@@ -1663,7 +1823,11 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <button
-                              onClick={() => doAction("INVESTIGATING")}
+                              onClick={() =>
+                                doAction("INVESTIGATING", true, {
+                                  resolved_case_type: resolvedCaseType,
+                                })
+                              }
                               disabled={actionProcessing}
                               className="py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
                             >
@@ -1969,7 +2133,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                         </div>
                       )}
 
-                      {/* REFERRED: handled in Authority Findings page */}
+                      {/* REFERRED: handled in Referred page */}
                       {currentStatus === "REFERRED" && (
                         <div className="rounded-2xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-500/10 p-5 space-y-4">
                           <p className="text-xs font-black text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-2">
@@ -1977,7 +2141,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
                           </p>
                           <p className="text-sm text-purple-700 dark:text-purple-300">
                             This case has been formally referred to a competent external authority for legal or regulatory action.
-                            All case proceedings and final outcomes for referred cases are now recorded in the Authority Findings page.
+                            All case proceedings and final outcomes for referred cases are now recorded in the Referred page.
                             This dossier is read-only at this stage.
                           </p>
 
@@ -1999,7 +2163,7 @@ export const InvestigatorView: React.FC<InvestigatorViewProps> = ({ user, onCase
 
                           <div className="border-t border-purple-200 dark:border-purple-500/20 pt-4">
                             <p className="text-xs text-purple-700 dark:text-purple-300">
-                              Use the Authority Findings page to log external authority proceedings, print table-format reports, and complete this case.
+                              Use the Referred page to log external authority proceedings, print table-format reports, and complete this case.
                             </p>
                           </div>
                         </div>

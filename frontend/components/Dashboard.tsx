@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   AreaChart,
   Area,
@@ -22,36 +22,47 @@ export const Dashboard: React.FC = () => {
   const [cases, setCases] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchCases = async () => {
-      try {
-        const response = await apiClient.getReports();
-        if (response?.success && Array.isArray(response.data)) {
-          setCases(
-            response.data.map((r: any) => ({
-              id: r.case_id || r.id,
-              case_id: r.case_id,
-              timestamp: r.created_at,
-              type: r.type,
-              status: r.status,
-              riskScore: r.risk_score,
-              priority: r.priority,
-              institution: r.institution,
-              description: r.description || "",
-              location: r.location || "",
-              reporterId: r.user_id,
-              referenceCode: r.reference_code,
-            })),
-          );
-        }
-      } catch (err) {
-        console.error("Dashboard fetch error:", err);
-      } finally {
-        setLoading(false);
+  const fetchCases = useCallback(async () => {
+    try {
+      const response = await apiClient.getReports();
+      if (response?.success && Array.isArray(response.data)) {
+        setCases(
+          response.data.map((r: any) => ({
+            id: r.case_id || r.id,
+            case_id: r.case_id,
+            timestamp: r.created_at,
+            type: r.type,
+            status: r.status,
+            riskScore: r.risk_score,
+            priority: r.priority,
+            institution: r.institution,
+            description: r.description || "",
+            location: r.location || "",
+            reporterId: r.user_id,
+            referenceCode: r.reference_code,
+          })),
+        );
       }
-    };
-    fetchCases();
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCases();
+  }, [fetchCases]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchCases();
+      }
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchCases]);
 
   const stats = [
     {

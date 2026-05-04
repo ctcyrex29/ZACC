@@ -44,6 +44,13 @@ return [
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+        'fallback_models' => array_values(array_filter(array_map('trim', explode(',', (string) env('GEMINI_FALLBACK_MODELS', 'gemini-1.5-flash,gemini-1.5-flash-8b'))))),
+        'routing_strategy' => strtolower((string) env('GEMINI_ROUTING_STRATEGY', 'balanced')),
+        'strategy_orders' => [
+            'fast' => array_values(array_filter(array_map('trim', explode(',', (string) env('GEMINI_FAST_MODEL_ORDER', 'gemini-2.0-flash,gemini-1.5-flash-8b,gemini-1.5-flash'))))),
+            'balanced' => array_values(array_filter(array_map('trim', explode(',', (string) env('GEMINI_BALANCED_MODEL_ORDER', ''))))),
+            'quality' => array_values(array_filter(array_map('trim', explode(',', (string) env('GEMINI_QUALITY_MODEL_ORDER', 'gemini-1.5-flash,gemini-2.0-flash,gemini-1.5-flash-8b'))))),
+        ],
         'timeout' => (int) env('GEMINI_TIMEOUT', 15),
     ],
 
